@@ -1,0 +1,49 @@
+.timeline { list-style: none; margin: 0; padding: 0; }
+
+/* `.tick`: the connecting line is drawn by the entry above it, so the last entry
+   has no tail hanging off the end of the list. */
+.tick { position: relative; padding: 0 13px 13px 30px; }
+.tick::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 6px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--rule2);
+}
+.tick:last-child::before { display: none; }
+
+.tick::after {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1.5px solid var(--faint);
+}
+
+.drift::after { background: var(--oxide); border-color: var(--oxide); }
+/* A change is the one square marker on the rail: crossing the write boundary is a
+   different kind of event from observing one, and the shape says so before the colour. */
+.change::after { background: var(--accent); border-color: var(--accent); border-radius: 1.5px; }
+.boot::after { background: var(--dim); border-color: var(--dim); }
+.verify::after { background: var(--verd); border-color: var(--verd); }
+.observe::after { background: var(--surface); border-color: var(--faint); }
+
+.at { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.what { font-size: 12px; margin: 1px 0; line-height: 1.4; }
+.what b { color: var(--oxide); font-weight: 650; }
+.note {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 11.5px;
+  color: var(--faint);
+  line-height: 1.4;
+}
+
+.what a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); }
+.what a:hover { border-bottom-color: var(--accent); }

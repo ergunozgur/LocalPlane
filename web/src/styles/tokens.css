@@ -1,0 +1,193 @@
+/* LocalPlane design tokens.
+ *
+ * Values are the product's own design, stated here rather than reinterpreted. The
+ * typography is part of the product and not of the atmosphere: three voices, and which one
+ * a piece of text gets is a statement about where it came from.
+ *
+ *   Instrument Serif   what a person reads   — headings, annotation
+ *   Inter              what a person operates — navigation, controls, labels
+ *   JetBrains Mono     what a machine said    — identifiers, values, evidence
+ *
+ * An identifier stays mono wherever it appears, including inside a heading. That rule is
+ * what keeps eth0 from becoming editorial.
+ */
+
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/instrument-serif.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/instrument-serif-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../assets/fonts/inter.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('../assets/fonts/jetbrains-mono.woff2') format('woff2');
+}
+
+:root {
+  --sans: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  --serif: 'Instrument Serif', 'Iowan Old Style', Palatino, Georgia, 'Times New Roman', serif;
+  /* The wordmark is an identity device rather than atmosphere, so it is named separately
+   * from the reading face even though they resolve to the same family today. */
+  --wordmark: 'Instrument Serif', 'Iowan Old Style', Palatino, Georgia, 'Times New Roman', serif;
+
+  --r-xs: 3px;
+  --r-sm: 4px;
+  --r: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+
+  --appbar-h: 54px;
+  --scopebar-h: 40px;
+
+  --sp-1: 4px;
+  --sp-2: 7px;
+  --sp-3: 11px;
+  --sp-4: 14px;
+  --sp-5: 18px;
+  --sp-6: 24px;
+
+  --t-fast: 130ms;
+}
+
+/* ---------------------------------------------------------------- localplane (default) */
+:root,
+[data-theme='localplane'] {
+  color-scheme: dark;
+
+  --bg: #0e0d12;
+  --surface: #16151c;
+  --raised: #1d1b25;
+  --inset: #131219;
+  --sunken: #0a090d;
+
+  --ink: #e3e1ea;
+  --dim: #9b98a9;
+  --faint: #6d6a7c;
+  --strong: var(--ink);
+
+  --rule: #2e2b39;
+  --rule2: #24222e;
+  --rule3: #1d1b26;
+
+  --verd: #63b78f;
+  --verd-soft: rgba(99, 183, 143, 0.12);
+  --verd-line: rgba(99, 183, 143, 0.32);
+
+  --oxide: #d0805a;
+  --oxide-soft: rgba(208, 128, 90, 0.13);
+  --oxide-line: rgba(208, 128, 90, 0.36);
+
+  --amber: #d7a24d;
+  --amber-soft: rgba(215, 162, 77, 0.12);
+  --amber-line: rgba(215, 162, 77, 0.32);
+
+  --crimson: #d46f78;
+  --crimson-soft: rgba(212, 111, 120, 0.12);
+  --crimson-line: rgba(212, 111, 120, 0.32);
+
+  --accent: #9d7cf4;
+  --accent-soft: rgba(157, 124, 244, 0.14);
+  --accent-line: rgba(157, 124, 244, 0.42);
+
+  --scrim: rgba(6, 5, 11, 0.62);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.38), 0 10px 28px rgba(0, 0, 0, 0.38);
+  --shadow-pop: 0 2px 8px rgba(0, 0, 0, 0.46), 0 22px 56px rgba(0, 0, 0, 0.58);
+  --grid-line: rgba(157, 124, 244, 0.045);
+  --focus: var(--accent);
+}
+
+/* ------------------------------------------------------------------ graphite (light) */
+[data-theme='graphite'] {
+  color-scheme: light;
+
+  --bg: #e7e8e3;
+  --surface: #eff0eb;
+  --raised: #f6f7f2;
+  --inset: #e2e3dd;
+  --sunken: #dcded7;
+
+  --ink: #1a1c18;
+  --dim: #585d53;
+  --faint: #8a8f84;
+  --strong: var(--ink);
+
+  --rule: #c6c9be;
+  --rule2: #d9dbd2;
+  --rule3: #e5e7e0;
+
+  --verd: #3a6b52;
+  --verd-soft: rgba(58, 107, 82, 0.1);
+  --verd-line: rgba(58, 107, 82, 0.34);
+
+  --oxide: #96462b;
+  --oxide-soft: rgba(150, 70, 43, 0.09);
+  --oxide-line: rgba(150, 70, 43, 0.34);
+
+  --amber: #9a7020;
+  --amber-soft: rgba(154, 112, 32, 0.1);
+  --amber-line: rgba(154, 112, 32, 0.32);
+
+  --crimson: #9d3535;
+  --crimson-soft: rgba(157, 53, 53, 0.09);
+  --crimson-line: rgba(157, 53, 53, 0.3);
+
+  --accent: #2f5c7a;
+  --accent-soft: rgba(47, 92, 122, 0.1);
+  --accent-line: rgba(47, 92, 122, 0.38);
+
+  --scrim: rgba(26, 28, 24, 0.34);
+  --shadow: 0 1px 2px rgba(28, 30, 25, 0.05), 0 8px 24px rgba(28, 30, 25, 0.07);
+  --shadow-pop: 0 2px 6px rgba(28, 30, 25, 0.09), 0 18px 48px rgba(28, 30, 25, 0.16);
+  --grid-line: rgba(26, 28, 24, 0.045);
+  --focus: var(--accent);
+}
+
+/* Semantic tone channels.
+ *
+ * A tone is never carried by colour alone — every consumer pairs these with a glyph and a
+ * word. `unknown` is a tone of its own rather than a shade of `warn`, because a missing
+ * fact and a bad fact are different claims and must not look alike. */
+:root {
+  --tone-good: var(--verd);
+  --tone-good-soft: var(--verd-soft);
+  --tone-good-line: var(--verd-line);
+
+  --tone-warn: var(--amber);
+  --tone-warn-soft: var(--amber-soft);
+  --tone-warn-line: var(--amber-line);
+
+  --tone-bad: var(--crimson);
+  --tone-bad-soft: var(--crimson-soft);
+  --tone-bad-line: var(--crimson-line);
+
+  --tone-attention: var(--oxide);
+  --tone-attention-soft: var(--oxide-soft);
+  --tone-attention-line: var(--oxide-line);
+
+  --tone-unknown: var(--dim);
+  --tone-unknown-soft: transparent;
+  --tone-unknown-line: var(--rule);
+
+  --tone-neutral: var(--dim);
+  --tone-neutral-soft: transparent;
+  --tone-neutral-line: var(--rule2);
+}

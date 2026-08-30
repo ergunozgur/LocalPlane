@@ -1,0 +1,99 @@
+/* The navigation pill.
+ *
+ * Primary navigation is a discrete raised object rather than a run of links on the
+ * bar: `border: 1px solid var(--rule)`, `--r-md`, `--raised`, 3px of inner padding and a
+ * 4% inset top highlight. It is centred so that it reads as centred on the *window*
+ * rather than on whatever space the end groups leave over — `margin-inline:auto` inside
+ * a `flex:1` track, which centres on the bar with the same visual result, survives the
+ * end groups changing width, and does not need a measurement pass to avoid collisions.
+ * `NavRail` handles overflow.
+ */
+.rail {
+  display: flex;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
+  min-width: 0;
+}
+
+.group { position: relative; display: inline-flex; align-items: center; }
+
+/* One domain control.
+ *
+ * The border is reserved as transparent so selecting a domain cannot shift the pill's
+ * geometry — the reason the nav never jitters on navigation. */
+.navbtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+
+.navbtn:hover,
+.navbtn[aria-expanded='true'] {
+  color: var(--ink);
+  background: var(--inset);
+  text-decoration: none;
+}
+
+/* The shared selection grammar: elevation, a real border, heavier text, and an accent
+ * underline drawn outside the button onto the pill's padding. `.scopeTab` and `.objectTab`
+ * use the same `::after` so all three strips read as one system. */
+.navbtn.current {
+  color: var(--ink);
+  font-weight: 650;
+  background: var(--surface);
+  border-color: var(--rule2);
+}
+
+.navbtn.current::after {
+  content: '';
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: -4px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.count { font-family: var(--mono); font-size: 10.5px; color: var(--faint); font-weight: 400; }
+.navbtn.current .count { color: var(--dim); }
+
+/* Drift marker — the domain has something wanting attention. */
+.dot { width: 5px; height: 5px; border-radius: 50%; background: var(--oxide); flex: none; }
+
+.chev { font-size: 8px; color: var(--faint); margin-left: -1px; }
+.navbtn:hover .chev,
+.navbtn[aria-expanded='true'] .chev { color: var(--ink); }
+
+/* The overflow control is present at every width and revealed by NavRail. */
+.more { padding: 0 9px; font-size: 14px; letter-spacing: 0.06em; color: var(--faint); }
+.more[aria-expanded='true'], .more:hover { color: var(--ink); }
+.more .dot { width: 4px; height: 4px; margin-left: -2px; }
+
+.hidden { display: none; }

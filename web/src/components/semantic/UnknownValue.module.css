@@ -1,0 +1,7 @@
+.unknown {
+  color: var(--faint);
+  border-bottom: 1px dashed var(--rule);
+  font-family: var(--mono);
+  cursor: help;
+  line-height: 1;
+}

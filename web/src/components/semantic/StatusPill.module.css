@@ -1,0 +1,67 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--dim);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.pill.sm { height: 17px; padding: 0 5px; font-size: 10.5px; gap: 4px; }
+
+.glyph {
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1;
+  flex: none;
+}
+
+.label { overflow: hidden; text-overflow: ellipsis; }
+
+.token {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+  padding-left: 3px;
+  border-left: 1px solid var(--rule2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: var(--r-xs);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1;
+  flex: none;
+}
+
+/* Tone channels. The dashed outline on `unknown` is load-bearing: it is what distinguishes
+ * "we do not know" from every settled answer when colour is unavailable. */
+.good { color: var(--tone-good); background: var(--tone-good-soft); border-color: var(--tone-good-line); }
+.warn { color: var(--tone-warn); background: var(--tone-warn-soft); border-color: var(--tone-warn-line); }
+.bad { color: var(--tone-bad); background: var(--tone-bad-soft); border-color: var(--tone-bad-line); }
+.attention { color: var(--tone-attention); background: var(--tone-attention-soft); border-color: var(--tone-attention-line); }
+.neutral { color: var(--dim); background: var(--raised); border-color: var(--rule2); }
+
+.unknown {
+  color: var(--dim);
+  background: transparent;
+  border-color: var(--rule);
+  border-style: dashed;
+}
+.mark.unknown { border: 1px dashed var(--rule); }

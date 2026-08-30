@@ -1,0 +1,67 @@
+/* 46px is the operator column: wide enough for the glyph to sit in its own
+   channel, narrow enough that the two value columns still read as the subject. */
+.dual { display: grid; grid-template-columns: minmax(0, 1fr) 46px minmax(0, 1fr); }
+
+.head {
+  padding: 7px 13px 6px;
+  border-bottom: 1px solid var(--rule2);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.mid { text-align: center; padding-left: 0; padding-right: 0; }
+.right { text-align: right; }
+.head em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--faint);
+  opacity: 0.8;
+  margin-left: 6px;
+}
+
+.row { display: contents; }
+
+.cell {
+  padding: 5px 13px;
+  border-bottom: 1px solid var(--rule3);
+  font-size: 12.5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.key { color: var(--dim); font-size: 11.5px; margin-right: 3px; }
+.value { font-family: var(--mono); font-size: 12px; }
+.drift { color: var(--oxide); font-weight: 650; }
+
+.op {
+  border-bottom: 1px solid var(--rule3);
+  text-align: center;
+  padding: 5px 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--rule);
+  user-select: none;
+}
+.eq { color: var(--verd); }
+.ne { color: var(--oxide); font-weight: 700; }
+.na { color: var(--rule); }
+
+.row:hover .cell, .row:hover .op { background: var(--inset); }
+.last .cell, .last .op { border-bottom: 0; }
+.isDrift .cell, .isDrift .op { background: var(--oxide-soft); }
+.isDrift:hover .cell, .isDrift:hover .op {
+  background: color-mix(in srgb, var(--oxide-soft) 60%, var(--inset));
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

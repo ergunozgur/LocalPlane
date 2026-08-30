@@ -1,0 +1,45 @@
+.stack { display: flex; flex-direction: column; gap: 14px; }
+
+.noChange {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--faint);
+  cursor: help;
+}
+
+
+
+.count { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+.aside {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 11.5px;
+  color: var(--faint);
+  margin-left: auto;
+}
+
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--rule2);
+  background: var(--inset);
+}
+
+.filterNote {
+  margin-left: auto;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+/* The operation's namespace, in the machine's voice — it is part of a typed name. */
+.domain { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+
+/* Every row says the same thing here, and that is the point: this build attributes nothing
+   to anybody, and a column of it is more honest than a column that is absent. */
+.actor { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }

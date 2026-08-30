@@ -1,0 +1,160 @@
+Third-party font notices
+========================
+
+LocalPlane redistributes the unmodified font files listed below. All retrievals
+were made on 2026-08-30 from the named official upstream repositories over HTTPS.
+
+Inter
+-----
+
+Official upstream: https://github.com/rsms/inter
+Release: v4.1 (commit e3a3d4c57d5ecc01453a575621882a384c1995a3)
+Release page: https://github.com/rsms/inter/releases/tag/v4.1
+Release asset: Inter-4.1.zip
+Release asset URL: https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
+Release asset SHA-256: 9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e
+Redistributed member: web/InterVariable.woff2
+Local file: web/src/assets/fonts/inter.woff2
+Local file SHA-256: 693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3
+Format and coverage: variable WOFF2, upright/normal, weight 100-900
+License file: LICENSE.txt from the same release
+License file SHA-256: 262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a
+Copyright: Copyright (c) 2016 The Inter Project Authors
+License: SIL Open Font License, Version 1.1
+
+JetBrains Mono
+---------------
+
+Official upstream: https://github.com/JetBrains/JetBrainsMono
+Family release/version: v2.304
+Release page: https://github.com/JetBrains/JetBrainsMono/releases/tag/v2.304
+Pinned repository snapshot: 19371302b95d218af43299bce79ddbddd0bc364d
+Exact source: fonts/webfonts/JetBrainsMono[wght].woff2
+Source URL: https://raw.githubusercontent.com/JetBrains/JetBrainsMono/19371302b95d218af43299bce79ddbddd0bc364d/fonts/webfonts/JetBrainsMono%5Bwght%5D.woff2
+Local file: web/src/assets/fonts/jetbrains-mono.woff2
+Local file SHA-256: 31ec365b93e4bad6f202ce23352a56d01ca4462b2afc782ed2cf6fa42ca9ac0e
+Format and coverage: variable WOFF2, upright/normal, weight 100-800
+License file: OFL.txt from the same pinned repository snapshot
+License file SHA-256: a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697
+Copyright: Copyright 2020 The JetBrains Mono Project Authors
+License: SIL Open Font License, Version 1.1
+
+The v2.304 release archive publishes the variable font as TTF and the WOFF2
+fonts as static instances. The unmodified variable WOFF2 above is published by
+the same official upstream, identifies itself as version 2.304, and is pinned to
+an exact repository commit so the existing single-file 100-800 web declaration
+can remain truthful without conversion or subsetting.
+
+Instrument Serif
+----------------
+
+Official upstream: https://github.com/Instrument/instrument-serif
+Version: repository snapshot 65c0ef225f386a3c7e87570a4aa9cc0262c2fd81
+The official repository publishes no release or tag; the snapshot commit is the
+immutable version identifier used for these files.
+
+Regular source: fonts/webfonts/InstrumentSerif-Regular.woff2
+Regular source URL: https://raw.githubusercontent.com/Instrument/instrument-serif/65c0ef225f386a3c7e87570a4aa9cc0262c2fd81/fonts/webfonts/InstrumentSerif-Regular.woff2
+Regular local file: web/src/assets/fonts/instrument-serif.woff2
+Regular SHA-256: ca21b99b0d6b88a0dc34cebfe48104611e5c7f8f92746bed26c37aa470174322
+Regular format and coverage: static WOFF2, weight 400, normal style
+
+Italic source: fonts/webfonts/InstrumentSerif-Italic.woff2
+Italic source URL: https://raw.githubusercontent.com/Instrument/instrument-serif/65c0ef225f386a3c7e87570a4aa9cc0262c2fd81/fonts/webfonts/InstrumentSerif-Italic.woff2
+Italic local file: web/src/assets/fonts/instrument-serif-italic.woff2
+Italic SHA-256: 4f7aacc18d491dea8778bbc591db87b9455625899ed5f913957e7fd82604c294
+Italic format and coverage: static WOFF2, weight 400, italic style
+
+License file: OFL.txt from the same pinned repository snapshot
+License file SHA-256: 129ed7618959716959f2941fdd5b49e0ad6e6c1d78726761786a00253d865521
+Copyright: Copyright 2022 The Instrument Serif Project Authors
+License: SIL Open Font License, Version 1.1
+
+SIL Open Font License, Version 1.1
+----------------------------------
+
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.

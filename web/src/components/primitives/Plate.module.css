@@ -1,0 +1,173 @@
+.plate {
+  position: relative;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+}
+
+/* The plate a view is built around: a second hairline gives it presence without a heavier
+ * border, which lifts it off the page. */
+.plate.lead {
+  box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--rule) 40%, transparent);
+}
+
+/* A toned plate colours its whole border and
+   tints the head band, rather than growing a left stripe. The stripe read as decoration
+   sitting beside the panel; this reads as the panel itself being in that state. */
+.plate.attention { border-color: var(--oxide-line); }
+.plate.attention > .head { background: var(--oxide-soft); }
+.plate.warn { border-color: var(--amber-line); }
+.plate.warn > .head { background: var(--amber-soft); }
+.plate.good { border-color: var(--verd-line); }
+.plate.good > .head { background: var(--verd-soft); }
+
+/* ------------------------------------------------------------------------------- head */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  min-height: 40px;
+  padding: 8px 13px;
+  border-bottom: 1px solid var(--rule2);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 15.5px;
+  letter-spacing: 0.005em;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.lead > .head > .title { font-size: 20px; line-height: 1.15; }
+
+/* Editorial, not administrative: the subtitle is the product's voice explaining what a
+ * panel is for, so it takes the serif italic rather than a grey sans caption. */
+.meta {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lead > .head > .meta { font-size: 14px; }
+
+/* Chips describe the subject, so they sit with the title. Only controls and the as-of
+ * stamp are pushed to the far end. */
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.spacer { flex: 1; }
+
+.asOf {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------------------------- mark */
+
+.mark {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  position: relative;
+}
+
+.mark_good { background: var(--verd); }
+.mark_warn { background: var(--amber); }
+.mark_bad { background: var(--crimson); }
+.mark_attention { background: var(--oxide); }
+.mark_neutral { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+
+/* Unknown keeps the dotted treatment it has everywhere else, so the shape says "not
+ * established" without depending on the colour. */
+.mark_unknown {
+  background: transparent;
+  border: 1px dotted var(--faint);
+  box-shadow: inset 0 0 0 1.5px var(--rule);
+}
+
+/* ---------------------------------------------------------------------------- section */
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px 6px;
+  border-bottom: 1px solid var(--rule3);
+}
+
+.sectionTitle {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  color: var(--dim);
+}
+
+.sectionBody { padding: 7px 13px 11px; }
+
+/* ------------------------------------------------------------------------------- body */
+
+.body { padding: 11px 13px; }
+.body.tight { padding: 7px 13px 9px; }
+
+/* ------------------------------------------------------------------------------- foot */
+
+.foot {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 13px 8px;
+  border-top: 1px solid var(--rule2);
+  margin-top: auto;
+}
+
+.evidenceKey {
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  flex: none;
+}
+
+.evidenceSource {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* On a supporting plate the header sits on the page ground,
+ * which stops a run of stacked tables from reading as a stack of headers. */
+.quiet :global(table) thead th { background: var(--bg); }

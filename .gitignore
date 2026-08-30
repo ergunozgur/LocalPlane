@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# LocalPlane runtime state — never committed
+var/
+*.db
+*.db-wal
+*.db-shm
+
+# Frontend build artifacts
+node_modules/
+
+# Local environment and editors
+.env
+.env.*
+*.log
+.vscode/
+.idea/

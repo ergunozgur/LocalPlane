@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "localplane"
+version = "0.1.0"
+description = "LocalPlane — a local autonomous operations control plane for Linux systems"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<0.117",
+    "jeepney>=0.9,<0.10",
+    "uvicorn>=0.30,<0.35",
+]
+
+# The systemd provider is the agent's sole third-party dependency boundary.  Only
+# localplane.agent.providers.systemd may import Jeepney; the helper, protocol, IPC and log
+# remain standard-library-only, and the backend never imports Jeepney.  Dependency tests
+# enforce these boundaries.
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "httpx>=0.27,<0.29",
+]
+
+[project.scripts]
+localplane-agent = "localplane.agent.__main__:main"
+localplane-backend = "localplane.backend.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"localplane.backend.db" = ["migrations/*.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "live: exercises the real host, read-only",
+]

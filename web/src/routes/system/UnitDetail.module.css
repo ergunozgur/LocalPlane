@@ -1,0 +1,55 @@
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+@media (max-width: 1100px) {
+  .columns { grid-template-columns: minmax(0, 1fr); }
+}
+
+.dropins { margin-top: 11px; }
+
+.dropinList {
+  list-style: none;
+  margin: 5px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.filterRow { display: block; margin-bottom: 9px; }
+
+.input {
+  width: 100%;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  background: var(--inset);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.input::placeholder { color: var(--faint); }
+.input:focus { border-color: var(--accent-line); outline: none; }
+
+/* A unit on this host can declare 187 relationships. The table gets its own scroll so the
+ * page does not become one enormous column. */
+.relationScroll { max-height: 460px; overflow-y: auto; }
+
+.listen { margin-top: 11px; }
+.listenList { list-style: none; margin: 5px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.agentNote {
+  margin: 11px 0 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--faint);
+  line-height: 1.5;
+  max-width: 76ch;
+}

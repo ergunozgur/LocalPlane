@@ -1,0 +1,43 @@
+.plate { height: 100%; display: flex; flex-direction: column; }
+.heading {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  color: var(--dim);
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--rule3);
+}
+.sweepRow { display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.count { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.capabilities { margin-top: 11px; }
+
+.caveat {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--faint);
+  line-height: 1.5;
+  max-width: 70ch;
+}
+
+.mutating {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--oxide);
+  border: 1px solid var(--oxide-line);
+  background: var(--oxide-soft);
+  border-radius: 2px;
+  padding: 0 4px;
+}
+
+/* The two resource shells sit side by side where there is room and stack where there is
+   not — the same arrangement a real pair of charts would take. */
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}

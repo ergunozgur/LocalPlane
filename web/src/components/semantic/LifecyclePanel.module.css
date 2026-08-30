@@ -1,0 +1,36 @@
+.gate {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin: 11px 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--rule3);
+}
+
+.gateValue { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+
+.section { margin-top: 13px; }
+.sectionHead { margin-bottom: 6px; }
+
+.capabilityRow { display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+.mutating {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--oxide);
+  border: 1px solid var(--oxide-line);
+  background: var(--oxide-soft);
+  border-radius: 2px;
+  padding: 0 4px;
+}
+
+.caveat {
+  margin: 7px 0 0;
+  font-size: 11.5px;
+  color: var(--faint);
+  line-height: 1.5;
+  max-width: 78ch;
+}

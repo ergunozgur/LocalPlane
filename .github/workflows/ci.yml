@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install LocalPlane (dev extras)
+        run: python -m pip install -e '.[dev]'
+
+      - name: Python tests (non-live)
+        run: python -m pytest -m 'not live'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Web install
+        working-directory: web
+        run: npm ci
+
+      - name: Web tests
+        working-directory: web
+        run: npm test
+
+      - name: Web typecheck
+        working-directory: web
+        run: npm run typecheck
+
+      - name: Web lint
+        working-directory: web
+        run: npm run lint
+
+      - name: Regenerate API contract against ephemeral backend
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          db_path="${RUNNER_TEMP}/localplane-contract.db"
+          backend_log="${RUNNER_TEMP}/localplane-backend.log"
+          backend_pid=""
+
+          stop_backend() {
+            if [[ -n "$backend_pid" ]] && kill -0 "$backend_pid" 2>/dev/null; then
+              kill "$backend_pid" 2>/dev/null || true
+              for _ in {1..100}; do
+                kill -0 "$backend_pid" 2>/dev/null || break
+                sleep 0.1
+              done
+              if kill -0 "$backend_pid" 2>/dev/null; then
+                kill -9 "$backend_pid" 2>/dev/null || true
+              fi
+            fi
+            wait "$backend_pid" 2>/dev/null || true
+            rm -f "$db_path" "$db_path-wal" "$db_path-shm" "$backend_log"
+          }
+
+          on_exit() {
+            local status=$?
+            trap - EXIT
+            stop_backend
+            exit "$status"
+          }
+
+          trap on_exit EXIT
+          trap 'trap - EXIT; stop_backend; exit 130' INT
+          trap 'trap - EXIT; stop_backend; exit 143' TERM
+
+          LOCALPLANE_HOST=127.0.0.1 \
+          LOCALPLANE_PORT=8080 \
+          LOCALPLANE_OBSERVE_ON_STARTUP=0 \
+          LOCALPLANE_DB_PATH="$db_path" \
+            python -m localplane.backend >"$backend_log" 2>&1 &
+          backend_pid=$!
+
+          deadline=$((SECONDS + 30))
+          until curl -fsS http://127.0.0.1:8080/openapi.json -o /dev/null; do
+            if ! kill -0 "$backend_pid" 2>/dev/null; then
+              echo "::error::LocalPlane backend exited before the OpenAPI endpoint became ready"
+              cat "$backend_log"
+              exit 1
+            fi
+            if (( SECONDS >= deadline )); then
+              echo "::error::Timed out after 30s waiting for http://127.0.0.1:8080/openapi.json"
+              cat "$backend_log"
+              exit 1
+            fi
+            sleep 0.5
+          done
+
+          if ! kill -0 "$backend_pid" 2>/dev/null; then
+            echo "::error::LocalPlane backend exited immediately after becoming ready"
+            cat "$backend_log"
+            exit 1
+          fi
+
+          (
+            cd web
+            LOCALPLANE_API_ORIGIN=http://127.0.0.1:8080 npm run api:snapshot
+            npm run api:types
+          )
+
+      - name: Fail on contract drift
+        run: git diff --exit-code -- web/openapi.json web/src/api/schema.d.ts

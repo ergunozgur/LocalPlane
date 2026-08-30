@@ -1,0 +1,38 @@
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+@media (max-width: 1100px) {
+  .columns { grid-template-columns: minmax(0, 1fr); }
+}
+
+.ownerLabel { color: var(--faint); margin-left: 7px; font-size: 11.5px; }
+
+.sourceRow { display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+.outcome { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+.gapFlag {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+  background: var(--amber-soft);
+  border-radius: 2px;
+  padding: 0 4px;
+}
+
+.rawNote { margin: 0 0 7px; font-size: 11.5px; color: var(--faint); max-width: 70ch; }
+
+.confidenceRow { display: inline-flex; align-items: center; gap: 8px; }
+
+/* The word beside the ladder. Colour alone must never carry a confidence level, and three
+   bars are a shape rather than a word — so the word stays. */
+.confidenceWord { font-size: 11px; color: var(--faint); }

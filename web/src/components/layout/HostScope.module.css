@@ -1,0 +1,85 @@
+/* The chip is the menu's trigger, so it supplies its own padding and border. */
+.trigger { padding: 0; border: 0; background: transparent; height: auto; }
+.trigger:hover { border: 0; }
+
+.host {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--raised);
+  color: var(--ink);
+  font-size: 12.5px;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.trigger:hover .host,
+.trigger[aria-expanded='true'] .host {
+  border-color: var(--accent-line);
+  background: var(--surface);
+}
+
+.name {
+  font-family: var(--mono);
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.address { font-family: var(--mono); font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+.caret { color: var(--faint); font-size: 9px; margin-left: 1px; }
+
+.item {
+  display: block;
+  padding: 7px;
+  border-radius: var(--r-sm);
+  color: var(--dim);
+  text-decoration: none;
+}
+.item:hover { background: var(--inset); color: var(--ink); text-decoration: none; }
+
+.itemTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.itemTag {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.itemDescription {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--faint);
+  line-height: 1.45;
+}
+
+/* A deferred entry is not a control: no hover, no cursor, no affordance. */
+.deferred { padding: 7px; border-radius: var(--r-sm); }
+.deferred .itemTitle { color: var(--dim); font-weight: 600; }
+
+.deferredMark {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px dotted var(--faint);
+  flex: none;
+}
+
+@media (max-width: 900px) {
+  .address { display: none; }
+}

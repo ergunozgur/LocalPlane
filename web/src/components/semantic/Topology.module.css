@@ -1,0 +1,400 @@
+/* `.topo`: a ruled plane the nodes sit on. The grid is what makes it read as a
+ * diagram rather than a list of boxes, and it costs nothing to draw. */
+.topo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 22px 18px;
+  background:
+    linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 100% 26px,
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 26px 100%,
+    var(--inset);
+  border-bottom: 1px solid var(--rule2);
+  overflow: hidden;
+}
+
+.columns {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns:
+    minmax(clamp(132px, 11vw, 196px), 1fr)
+    minmax(clamp(132px, 11vw, 190px), 1fr)
+    minmax(clamp(186px, 15vw, 260px), 1.25fr)
+    minmax(clamp(150px, 12vw, 215px), 1.1fr);
+  column-gap: clamp(26px, 4.5vw, 74px);
+  align-items: stretch;
+  /* Fills whatever height the plate gives it, so the nodes distribute down the plane rather
+   * than bunching at the top over an empty grid. The minimum keeps the plane a diagram when
+   * the row is short. */
+  flex: 1;
+  min-height: calc(var(--rows, 3) * 84px);
+}
+
+/* Density is a change of scope, not of scale: fewer columns, same type, same node content. */
+.topo[data-columns='4'] .columns { }
+.topo[data-columns='3'] .columns {
+  grid-template-columns:
+    minmax(clamp(132px, 11vw, 190px), 1fr)
+    minmax(clamp(186px, 15vw, 260px), 1.25fr)
+    minmax(clamp(150px, 12vw, 215px), 1.1fr);
+}
+.topo[data-columns='2'] .columns {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  column-gap: clamp(20px, 4vw, 44px);
+  min-height: 0;
+}
+.topo[data-columns='1'] .columns {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.columnHead {
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 0 0 8px 1px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--rule3);
+}
+
+/* `space-evenly` distributes several nodes down a column — but a
+ * column holding one node then floats it in the middle of a tall empty box. Centring is the
+ * right answer for one node and even spacing for several, so the rule is conditional. */
+.stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 12px;
+  min-width: 0;
+}
+
+.stack:has(> :only-child) { justify-content: center; }
+
+/* The wrapper is what the edges are measured against, so the node's own hover lift does not
+ * drag the curve with it. */
+.nodeWrap {
+  position: relative;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.18s ease, background 0.15s ease;
+}
+.nodeWrap:hover { border-color: var(--accent-line); box-shadow: var(--shadow-pop); }
+.nodeWrap:has(.selected) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow); }
+.nodeWrap:has(.drifted) {
+  border-color: var(--oxide-line);
+  background: color-mix(in srgb, var(--oxide-soft) 55%, var(--surface));
+}
+.nodeWrap:has(.host) { background: var(--raised); }
+
+/* Selection lighting: everything not on the selected node's own edges recedes rather than
+ * disappearing, so the shape of the graph survives the emphasis. */
+.nodeDimmed { opacity: 0.42; }
+
+.node {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+.node:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.node:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.host { padding: 11px 13px; }
+.host .nodeName { font-size: 15px; }
+.host .nodeDetail { font-size: 12px; }
+
+.nodeTop {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nodeName {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nodeName { flex-shrink: 1; }
+
+.nodeKind {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--faint);
+  white-space: nowrap;
+  /* An enormous shrink factor against the name's: when the row runs out of width the
+   * classifier gives way entirely rather than both halves ellipsising into mush. */
+  flex: 0 9999 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 2px;
+}
+
+.nodeDetail {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodeNote {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--faint);
+  min-width: 0;
+  line-height: 1.35;
+}
+
+/* The host's own attachments, as `.port` rows: a focusable row per interface with a
+ * marker, a name, a reserved sparkline slot and a value. Each one is a link — a port is an
+ * object, and the diagram is where an operator finds it. */
+.ports {
+  border-top: 1px solid var(--rule2);
+}
+
+.portHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 13px;
+  border-bottom: 1px solid var(--rule3);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.port {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 13px;
+  border: 0;
+  border-bottom: 1px solid var(--rule3);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  transition: background 0.13s ease, box-shadow 0.13s ease;
+}
+.port:last-child { border-bottom: 0; }
+.port:hover { background: var(--inset); text-decoration: none; box-shadow: inset 2px 0 0 var(--accent); }
+.port:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.portDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--faint);
+}
+.dot_good { background: var(--verd); }
+.dot_warn { background: var(--amber); }
+.dot_bad { background: var(--crimson); }
+.dot_attention { background: var(--oxide); }
+.dot_neutral { background: transparent; box-shadow: inset 0 0 0 1.2px var(--faint); }
+.dot_unknown { background: transparent; border: 1px dotted var(--faint); }
+
+.portName {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portDrift { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--oxide); }
+
+/* The reserved series slot. Empty, and empty on purpose — see the note at its use site. */
+.spark {
+  margin-left: auto;
+  flex: none;
+  width: 46px;
+  height: 12px;
+  border-bottom: 1px dashed var(--rule2);
+  opacity: 0.5;
+}
+
+.portValue {
+  flex: none;
+  max-width: 88px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The estate counts under the host node: what the machine is made of. */
+.nodeFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--rule2);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.emptyColumn {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  overflow: visible;
+}
+
+/* Four kinds of line, and each one is a claim. `standby` is the one that matters most: a
+ * relationship that exists but carries nothing established, drawn so it cannot be mistaken
+ * for a proven path. */
+.edge {
+  fill: none;
+  stroke: var(--rule);
+  stroke-width: 1.25;
+  transition: stroke 0.18s ease, stroke-width 0.18s ease, opacity 0.18s ease;
+}
+.plain { stroke: var(--rule); }
+.active { stroke: var(--verd-line); stroke-width: 1.5; }
+.drift { stroke: var(--oxide); stroke-dasharray: 3 3.5; opacity: 0.85; }
+.standby { stroke: var(--rule); stroke-dasharray: 2 4; opacity: 0.75; }
+.lit { stroke: var(--accent); stroke-width: 2; opacity: 1; }
+.dimmed { opacity: 0.22; }
+
+.label {
+  font-family: var(--mono);
+  font-size: 9px;
+  fill: var(--dim);
+  dominant-baseline: middle;
+}
+.litLabel { fill: var(--accent); font-weight: 600; }
+.labelBg { fill: var(--inset); opacity: 0.94; }
+.litBg { fill: var(--accent-soft); opacity: 1; }
+
+/* The evidence strip: what the selection is, and what proves it. */
+.evidence {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 15px;
+  border-bottom: 1px solid var(--rule2);
+  background: var(--raised);
+  font-size: 12px;
+  color: var(--dim);
+  min-height: 40px;
+}
+.what { font-weight: 600; color: var(--ink); }
+.rel { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.evidenceText { min-width: 0; overflow-wrap: anywhere; flex: 1 1 22ch; }
+.evidenceIdle { font-family: var(--serif); font-style: italic; color: var(--faint); }
+.evidenceIdle b { font-family: var(--mono); font-style: normal; color: var(--dim); }
+.sources { font-family: var(--mono); font-size: 10.5px; color: var(--faint); overflow-wrap: anywhere; }
+.open { font-size: 11.5px; color: var(--accent); text-decoration: none; white-space: nowrap; }
+.open:hover { text-decoration: underline; }
+.spacer { flex: 1; }
+
+/* Relationships, spelled out. The one place a whole edge is written down, so nothing is
+ * lost when a label is shortened or dropped. */
+.relationships {
+  padding: 8px 15px;
+  border-bottom: 1px solid var(--rule2);
+  background: var(--inset);
+}
+.relationship {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  flex-wrap: wrap;
+}
+.relEnd { color: var(--ink); font-weight: 600; }
+.arrow { color: var(--faint); }
+.why { margin-left: auto; color: var(--faint); font-family: var(--sans); font-size: 11.5px; }
+.driftRow .relEnd, .driftRow .why { color: var(--oxide); }
+
+/* Element-level density: the descriptive tail goes first, then the classifier, then the
+ * reserved series slot. Identity is never touched, and nothing here changes type size. */
+.topo[data-density='tight'] .nodeNote { -webkit-line-clamp: 1; }
+.topo[data-density='compact'] .nodeNote { display: none; }
+.topo[data-density='compact'] .node:not(.host) .nodeKind { display: none; }
+.topo[data-density='compact'] .spark { display: none; }
+.topo[data-density='min'] .nodeNote,
+.topo[data-density='min'] .nodeKind,
+.topo[data-density='min'] .spark,
+.topo[data-density='min'] .nodeFacts { display: none; }
+.topo[data-density='min'] .columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  row-gap: 14px;
+  min-height: 0;
+}
+.topo[data-density='min'] .svg { display: none; }
+
+@media (max-width: 900px) {
+  .topo { padding: 14px 13px 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edge, .nodeWrap, .node, .port { transition: none; }
+}

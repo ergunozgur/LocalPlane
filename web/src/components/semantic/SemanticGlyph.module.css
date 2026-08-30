@@ -1,0 +1,96 @@
+/* ------------------------------------------------------------------ health — a circle */
+
+.health {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  position: relative;
+}
+.good { background: var(--verd); }
+.warn { background: var(--amber); }
+.bad { background: var(--crimson); }
+.attention { background: var(--oxide); }
+.neutral { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+/* Unknown keeps the dotted treatment it has everywhere: the shape says "not established". */
+.unknown {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--rule);
+  border: 1px dotted var(--faint);
+}
+
+/* --------------------------------------------------------------------------- chip base */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--dim);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.sm { height: 17px; padding: 0 5px; font-size: 10.5px; gap: 4px; }
+.md { }
+
+/* ------------------------------------------------------- management — a square, not a dot */
+
+.square {
+  width: 8px;
+  height: 8px;
+  border-radius: 1.5px;
+  flex: none;
+  background: currentColor;
+}
+
+.m_managed { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.m_observed { color: var(--dim); }
+.m_observe_only { color: var(--faint); }
+.m_observe_only .square { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+
+/* --------------------------------------------- reconciliation — a mono operator, not a dot */
+
+.operator {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-style: normal;
+  flex: none;
+}
+
+.r_in_sync { color: var(--verd); border-color: var(--verd-line); background: var(--verd-soft); }
+.r_drifted { color: var(--oxide); border-color: var(--oxide-line); background: var(--oxide-soft); }
+.r_applying { color: var(--amber); border-color: var(--amber-line); background: var(--amber-soft); }
+.r_unknown { color: var(--dim); border-color: var(--rule); border-style: dashed; background: transparent; }
+/* No retained intent: the chip reads as inapplicable rather than as agreement. */
+.r_none { color: var(--faint); background: transparent; border-style: dashed; }
+
+/* ------------------------------------------------------------ confidence — rising bars */
+
+/* The ladder sits beside a value, so it carries its own breathing room — without it the
+   bars read as a glyph appended to the word rather than as a separate reading of it. */
+.confidence {
+  display: inline-flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 11px;
+  flex: none;
+  margin: 0 5px;
+  vertical-align: -1px;
+}
+.confidence i { width: 3px; background: var(--rule); border-radius: 1px; display: block; }
+.confidence i:nth-child(1) { height: 4px; }
+.confidence i:nth-child(2) { height: 7px; }
+.confidence i:nth-child(3) { height: 11px; }
+
+.c_high i { background: var(--verd); }
+.c_medium i:nth-child(-n + 2) { background: var(--amber); }
+.c_low i:nth-child(1) { background: var(--oxide); }

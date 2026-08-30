@@ -1,0 +1,110 @@
+.shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 100% 28px,
+    var(--bg);
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 8px 12px;
+  background: var(--raised);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+}
+.skip:focus { left: 8px; top: 8px; }
+
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--appbar-h);
+  padding: 0 14px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border-bottom: 1px solid var(--rule);
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.barLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.barRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* The wordmark.
+ *
+ * It is set in the display serif at 20px, and the second half is distinguished by
+ * *italic alone* — both halves take `--ink`. Colouring "Plane" with the accent is a legacy
+ * treatment that had crept back in; it makes the mark read as a link and puts the product's
+ * one identity device on the same channel the interface uses for interactive state.
+ *
+ * It is an identity device, so it does not change with the theme. Below the narrow
+ * breakpoint the display face loses its footing before the layout does, so it steps back
+ * to the interface face there. */
+.brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  font-family: var(--wordmark);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--ink);
+  padding: 5px 3px 6px;
+  flex: none;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color 0.14s ease;
+}
+.brand i { font-style: italic; font-weight: 400; color: inherit; }
+.brand:hover { color: var(--strong); text-decoration: none; }
+
+@media (max-width: 520px) {
+  .brand {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0.005em;
+  }
+  .brand i { font-style: normal; font-weight: 400; }
+}
+
+
+
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 2200px;
+  margin: 0 auto;
+  padding: 16px 18px 40px;
+  min-width: 0;
+}
+
+/* The bar wraps rather than dropping anything: at narrow widths the host and the account
+ * menu stay where they are and the navigation takes its own row. */
+/* The bar yields before navigation does, in stages: the account
+ * menu's label, then the read stamp's clock, then the host's address give way, and only at
+ * genuinely narrow widths does the bar wrap. */
+@media (max-width: 860px) {
+  .appbar { height: auto; flex-wrap: wrap; padding: 7px 10px; row-gap: 7px; }
+  .main { padding: 12px 10px 32px; }
+}

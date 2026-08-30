@@ -1,0 +1,59 @@
+/* An object names itself in the machine's voice, even at heading size. */
+.name {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.kind {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--r-sm);
+  background: var(--inset);
+  font-size: 11px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.body { min-width: 0; }
+.rail { min-width: 0; }
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.single { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+@media (max-width: 1100px) {
+  .columns { grid-template-columns: minmax(0, 1fr); }
+}
+
+.headline {
+  margin: 0;
+  padding: 10px 13px 11px;
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.5;
+  max-width: 96ch;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(260px, 1fr);
+  gap: 14px;
+  align-items: start;
+  margin-top: 14px;
+}
+
+/* Below this the rail would be a column of one-word lines; it goes underneath instead of
+   getting narrower, because the timeline's sentences are the point of it. */
+@media (max-width: 1180px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}

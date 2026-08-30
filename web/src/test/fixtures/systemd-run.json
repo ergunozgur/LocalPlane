@@ -1,0 +1,297 @@
+{
+  "run_id": "run_36dde258f06341e0b4ed727a41003c3f",
+  "host_id": "host_d68ecb94e4e4e644fe24fd4a8f88328b",
+  "object_id": "obj_b230f43d7107c57429c228e366e618a9",
+  "object_name": "ModemManager.service",
+  "operation": "systemd.service.restart",
+  "state": "preview",
+  "created_at": "2026-08-27T21:47:50.133019Z",
+  "cancelled_at": null,
+  "finished_at": null,
+  "host_mutated": false,
+  "host_effect": "none",
+  "change_created": false,
+  "change_id": null,
+  "confirmation": null,
+  "checkpoint": null,
+  "guard": null,
+  "change": null,
+  "events": [],
+  "note": "LocalPlane planned this operation and published the preview. Nothing was written to the host: no MTU was set, no link was touched, and the agent has no mutating operation to have called. This is a Run, not a Change \u2014 no write boundary was crossed, so there is nothing for a Change record to be about.",
+  "preview": {
+    "preview_id": "prv_72dd0aa7b5e04fa6a5fbe94c609331fc",
+    "preview_digest": "sha256:b9a9150c7fcb58e8933561929f2bffbd212d5a6616a305148b9d3e56d168df3a",
+    "digest_version": 4,
+    "published_at": "2026-08-27T21:47:50.133019Z",
+    "operation": {
+      "type": "systemd.service.restart",
+      "summary": "Ask the system manager to restart one active canonical service unit and verify both the final state and a changed execution InvocationID.",
+      "target_kind": "systemd.unit"
+    },
+    "what": {
+      "object_id": "obj_b230f43d7107c57429c228e366e618a9",
+      "object_name": "ModemManager.service",
+      "kind": "action",
+      "field": null,
+      "value_type": null,
+      "current": null,
+      "desired": null,
+      "action": "restart",
+      "observed_state": "active",
+      "expected_state": "active_with_new_invocation_id",
+      "expected_after": "active_with_new_invocation_id"
+    },
+    "why": {
+      "intent_id": null,
+      "intent_version": null,
+      "reason": "operator_requested_action",
+      "drift_finding_id": null
+    },
+    "how": {
+      "availability": "not_implemented",
+      "eligibility": "blocked",
+      "blockers": [
+        "execution_not_implemented",
+        "protection_unresolved:management_path",
+        "protection_unresolved:localplane_agent"
+      ],
+      "provider": null,
+      "required_capability": "systemd.service.lifecycle",
+      "capability_declared_by_agent": true,
+      "note": "Slice 11B Part A has no executor and sends no systemd lifecycle message. Part B may add one closed systemd D-Bus dispatch using the canonical Unit.Id already bound here; callers can supply neither a unit name nor D-Bus fields."
+    },
+    "evidence": {
+      "intent": null,
+      "observation": {
+        "observation_id": "obs_4bea701308f641288e53b668cac0f680",
+        "sweep_id": "sweep_0b1b41ef3b8b4253bff7affe260ccbb0",
+        "observed_at": "2026-08-27T21:47:49.000536Z"
+      },
+      "ownership": {
+        "state": "attributed",
+        "reason": "systemd_is_authoritative_for_loaded_unit_runtime",
+        "claims": [
+          {
+            "relation": "configured_by",
+            "provider": "systemd",
+            "instance": "ModemManager.service",
+            "label": "ModemManager.service",
+            "confidence": "confirmed",
+            "external": true
+          }
+        ],
+        "evidence_gaps": [],
+        "provider_readings": {
+          "docker": "pobs_b4a26165e1e04d62835ac9867a471604",
+          "networkmanager": "pobs_78ae530e04e44da1ae0e89cb57f3ff01",
+          "tailscale": "pobs_5d694dc1a1b84152ba370c94f9acf9fe"
+        }
+      }
+    },
+    "risk": {
+      "tier": "medium",
+      "factors": [
+        {
+          "code": "operation_base_risk",
+          "floor": "medium",
+          "detail": "systemd.service.restart carries medium risk before any evidence about the target"
+        },
+        {
+          "code": "protection_evidence_incomplete",
+          "floor": "medium",
+          "detail": "at least one lifecycle protection reason could not be settled"
+        }
+      ]
+    },
+    "protection": {
+      "status": "unknown",
+      "reasons": [],
+      "unresolved": [
+        "localplane_agent",
+        "management_path"
+      ],
+      "management_path": "unknown",
+      "reason": "management_path_effect_correlation_incomplete",
+      "missing_evidence": [
+        "effect_graph.node_limit",
+        "effect_graph.stop_when_unneeded:bluetooth.target",
+        "effect_graph.stop_when_unneeded:user-1000.slice",
+        "effect_graph.stop_when_unneeded:user-runtime-dir@1000.service",
+        "effect_graph.unresolved:-.slice",
+        "effect_graph.unresolved:NetworkManager-wait-online.service"
+      ],
+      "evidence_id": "obs_4bea701308f641288e53b668cac0f680",
+      "evidence_observed_at": "2026-08-27T21:47:48.967179Z",
+      "assessed": [
+        {
+          "reason": "management_path",
+          "status": "unknown",
+          "detail": "management_path_effect_correlation_incomplete",
+          "evidence_id": "obs_4bea701308f641288e53b668cac0f680",
+          "observed_at": "2026-08-27T21:47:48.967179Z",
+          "evidence": {
+            "target_unit": "ModemManager.service",
+            "action": "restart",
+            "effect_units": "\u2026trimmed for fixture\u2026",
+            "effect_edges": "\u2026trimmed for fixture\u2026",
+            "effect_complete": false,
+            "context_gaps": "\u2026trimmed for fixture\u2026",
+            "management_units": [],
+            "intersection": [],
+            "management_complete": false
+          },
+          "missing_evidence": [
+            "effect_graph.node_limit",
+            "effect_graph.stop_when_unneeded:bluetooth.target",
+            "effect_graph.stop_when_unneeded:user-1000.slice",
+            "effect_graph.stop_when_unneeded:user-runtime-dir@1000.service",
+            "effect_graph.unresolved:-.slice",
+            "effect_graph.unresolved:NetworkManager-wait-online.service"
+          ]
+        },
+        {
+          "reason": "localplane_agent",
+          "status": "unknown",
+          "detail": "localplane_agent_effect_correlation_incomplete",
+          "evidence_id": "obs_4bea701308f641288e53b668cac0f680",
+          "observed_at": "2026-08-27T21:47:48.967179Z",
+          "evidence": {
+            "target_unit": "ModemManager.service",
+            "action": "restart",
+            "effect_units": "\u2026trimmed for fixture\u2026",
+            "effect_edges": "\u2026trimmed for fixture\u2026",
+            "effect_complete": false,
+            "context_gaps": "\u2026trimmed for fixture\u2026",
+            "agent_unit": "user@1000.service",
+            "agent_complete": true
+          },
+          "missing_evidence": [
+            "effect_graph.node_limit",
+            "effect_graph.stop_when_unneeded:bluetooth.target",
+            "effect_graph.stop_when_unneeded:user-1000.slice",
+            "effect_graph.stop_when_unneeded:user-runtime-dir@1000.service",
+            "effect_graph.unresolved:-.slice",
+            "effect_graph.unresolved:NetworkManager-wait-online.service"
+          ]
+        }
+      ]
+    },
+    "authorization": {
+      "state": "not_preflighted",
+      "exact": false,
+      "authority": "systemd",
+      "decision_point": "dispatch",
+      "action_id": "org.freedesktop.systemd1.manage-units",
+      "canonical_target": "ModemManager.service",
+      "verb": "restart",
+      "reason": "unprivileged_caller_cannot_supply_trusted_polkit_unit_verb_details"
+    },
+    "systemd_lifecycle_context": {
+      "status": "partial",
+      "target_unit": "ModemManager.service",
+      "action": "restart",
+      "effect_units": [
+        "-.mount",
+        "ModemManager.service",
+        "apport-autoreport.timer",
+        "apport-forward.socket",
+        "apport.service",
+        "apt-daily-upgrade.service",
+        "apt-daily-upgrade.timer",
+        "apt-daily.timer"
+      ],
+      "effect_edges": [
+        {
+          "source": "-.mount",
+          "relation": "RequiredBy",
+          "target": "ModemManager.service"
+        },
+        {
+          "source": "-.mount",
+          "relation": "RequiredBy",
+          "target": "apparmor.service"
+        },
+        {
+          "source": "-.mount",
+          "relation": "RequiredBy",
+          "target": "apport-autoreport.path"
+        },
+        {
+          "source": "-.mount",
+          "relation": "RequiredBy",
+          "target": "apport-forward.socket"
+        },
+        {
+          "source": "-.mount",
+          "relation": "RequiredBy",
+          "target": "apt-daily-upgrade.timer"
+        },
+        {
+          "source": "-.mount",
+          "relation": "RequiredBy",
+          "target": "apt-daily.timer"
+        }
+      ],
+      "effect_complete": false,
+      "active_activation_sources": [],
+      "active_upholding_sources": [],
+      "management_units": [],
+      "management_complete": false,
+      "agent_unit": "user@1000.service",
+      "agent_complete": true,
+      "gaps": [
+        "effect_graph.node_limit",
+        "effect_graph.stop_when_unneeded:bluetooth.target",
+        "effect_graph.stop_when_unneeded:user-1000.slice",
+        "effect_graph.stop_when_unneeded:user-runtime-dir@1000.service",
+        "effect_graph.unresolved:-.slice",
+        "effect_graph.unresolved:NetworkManager-wait-online.service"
+      ],
+      "restart_baseline_invocation_id": "f232561181bd400cab28de27eb30d477"
+    },
+    "confirmation": {
+      "required": true,
+      "method": "typed",
+      "source": "policy",
+      "reasons": [
+        "medium risk \u2014 policy requires confirmation from medium"
+      ],
+      "policy": "required for medium and high risk, for anything that can remove the management path, and for anything that cannot be undone",
+      "token_issued": false,
+      "satisfied": false,
+      "satisfiable": false,
+      "unsatisfiable_reason": "execution_not_implemented"
+    },
+    "verification": {
+      "executed": false,
+      "capability": "systemd.units.observe",
+      "provider": "systemd",
+      "field": null,
+      "expect": "active_with_new_invocation_id",
+      "condition": "fresh targeted systemd observation must prove a supported active service shape and a non-null InvocationID different from the dispatch baseline"
+    },
+    "guard": {
+      "availability": "unavailable",
+      "reason": "operation_has_no_safe_automatic_inverse",
+      "window_s": 0,
+      "prerequisites": [],
+      "unmet": [],
+      "armed": false,
+      "guarantee": "no connection guard is offered for systemd lifecycle actions"
+    },
+    "recovery": {
+      "mode": "none",
+      "rollback_possible": false,
+      "restores_field": null,
+      "restores_value": null,
+      "armed": false,
+      "guarantee": "none",
+      "reason": "start, stop and restart have no trustworthy unattended inverse; Connection Guard and automatic rollback do not apply"
+    },
+    "validity": {
+      "state": "current",
+      "reasons": [],
+      "as_of": "2026-08-27T21:47:50.310195Z"
+    }
+  }
+}

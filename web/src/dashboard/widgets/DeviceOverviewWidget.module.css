@@ -1,0 +1,96 @@
+.container { min-width: 0; height: 100%; }
+.plate { height: 100%; display: flex; flex-direction: column; }
+
+/* The relationship plane absorbs any spare height in the row rather than leaving it under
+ * the panel's last row of text. */
+.plate > :global([class*='topo']) { flex: 1 1 auto; }
+
+/* A count is a fact, not a metric tile: it sits in the head as a small inline chip rather
+ * than a card of its own. */
+.countChip {
+  display: inline-flex;
+  align-items: baseline;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.countChip b {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--dim);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+.action:hover {
+  color: var(--ink);
+  border-color: var(--rule);
+  background: var(--raised);
+  text-decoration: none;
+}
+
+/* The verdict and the sentence explaining it read as one statement, so they share a row and
+ * only stack when there is genuinely no width for them. */
+.pathRow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex-wrap: wrap;
+  margin-bottom: 9px;
+}
+
+.safety {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  flex: none;
+}
+
+/* Gap lists sit side by side rather than each taking a full-width band. */
+.gapRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 9px;
+}
+
+.pathNote {
+  flex: 1 1 320px;
+  margin: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--r-sm);
+  background: var(--inset);
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.5;
+  max-width: 92ch;
+}
+
+.code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  background: var(--sunken);
+  padding: 1px 4px;
+  border-radius: var(--r-xs);
+}
