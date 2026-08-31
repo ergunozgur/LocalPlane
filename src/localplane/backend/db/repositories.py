@@ -177,7 +177,7 @@ class HostRepository:
 
     def upsert(self, identity: dict[str, Any], now: str) -> str:
         """Record what the agent said about the host. First-seen is never overwritten."""
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO hosts (
                 host_id, identity_basis, identity_confidence, hostname, configured_hostname,
@@ -233,7 +233,7 @@ class AgentRepository:
         self._db = database
 
     def upsert(self, host_id: str, agent: dict[str, Any], protocol_version: str, now: str) -> str:
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO agent_instances (
                 agent_instance_id, host_id, agent_version, protocol_version, transport,
@@ -268,10 +268,10 @@ class AgentRepository:
         stale row claiming ``available`` is the exact failure this model exists to
         prevent.
         """
-        self._db.connection.execute(
+        self._db.execute(
             "DELETE FROM agent_capabilities WHERE agent_instance_id = ?", (agent_instance_id,)
         )
-        self._db.connection.executemany(
+        self._db.executemany(
             """
             INSERT INTO agent_capabilities (
                 agent_instance_id, capability, version, status, mutating, summary,
@@ -350,7 +350,7 @@ class ObjectRepository:
         management_reason: str,
         now: str,
     ) -> None:
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO objects (
                 object_id, host_id, kind, identity_basis, identity_value, identity_confidence,
@@ -452,7 +452,7 @@ class ObjectRepository:
         and an unmanaged row with one, so there is no order in which this could be done in
         two steps.
         """
-        self._db.connection.execute(
+        self._db.execute(
             "UPDATE objects SET management_state = 'managed', active_intent_id = ?, "
             "management_reason = ? WHERE object_id = ?",
             (intent_id, reason, object_id),
@@ -472,7 +472,7 @@ class ObjectRepository:
         catch the write, and the trigger would catch an intent belonging to somebody else,
         but a statement that cannot express the mistake is better than two that refuse it.
         """
-        self._db.connection.execute(
+        self._db.execute(
             "UPDATE objects SET active_intent_id = ? "
             "WHERE object_id = ? AND management_state = 'managed'",
             (intent_id, object_id),
@@ -484,7 +484,7 @@ class ObjectRepository:
         The intent row itself is untouched: it stays as history, and so does every version
         before it. What is released is LocalPlane's claim to be answerable for the object.
         """
-        self._db.connection.execute(
+        self._db.execute(
             "UPDATE objects SET management_state = 'observed', active_intent_id = NULL, "
             "management_reason = ? WHERE object_id = ?",
             (reason, object_id),
@@ -531,7 +531,7 @@ class SweepRepository:
         self._db = database
 
     def insert(self, sweep: dict[str, Any]) -> None:
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO observation_sweeps (
                 sweep_id, host_id, agent_instance_id, capability, scope, provider,
@@ -558,7 +558,7 @@ class SweepRepository:
         )
 
     def insert_observation(self, observation: dict[str, Any]) -> None:
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO observations (
                 observation_id, sweep_id, host_id, object_id, capability, provider,
@@ -758,7 +758,7 @@ class IntentRepository:
         adopt in ``management_transitions`` or a row in ``intent_revisions`` — and exactly
         one of those must be written in the same transaction as this call.
         """
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO intents (
                 intent_id, object_id, host_id, version, supersedes, schema_version, origin,
@@ -783,7 +783,7 @@ class IntentRepository:
                 created_at,
             ),
         )
-        self._db.connection.executemany(
+        self._db.executemany(
             "INSERT INTO intent_fields (intent_id, field, value_type, value) VALUES (?,?,?,?)",
             [(intent_id, field, value_type, value) for field, value_type, value in fields],
         )
@@ -807,7 +807,7 @@ class IntentRepository:
         else. Neither transition touches the host, and this table is structurally incapable
         of claiming otherwise.
         """
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO management_transitions (
                 transition_id, object_id, host_id, transition, from_state, to_state,
@@ -846,7 +846,7 @@ class IntentRepository:
         ``intent_id`` is UNIQUE in the schema, so a second revision claiming the same
         version is refused by the store rather than by whoever remembered to check.
         """
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO intent_revisions (
                 revision_id, object_id, host_id, kind, intent_id, host_effect, occurred_at
@@ -1092,7 +1092,7 @@ class FindingRepository:
         sweep_id: str | None,
         now: str,
     ) -> None:
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO findings (
                 finding_id, finding_key, host_id, object_id, finding_type, subject, status,
@@ -1146,7 +1146,7 @@ class FindingRepository:
         ``updated_at`` and leaves ``last_seen_at`` where it was, so the pair says exactly
         what happened: still open, last confirmed then, looked at since and could not tell.
         """
-        self._db.connection.execute(
+        self._db.execute(
             """
             UPDATE findings SET
                 intent_id = ?, intended_type = ?, intended_value = ?,
@@ -1181,7 +1181,7 @@ class FindingRepository:
         resolved_by_observation_id: str | None,
         now: str,
     ) -> None:
-        self._db.connection.execute(
+        self._db.execute(
             """
             UPDATE findings SET
                 status = 'resolved', resolution = ?, resolved_by_observation_id = ?,
@@ -1209,7 +1209,7 @@ class ProviderObservationRepository:
         self._db = database
 
     def insert(self, reading: dict[str, Any]) -> None:
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO provider_observations (
                 provider_observation_id, sweep_id, host_id, provider, source, status, reason,
@@ -1392,7 +1392,7 @@ class OwnershipFindingRepository:
         sweep_id: str | None,
         now: str,
     ) -> None:
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO ownership_findings (
                 finding_id, finding_key, host_id, object_id, finding_type, subject, status,
@@ -1446,7 +1446,7 @@ class OwnershipFindingRepository:
         unconditionally here. An evaluation that could not read the provider does not reach
         this method at all — it calls :meth:`touch`, which says "looked, could not tell".
         """
-        self._db.connection.execute(
+        self._db.execute(
             """
             UPDATE ownership_findings SET
                 intent_id = ?, owner_provider = ?, owner_instance = ?, owner_label = ?,
@@ -1479,7 +1479,7 @@ class OwnershipFindingRepository:
         happened — still open, last proven then, looked at since and the evidence was not
         readable. An unreadable provider is not grounds for closing anything.
         """
-        self._db.connection.execute(
+        self._db.execute(
             "UPDATE ownership_findings SET updated_at = ? WHERE finding_id = ?",
             (now, finding_id),
         )
@@ -1492,7 +1492,7 @@ class OwnershipFindingRepository:
         resolved_by_provider_observation_id: str | None,
         now: str,
     ) -> None:
-        self._db.connection.execute(
+        self._db.execute(
             """
             UPDATE ownership_findings SET
                 status = 'resolved', resolution = ?, resolved_by_provider_observation_id = ?,
@@ -1691,7 +1691,7 @@ class RunRepository:
     def insert_preview(self, preview: dict[str, Any]) -> None:
         """Write one published plan. Nothing may update it afterwards; a trigger says so."""
         columns = list(preview)
-        self._db.connection.execute(
+        self._db.execute(
             f"INSERT INTO run_previews ({', '.join(columns)}) "
             f"VALUES ({', '.join('?' for _ in columns)})",
             tuple(preview[c] for c in columns),
@@ -1714,7 +1714,7 @@ class RunRepository:
         else, exactly as it will not on a management transition or an intent revision.
         Planning is not applying, and this table cannot say otherwise.
         """
-        self._db.connection.execute(
+        self._db.execute(
             """
             INSERT INTO runs (
                 run_id, host_id, object_id, operation, state, preview_id, host_effect,
@@ -1726,7 +1726,7 @@ class RunRepository:
 
     def cancel(self, *, run_id: str, now: str) -> None:
         """Mark a Run cancelled. The preview it published stays exactly as it is."""
-        self._db.connection.execute(
+        self._db.execute(
             "UPDATE runs SET state = 'cancelled', cancelled_at = ?, finished_at = ? "
             "WHERE run_id = ?",
             (now, now, run_id),
@@ -1764,7 +1764,7 @@ class RunRepository:
         if not assignments:
             return
         params.append(run_id)
-        self._db.connection.execute(
+        self._db.execute(
             f"UPDATE runs SET {', '.join(assignments)} WHERE run_id = ?", tuple(params)
         )
 
@@ -1881,7 +1881,7 @@ class ManagementPathRepository:
     def insert(self, observation: dict[str, Any]) -> None:
         """Record one observation. Belongs inside a transaction opened by the caller."""
         columns = list(observation)
-        self._db.connection.execute(
+        self._db.execute(
             f"INSERT INTO management_path_observations ({', '.join(columns)}) "
             f"VALUES ({', '.join('?' for _ in columns)})",
             tuple(observation[c] for c in columns),
@@ -2029,7 +2029,7 @@ class ConfirmationRepository:
     def insert(self, confirmation: dict[str, Any]) -> None:
         """Record a satisfied confirmation. Inside a transaction opened by the caller."""
         columns = list(confirmation)
-        self._db.connection.execute(
+        self._db.execute(
             f"INSERT INTO run_confirmations ({', '.join(columns)}) "
             f"VALUES ({', '.join('?' for _ in columns)})",
             tuple(confirmation[c] for c in columns),
@@ -2082,7 +2082,7 @@ class ConfirmationRepository:
         may proceed. A trigger refuses the loser's write in any case, so the guarantee does
         not rest on this method being called correctly.
         """
-        cursor = self._db.connection.execute(
+        cursor = self._db.execute(
             "UPDATE run_confirmations SET consumed_at = ?, consumed_by_attempt_id = ? "
             "WHERE confirmation_id = ? AND consumed_at IS NULL",
             (now, attempt_id, confirmation_id),
@@ -2134,7 +2134,7 @@ class CheckpointRepository:
 
     def insert(self, checkpoint: dict[str, Any]) -> None:
         columns = list(checkpoint)
-        self._db.connection.execute(
+        self._db.execute(
             f"INSERT INTO run_checkpoints ({', '.join(columns)}) "
             f"VALUES ({', '.join('?' for _ in columns)})",
             tuple(checkpoint[c] for c in columns),
@@ -2257,7 +2257,7 @@ class ChangeRepository:
 
     def insert(self, change: dict[str, Any]) -> None:
         columns = list(change)
-        self._db.connection.execute(
+        self._db.execute(
             f"INSERT INTO changes ({', '.join(columns)}) "
             f"VALUES ({', '.join('?' for _ in columns)})",
             tuple(change[c] for c in columns),
@@ -2266,7 +2266,7 @@ class ChangeRepository:
     def update(self, change_id: str, values: dict[str, Any]) -> None:
         """Move what became of a Change. What it was *about* is refused by a trigger."""
         assignments = ", ".join(f"{column} = ?" for column in values)
-        self._db.connection.execute(
+        self._db.execute(
             f"UPDATE changes SET {assignments} WHERE change_id = ?",
             (*values.values(), change_id),
         )
@@ -2428,7 +2428,7 @@ class RecoveryAttemptRepository:
 
     def insert(self, attempt: dict[str, Any]) -> None:
         columns = list(attempt)
-        self._db.connection.execute(
+        self._db.execute(
             f"INSERT INTO change_recovery_attempts ({', '.join(columns)}) "
             f"VALUES ({', '.join('?' for _ in columns)})",
             tuple(attempt[c] for c in columns),
@@ -2437,7 +2437,7 @@ class RecoveryAttemptRepository:
     def update(self, attempt_id: str, values: dict[str, Any]) -> None:
         """Move what became of an attempt. What it was about is refused by a trigger."""
         assignments = ", ".join(f"{column} = ?" for column in values)
-        self._db.connection.execute(
+        self._db.execute(
             f"UPDATE change_recovery_attempts SET {assignments} WHERE attempt_id = ?",
             (*values.values(), attempt_id),
         )
@@ -2570,7 +2570,7 @@ class RunEventRepository:
             (run_id,),
         )
         sequence = int(row["n"]) + 1 if row is not None else 1
-        self._db.connection.execute(
+        self._db.execute(
             "INSERT INTO run_events (event_id, run_id, change_id, sequence, event, "
             "state_from, state_to, occurred_at, detail) VALUES (?,?,?,?,?,?,?,?,?)",
             (
@@ -2670,14 +2670,14 @@ class GuardRepository:
     def insert(self, values: dict[str, Any]) -> None:
         columns = ", ".join(values)
         placeholders = ", ".join("?" for _ in values)
-        self._db.connection.execute(
+        self._db.execute(
             f"INSERT INTO run_guards ({columns}) VALUES ({placeholders})",
             tuple(values.values()),
         )
 
     def update(self, guard_id: str, values: dict[str, Any]) -> None:
         assignments = ", ".join(f"{column} = ?" for column in values)
-        self._db.connection.execute(
+        self._db.execute(
             f"UPDATE run_guards SET {assignments} WHERE guard_id = ?",
             (*values.values(), guard_id),
         )
@@ -2753,7 +2753,7 @@ class WriteLockRepository:
         """
         key = write_lock_key(host_id, object_id, field)
         try:
-            self._db.connection.execute(
+            self._db.execute(
                 "INSERT INTO object_write_locks "
                 "(lock_key, host_id, object_id, field, run_id, acquired_at) "
                 "VALUES (?,?,?,?,?,?)",
@@ -2789,7 +2789,7 @@ class WriteLockRepository:
         "only the Run that owns the hold can release it" needs no extra machinery, and why no
         other object's lock can be touched by either act.
         """
-        cursor = self._db.connection.execute(
+        cursor = self._db.execute(
             "DELETE FROM object_write_locks WHERE run_id = ?", (run_id,)
         )
         return cursor.rowcount

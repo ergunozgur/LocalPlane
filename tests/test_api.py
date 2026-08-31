@@ -7,7 +7,10 @@ same against the machine.
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
@@ -18,8 +21,34 @@ from localplane.agent.server import AgentServer
 from localplane.agent.service import AgentService
 from localplane.backend.app import create_app
 from localplane.backend.config import Settings
-from localplane.backend.db.database import open_database
+from localplane.backend.db.database import Database, open_database
+from localplane.backend.db.repositories import HostRepository
 from tests.conftest import FakeRunner
+
+
+class ContentionTrackingRLock:
+    """An RLock that proves another request attempted to enter while it was held."""
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self.contender_attempted = threading.Event()
+
+    def acquire(self) -> bool:
+        if self._lock.acquire(blocking=False):
+            return True
+        self.contender_attempted.set()
+        self._lock.acquire()
+        return True
+
+    def release(self) -> None:
+        self._lock.release()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *_args) -> None:
+        self.release()
 
 
 @pytest.fixture
@@ -92,6 +121,93 @@ def test_status_is_backend_liveness_only(client: TestClient):
 def test_status_works_without_an_agent(agentless_client: TestClient):
     """A backend that cannot answer while the agent is down cannot report that it is."""
     assert agentless_client.get("/api/v1/status").status_code == 200
+
+
+def test_parallel_sync_requests_serialize_shared_connection_transactions(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """A second real request contends, then owns a separate complete transaction."""
+    database = client.app.state.context.database
+    tracked_lock = ContentionTrackingRLock()
+    database._lock = tracked_lock
+    original_transaction = Database.transaction
+    first_transaction_open = threading.Event()
+    sequence_lock = threading.Lock()
+    call_count = 0
+
+    @contextmanager
+    def force_first_two_transactions_to_overlap(self: Database):
+        nonlocal call_count
+        assert self is database
+        with sequence_lock:
+            call_count += 1
+            call_number = call_count
+
+        if call_number == 1:
+            with original_transaction(self) as connection:
+                first_transaction_open.set()
+                assert tracked_lock.contender_attempted.wait(timeout=5)
+                yield connection
+            return
+
+        assert first_transaction_open.wait(timeout=5)
+        with original_transaction(self) as connection:
+            yield connection
+
+    monkeypatch.setattr(Database, "transaction", force_first_two_transactions_to_overlap)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(client.post, "/api/v1/network/observations/refresh")
+            for _ in range(2)
+        ]
+        responses = [future.result(timeout=10) for future in futures]
+
+    assert tracked_lock.contender_attempted.is_set()
+    assert [response.status_code for response in responses] == [200, 200]
+    assert len({response.json()["sweep_id"] for response in responses}) == 2
+    assert client.get("/api/v1/network/interfaces").json()["count"] == 9
+
+
+def test_concurrent_request_cannot_read_state_that_another_request_rolls_back(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """A real read contends on the connection and resumes only after writer rollback."""
+    database = client.app.state.context.database
+    tracked_lock = ContentionTrackingRLock()
+    database._lock = tracked_lock
+    original_hostname = client.get("/api/v1/host").json()["configured_hostname"]
+    uncommitted_hostname = "proof-uncommitted-hostname"
+    update_visible = threading.Event()
+    original_upsert = HostRepository.upsert
+
+    class ProofRollback(RuntimeError):
+        pass
+
+    def update_then_rollback(self: HostRepository, identity: dict, now: str) -> str:
+        host_id = original_upsert(self, identity, now)
+        self._db.execute(
+            "UPDATE hosts SET configured_hostname = ? WHERE host_id = ?",
+            (uncommitted_hostname, host_id),
+        )
+        update_visible.set()
+        assert tracked_lock.contender_attempted.wait(timeout=5)
+        raise ProofRollback("force the request transaction to roll back")
+
+    monkeypatch.setattr(HostRepository, "upsert", update_then_rollback)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        writer = pool.submit(client.post, "/api/v1/network/observations/refresh")
+        assert update_visible.wait(timeout=5)
+        reader = pool.submit(client.get, "/api/v1/host")
+        with pytest.raises(ProofRollback):
+            writer.result(timeout=10)
+        observed_after_rollback = reader.result(timeout=10)
+
+    assert tracked_lock.contender_attempted.is_set()
+    assert observed_after_rollback.status_code == 200
+    assert observed_after_rollback.json()["configured_hostname"] == original_hostname
+    assert client.get("/api/v1/host").json()["configured_hostname"] == original_hostname
 
 
 # ----------------------------------------------------------------------------------- host

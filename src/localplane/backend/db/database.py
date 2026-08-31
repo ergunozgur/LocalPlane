@@ -24,7 +24,8 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from collections.abc import Iterator
+import threading
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -96,10 +97,18 @@ class Database:
 
     def __init__(self, connection: sqlite3.Connection, path: Path) -> None:
         self._connection = connection
+        # FastAPI runs synchronous handlers in worker threads.  They all share this
+        # Database, and a sqlite3 connection has one transaction state regardless of
+        # which thread uses it.  Hold one reentrant lock for every use of the connection,
+        # and for the whole lifetime of an explicit transaction.  Reentrancy is required
+        # because repository calls made inside a transaction come back through execute()
+        # and query methods on this same object.
+        self._lock = threading.RLock()
         self.path = path
 
     @property
     def connection(self) -> sqlite3.Connection:
+        """Raw startup/migration connection; request-time code uses locked methods."""
         return self._connection
 
     @contextmanager
@@ -114,23 +123,39 @@ class Database:
         ``BEGIN IMMEDIATE`` takes the write lock up front rather than discovering a
         conflict partway through.
         """
-        self._connection.execute("BEGIN IMMEDIATE")
-        try:
-            yield self._connection
-        except BaseException:
-            self._connection.execute("ROLLBACK")
-            LOG.exception("transaction rolled back")
-            raise
-        self._connection.execute("COMMIT")
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield self._connection
+            except BaseException:
+                self._connection.execute("ROLLBACK")
+                LOG.exception("transaction rolled back")
+                raise
+            self._connection.execute("COMMIT")
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Cursor:
+        """Execute one statement without bypassing shared-connection ownership."""
+        with self._lock:
+            return self._connection.execute(sql, params)
+
+    def executemany(
+        self, sql: str, params: Iterable[tuple[Any, ...]]
+    ) -> sqlite3.Cursor:
+        """Execute one parameter batch under the shared-connection lock."""
+        with self._lock:
+            return self._connection.executemany(sql, params)
 
     def query(self, sql: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
-        return self._connection.execute(sql, params).fetchall()
+        with self._lock:
+            return self._connection.execute(sql, params).fetchall()
 
     def query_one(self, sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
-        return self._connection.execute(sql, params).fetchone()
+        with self._lock:
+            return self._connection.execute(sql, params).fetchone()
 
     def close(self) -> None:
-        self._connection.close()
+        with self._lock:
+            self._connection.close()
 
 
 def open_database(path: str | Path, migrations_dir: Path | None = None) -> Database:
