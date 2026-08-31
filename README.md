@@ -1,15 +1,26 @@
 <div align="center">
 
+<br>
+<br>
+<br>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/localplane-wordmark-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/images/localplane-wordmark-light.svg">
   <img src="docs/images/localplane-wordmark-light.svg" alt="LocalPlane" width="360">
 </picture>
 
+<br>
+<br>
+
 **Observe everything. Manage what you choose.**
+
+<br>
 
 A local-first operations control plane for understanding Linux systems and making guarded,
 evidence-backed changes.
+
+<br>
 
 </div>
 
