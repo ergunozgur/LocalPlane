@@ -17,7 +17,7 @@ import { StatusMark, StatusPill } from '@/components/semantic/StatusPill';
 import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty, Degraded } from '@/components/states/SurfaceState';
-import { capabilityStatus, health as healthOf, unitActiveState } from '@/domain/vocabulary';
+import { capabilityStatus, unitActiveState } from '@/domain/vocabulary';
 import { SweepCaveat, SweepFoot, WidgetAction } from './shared';
 
 const LIMIT = 8;
@@ -39,7 +39,6 @@ export function ServicesWidget(): JSX.Element {
               <PlateHead
                 title="Services"
                 meta={`${list.count} units under watch, none managed`}
-                mark={healthOf(failed.length > 0 ? 'failed' : 'healthy')}
                 asOf={meta.fetchedAt.toLocaleTimeString()}
               >
                 <WidgetAction to="/system">All {list.count} ›</WidgetAction>

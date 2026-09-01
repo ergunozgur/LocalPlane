@@ -41,7 +41,8 @@ firewall rule, a DNS setting, a sysctl or anything in any of those daemons.
 
 `apply` can execute only the closed typed operation already fixed by its published Run:
 reconcile a managed interface's retained MTU through the fixed helper path, or ask Docker
-to start, stop or restart one validated container through Docker's own closed API.
+to start, stop or restart one validated container through Docker's own closed API, or ask
+systemd to start, stop or restart one validated service unit through the official D-Bus API.
 `recovery/retry` can only re-attempt the original Change's required end state, after a fresh
 observation and any required authority. Neither endpoint takes a request body, so there is
 no parameter for a value, target, operation, verb, interface, command or provider on either

@@ -1,17 +1,16 @@
 /**
- * Application grouping.
+ * Provider-derived container grouping.
  *
- * The claim under test is the product's: an application is the first-class object and a
- * container is a part of it. The grouping must come from the labels the backend publishes,
- * never from names — two containers that merely look related are not an application.
+ * Grouping must come from labels the backend publishes, never from names. The result is a
+ * presentation projection and does not claim durable LocalPlane Application identity.
  */
 import { describe, expect, it } from 'vitest';
 import {
   engineFacts,
-  groupIntoApplications,
+  groupContainers,
   imagesInUse,
   runtimeRows,
-  applicationOf,
+  containerGroupOf,
   LABEL_CONFIG_FILES,
   LABEL_PROJECT,
   LABEL_SERVICE,
@@ -38,74 +37,74 @@ function container(
 }
 
 describe('grouping', () => {
-  it('groups containers into one application by their compose project', () => {
-    const apps = groupIntoApplications([
+  it('groups containers by their Compose project label', () => {
+    const groups = groupContainers([
       container('grafana', { [LABEL_PROJECT]: 'monitoring', [LABEL_SERVICE]: 'grafana' }),
       container('prometheus', { [LABEL_PROJECT]: 'monitoring', [LABEL_SERVICE]: 'prometheus' }),
     ]);
-    expect(apps).toHaveLength(1);
-    expect(apps[0]?.name).toBe('monitoring');
-    expect(apps[0]?.origin).toBe('compose');
-    expect(apps[0]?.containers).toHaveLength(2);
-    expect(apps[0]?.services).toEqual(['grafana', 'prometheus']);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.name).toBe('monitoring');
+    expect(groups[0]?.origin).toBe('compose');
+    expect(groups[0]?.containers).toHaveLength(2);
+    expect(groups[0]?.services).toEqual(['grafana', 'prometheus']);
   });
 
   it('does not group containers whose names merely look related', () => {
-    // No compose labels: these are two standalone applications, not one.
-    const apps = groupIntoApplications([
+    // No Compose labels: these remain two standalone containers, not one inferred group.
+    const groups = groupContainers([
       container('monitoring-a'),
       container('monitoring-b'),
     ]);
-    expect(apps).toHaveLength(2);
-    expect(apps.every((a) => a.origin === 'standalone')).toBe(true);
+    expect(groups).toHaveLength(2);
+    expect(groups.every((group) => group.origin === 'standalone')).toBe(true);
   });
 
-  it('keeps a container without a project as an application of itself', () => {
-    const apps = groupIntoApplications([container('portainer')]);
-    expect(apps[0]?.origin).toBe('standalone');
-    expect(apps[0]?.name).toBe('portainer');
-    expect(apps[0]?.configFile).toBeNull();
+  it('keeps a container without a project as an individual presentation row', () => {
+    const groups = groupContainers([container('portainer')]);
+    expect(groups[0]?.origin).toBe('standalone');
+    expect(groups[0]?.name).toBe('portainer');
+    expect(groups[0]?.configFile).toBeNull();
   });
 
   it('carries the declaration the compose project came from', () => {
-    const apps = groupIntoApplications([
+    const groups = groupContainers([
       container('grafana', {
         [LABEL_PROJECT]: 'monitoring',
         [LABEL_CONFIG_FILES]: '/srv/compose/monitoring/docker-compose.yml',
       }),
     ]);
-    expect(apps[0]?.configFile).toBe('/srv/compose/monitoring/docker-compose.yml');
+    expect(groups[0]?.configFile).toBe('/srv/compose/monitoring/docker-compose.yml');
   });
 
   it('counts only running containers as running', () => {
-    const apps = groupIntoApplications([
+    const groups = groupContainers([
       container('a', { [LABEL_PROJECT]: 'p' }, 'running'),
       container('b', { [LABEL_PROJECT]: 'p' }, 'exited'),
     ]);
-    expect(apps[0]?.running).toBe(1);
-    expect(apps[0]?.containers).toHaveLength(2);
+    expect(groups[0]?.running).toBe(1);
+    expect(groups[0]?.containers).toHaveLength(2);
   });
 
-  it('lists compose applications before standalone ones', () => {
-    const apps = groupIntoApplications([
+  it('lists Compose groups before standalone containers', () => {
+    const groups = groupContainers([
       container('zzz-standalone'),
       container('aaa', { [LABEL_PROJECT]: 'project' }),
     ]);
-    expect(apps[0]?.origin).toBe('compose');
-    expect(apps[1]?.origin).toBe('standalone');
+    expect(groups[0]?.origin).toBe('compose');
+    expect(groups[1]?.origin).toBe('standalone');
   });
 });
 
-describe('applicationOf', () => {
+describe('containerGroupOf', () => {
   it('names the project and the service a container plays in it', () => {
-    const result = applicationOf(
+    const result = containerGroupOf(
       container('grafana', { [LABEL_PROJECT]: 'monitoring', [LABEL_SERVICE]: 'grafana' }),
     );
     expect(result).toEqual({ name: 'monitoring', origin: 'compose', service: 'grafana' });
   });
 
-  it('reports a standalone container as its own application with no service', () => {
-    expect(applicationOf(container('portainer'))).toEqual({
+  it('reports an unlabelled container with no project or service', () => {
+    expect(containerGroupOf(container('portainer'))).toEqual({
       name: 'portainer',
       origin: 'standalone',
       service: null,
@@ -151,21 +150,21 @@ describe('images in use', () => {
 
 describe('runtimes', () => {
   it('reports compose and standalone docker from real evidence', () => {
-    const apps = groupIntoApplications([
+    const groups = groupContainers([
       container('a', { [LABEL_PROJECT]: 'p' }),
       container('b'),
     ]);
-    const rows = runtimeRows(apps);
+    const rows = runtimeRows(groups);
     expect(rows.find((r) => r.name === 'docker compose')?.detection).toBe('observed');
     expect(rows.find((r) => r.name === 'docker')?.detection).toBe('observed');
   });
 
   it('never claims an undetectable runtime is absent', () => {
-    const rows = runtimeRows(groupIntoApplications([container('a')]));
+    const rows = runtimeRows(groupContainers([container('a')]));
     for (const name of ['podman', 'systemd-supervised', 'kubelet']) {
       const row = rows.find((r) => r.name === name);
       expect(row?.detection).toBe('unsupported');
-      expect(row?.workloads).toBeNull();
+      expect(row?.observedGroups).toBeNull();
       // "not detected by this build" is a statement about the build, not about the host.
       expect(row?.note).toMatch(/this build|would live here/i);
     }

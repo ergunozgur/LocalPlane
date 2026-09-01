@@ -1,10 +1,8 @@
 /**
- * Workloads — the applications this host runs, and the containers they are made of.
+ * Workloads — Docker containers, grouped only where provider labels support it.
  *
- * A deliberate claim: an Application is the first-class object and a container is a part it
- * is made of. The grouping comes from compose labels the backend already publishes, so a
- * compose project is a real application and a container without one stands alone rather than
- * being forced into a group.
+ * Durable Application identity does not exist in this build. Compose labels support a useful
+ * provider-derived project grouping, while an unlabelled container remains standalone.
  */
 import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -13,14 +11,13 @@ import { useResource } from '@/hooks/useResource';
 import { useEstateCounts, useHostName } from '@/hooks/useEstateCounts';
 import { Plate, PlateBody, PlateFoot, PlateHead, StatusDot } from '@/components/primitives/Plate';
 import { StatusPill } from '@/components/semantic/StatusPill';
-import { ManagementChip } from '@/components/semantic/SemanticGlyph';
 import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty } from '@/components/states/SurfaceState';
 import { PageHeader } from '../PageHeader';
 import { ScopeBar } from '@/components/layout/ScopeBar';
 import { SweepCaveat } from '@/dashboard/widgets/shared';
-import { groupIntoApplications, type Application } from '@/domain/workloads';
+import { groupContainers, type ContainerGroup } from '@/domain/workloads';
 import {
   containerHealth,
   containerState,
@@ -40,7 +37,7 @@ export function WorkloadList(): JSX.Element {
   return (
     <ResourceView resource={resource} what="container list" loadingLabel="Reading containers…">
       {(list, meta) => {
-        const applications = groupIntoApplications(list.containers);
+        const groups = groupContainers(list.containers);
         const running = list.containers.filter((c) => c.runtime.state === 'running').length;
 
         return (
@@ -48,7 +45,7 @@ export function WorkloadList(): JSX.Element {
             <ScopeBar
               crumbs={[{ label: hostName, to: '/' }, { label: 'workloads' }]}
               tabs={[
-                { to: '/workloads', label: 'Applications', count: counts.applications, end: true },
+                { to: '/workloads', label: 'Container groups', count: counts.containerGroups, end: true },
                 { to: '/workloads/runtime', label: 'Runtime' },
               ]}
               observedAt={meta.fetchedAt}
@@ -57,13 +54,13 @@ export function WorkloadList(): JSX.Element {
             <PageHeader
               title="Workloads"
               count={list.count}
-              annotation="An application is a first-class object — a named thing you operate. Its containers are the parts it is made of. Docker created these and Docker configures them; LocalPlane observes them and does not become answerable for them by watching."
+              annotation="Docker reports the containers in this view. Compose labels support project grouping, but these groups are provider-derived views—not canonical LocalPlane Applications. LocalPlane observes them and does not become answerable for them by watching."
             />
 
             <Plate quiet>
               <PlateHead
-                title="Applications"
-                meta="everything this host is running on your behalf"
+                title="Container groups"
+                meta="Compose-label projects and standalone containers observed through Docker"
                 mark={containerState(running > 0 ? 'running' : 'exited')}
                 asOf={meta.fetchedAt.toLocaleTimeString()}
                 chips={
@@ -73,8 +70,8 @@ export function WorkloadList(): JSX.Element {
                       <span>/{list.count} running</span>
                     </span>
                     <span className={styles.countChip}>
-                      <b>{applications.length}</b>
-                      <span>&nbsp;application{applications.length === 1 ? '' : 's'}</span>
+                      <b>{groups.length}</b>
+                      <span>&nbsp;group{groups.length === 1 ? '' : 's'}</span>
                     </span>
                   </>
                 }
@@ -86,7 +83,7 @@ export function WorkloadList(): JSX.Element {
                 </PlateBody>
               ) : null}
 
-              {applications.length === 0 ? (
+              {groups.length === 0 ? (
                 <Empty
                   title="No workloads"
                   explanation={
@@ -97,8 +94,8 @@ export function WorkloadList(): JSX.Element {
                 />
               ) : (
                 <div className={styles.applications}>
-                  {applications.map((application) => (
-                    <ApplicationRows key={application.id} application={application} />
+                  {groups.map((group) => (
+                    <ContainerGroupRows key={group.id} group={group} />
                   ))}
                 </div>
               )}
@@ -125,30 +122,28 @@ export function WorkloadList(): JSX.Element {
   );
 }
 
-function ApplicationRows({ application }: { application: Application }): JSX.Element {
-  const attention = application.containers.some(
+function ContainerGroupRows({ group }: { group: ContainerGroup }): JSX.Element {
+  const attention = group.containers.some(
     (c) => c.container_health.status === 'unhealthy' || c.runtime.state === 'dead',
   );
 
   return (
     <section className={styles.application} data-attention={attention ? 'true' : undefined}>
       <header className={styles.applicationHead}>
-        <StatusDot
-          semantic={containerState(application.running > 0 ? 'running' : 'exited')}
-        />
-        <span className={styles.applicationName}>{application.name}</span>
-        <span className={styles.kind}>application</span>
+        <span className={styles.applicationName}>{group.name}</span>
+        <span className={styles.kind}>
+          {group.origin === 'compose' ? 'Compose project' : 'standalone container'}
+        </span>
         <span className={styles.applicationMeta}>
-          {application.origin === 'compose'
-            ? `compose · ${application.containers.length} container${application.containers.length === 1 ? '' : 's'} · declared`
-            : 'standalone container · observed only'}
+          {group.origin === 'compose'
+            ? `${group.containers.length} container${group.containers.length === 1 ? '' : 's'} · grouped from provider labels`
+            : 'no Compose project label · observed only'}
         </span>
         <span className={styles.spacer} />
-        <ManagementChip state={application.containers[0]?.management.state} />
       </header>
 
       <div className={styles.containers}>
-        {application.containers.map((container) => (
+        {group.containers.map((container) => (
           <Link
             key={container.object_id}
             to={`/workloads/${container.object_id}`}

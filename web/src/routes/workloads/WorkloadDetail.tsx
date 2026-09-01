@@ -34,7 +34,7 @@ import { ResourceUsage } from '@/components/semantic/ResourceUsage';
 import { ContainerLogPanel } from '@/components/semantic/ContainerLogPanel';
 import { Disclosure } from '@/components/semantic/Evidence';
 import {
-  applicationOf,
+  containerGroupOf,
   LABEL_CONFIG_FILES,
   LABEL_CONFIG_HASH,
   LABEL_CONTAINER_NUMBER,
@@ -63,7 +63,7 @@ export function WorkloadDetail(): JSX.Element {
   return (
     <ResourceView resource={resource} what="container" loadingLabel="Reading container…">
       {(data, meta) => {
-        const application = applicationOf(data);
+        const group = containerGroupOf(data);
 
         const tabs: ObjectTab[] = [
           {
@@ -153,22 +153,22 @@ export function WorkloadDetail(): JSX.Element {
           },
           {
             id: 'declaration',
-            label: application.origin === 'compose' ? 'Declaration' : 'Labels',
+            label: group.origin === 'compose' ? 'Declaration' : 'Labels',
             render: () => (
               <ObjectColumns
                 main={
                   <Plate>
                     <PlateHead
-                      title={application.origin === 'compose' ? 'Project' : 'Declaration'}
+                      title={group.origin === 'compose' ? 'Project' : 'Declaration'}
                       level={3}
                       meta={
-                        application.origin === 'compose'
+                        group.origin === 'compose'
                           ? 'what declared this container'
                           : 'nothing declares this container'
                       }
                     />
                     <PlateBody>
-                      {application.origin === 'compose' ? (
+                      {group.origin === 'compose' ? (
                         <KeyValueList>
                           <KeyValue label="Project">
                             <Value value={data.labels[LABEL_PROJECT]} mono />
@@ -203,7 +203,7 @@ export function WorkloadDetail(): JSX.Element {
                           a declaration, not its contents. Rendering the comparator with an
                           empty right-hand column would state a comparison nobody made. */}
                       <p className={styles.labelNote}>
-                        {application.origin === 'compose'
+                        {group.origin === 'compose'
                           ? 'LocalPlane records which declaration produced this container, not what that declaration said. There is no field-by-field comparison to show, because the file was never read.'
                           : 'With nothing declared, nothing can disagree — this container has a health, but no reconciliation state.'}
                       </p>
@@ -367,11 +367,11 @@ export function WorkloadDetail(): JSX.Element {
               crumbs={[
                 { label: data.identity.value.slice(0, 12), to: '/' },
                 { label: 'workloads', to: '/workloads' },
-                { label: application.name, mono: true },
+                { label: group.name, mono: true },
                 // A one-service project names its service the same as itself. Saying it
                 // twice looks like a bug rather than like a hierarchy.
-                ...(application.service && application.service !== application.name
-                  ? [{ label: application.service, mono: true }]
+                ...(group.service && group.service !== group.name
+                  ? [{ label: group.service, mono: true }]
                   : []),
                 { label: data.short_id, mono: true },
               ]}
@@ -385,17 +385,17 @@ export function WorkloadDetail(): JSX.Element {
               mark={healthOf(data.health?.state)}
               observedAt={meta.fetchedAt}
               headline={
-                application.origin === 'compose'
-                  ? `A part of ${application.name}${application.service ? `, playing the ${application.service} service` : ''}. Declared by compose; observed by LocalPlane.`
+                group.origin === 'compose'
+                  ? `Compose labels place this container in project ${group.name}${group.service ? ` as service ${group.service}` : ''}. This is provider grouping evidence, not LocalPlane Application identity.`
                   : 'A standalone container. Nothing declares it to LocalPlane, so it is observed only.'
               }
               path={[
                 { label: 'workloads', to: '/workloads' },
-                ...(application.origin === 'compose'
-                  ? [{ label: application.name, to: `/workloads?application=${encodeURIComponent(application.name)}` }]
+                ...(group.origin === 'compose'
+                  ? [{ label: group.name, to: `/workloads?group=${encodeURIComponent(group.name)}` }]
                   : []),
-                ...(application.service && application.service !== application.name
-                  ? [{ label: application.service }]
+                ...(group.service && group.service !== group.name
+                  ? [{ label: group.service }]
                   : []),
                 { prefix: 'container', label: data.short_id },
               ]}

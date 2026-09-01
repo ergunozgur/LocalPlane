@@ -146,7 +146,7 @@ describe('breadcrumbs', () => {
 
     const crumbs = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     expect(within(crumbs).getByText('workloads')).toBeInTheDocument();
-    // The compose project is a real parent; the service is the part this container plays.
+    // The Compose project and service are explicit provider-label relationships.
     expect(within(crumbs).getByText('monitoring')).toBeInTheDocument();
     expect(within(crumbs).getByText('grafana')).toBeInTheDocument();
   });

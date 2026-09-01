@@ -76,21 +76,21 @@ function DOMAINS(counts: ReturnType<typeof useEstateCounts>): readonly Domain[] 
       label: 'Workloads',
       to: '/workloads',
       priority: 3,
-      count: counts.applications,
+      count: counts.containers,
       entries: [
         {
           to: '/workloads',
-          label: 'Applications',
+          label: 'Container groups',
           root: true,
-          count: counts.applications,
+          count: counts.containerGroups,
           description:
-            'Compose projects and standalone containers — the things this host runs on your behalf',
+            'Compose-label project groups and standalone containers observed through Docker',
         },
         {
           to: '/workloads/runtime',
           label: 'Runtime',
           description:
-            'The engine behind these workloads, the images they run from, and which runtimes are observed',
+            'The observed Docker engine, images in use, and runtime detection limits',
         },
       ],
     },

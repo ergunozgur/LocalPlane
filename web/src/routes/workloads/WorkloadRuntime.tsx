@@ -31,7 +31,7 @@ import { PageHeader } from '../PageHeader';
 import { ScopeBar } from '@/components/layout/ScopeBar';
 import {
   engineFacts,
-  groupIntoApplications,
+  groupContainers,
   imagesInUse,
   runtimeRows,
   type RuntimeRow,
@@ -59,17 +59,17 @@ export function WorkloadRuntime(): JSX.Element {
   return (
     <ResourceView resource={resource} what="container list" loadingLabel="Reading runtime…">
       {(list, meta) => {
-        const applications = groupIntoApplications(list.containers);
+        const groups = groupContainers(list.containers);
         const engine = engineFacts(list.last_sweep, list.containers);
         const images = imagesInUse(list.containers);
-        const rows = runtimeRows(applications);
+        const rows = runtimeRows(groups);
 
         return (
           <>
             <ScopeBar
               crumbs={[{ label: hostName, to: '/' }, { label: 'workloads', to: '/workloads' }, { label: 'runtime' }]}
               tabs={[
-                { to: '/workloads', label: 'Applications', count: counts.applications, end: true },
+                { to: '/workloads', label: 'Container groups', count: counts.containerGroups, end: true },
                 { to: '/workloads/runtime', label: 'Runtime' },
               ]}
               observedAt={meta.fetchedAt}
@@ -77,7 +77,7 @@ export function WorkloadRuntime(): JSX.Element {
 
             <PageHeader
               title="Runtime"
-              annotation="How these workloads are being run. Workloads is the domain; Docker is only what is present on this host today."
+              annotation="Current runtime evidence comes from Docker containers. Docker is the only runtime this build observes; unsupported detectors do not establish that other runtimes are absent."
             />
 
             <div className={styles.columns}>
@@ -85,7 +85,7 @@ export function WorkloadRuntime(): JSX.Element {
                 <Plate quiet>
                   <PlateHead
                     title="Engine"
-                    meta="the container runtime behind these workloads"
+                    meta="the container runtime this build currently observes"
                     asOf={meta.fetchedAt.toLocaleTimeString()}
                   />
                   <PlateBody>
@@ -141,7 +141,7 @@ export function WorkloadRuntime(): JSX.Element {
                 <Plate quiet>
                   <PlateHead
                     title="Runtimes"
-                    meta="what is actually running workloads on this host"
+                    meta="what the current provider evidence can establish"
                     asOf={meta.fetchedAt.toLocaleTimeString()}
                   />
                   <DataTable
@@ -160,14 +160,14 @@ export function WorkloadRuntime(): JSX.Element {
                         render: (row) => <Detection row={row} />,
                       },
                       {
-                        key: 'workloads',
-                        header: 'Workloads',
+                        key: 'groups',
+                        header: 'Observed groups',
                         align: 'right',
                         render: (row) =>
-                          row.workloads === null ? (
+                          row.observedGroups === null ? (
                             <Value value={null} reason="this build has no detector for it" />
                           ) : (
-                            <span className="mono">{row.workloads}</span>
+                            <span className="mono">{row.observedGroups}</span>
                           ),
                       },
                       {

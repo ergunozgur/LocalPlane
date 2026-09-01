@@ -107,7 +107,7 @@ describe('the shell', () => {
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    expect(await screen.findByRole('menuitem', { name: /Applications/ })).toHaveAttribute(
+    expect(await screen.findByRole('menuitem', { name: /Container groups/ })).toHaveAttribute(
       'href',
       '/workloads',
     );

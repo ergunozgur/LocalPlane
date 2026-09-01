@@ -154,6 +154,17 @@ a.item:hover { color: var(--ink); border-color: var(--accent-line); text-decorat
 .finding { border-color: var(--amber-line); background: var(--amber-soft); }
 .finding .itemName { color: var(--amber); font-weight: 600; }
 
+.incomplete {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 220px;
+  max-width: 430px;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.incomplete b { color: var(--ink); font-weight: 650; }
+
 .end {
   margin-left: auto;
   flex: none;

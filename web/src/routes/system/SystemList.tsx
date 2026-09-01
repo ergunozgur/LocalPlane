@@ -99,7 +99,6 @@ export function SystemList(): JSX.Element {
               <PlateHead
                 title="Units"
                 meta="every unit the system manager has loaded"
-                mark={unitActiveState(failed > 0 ? 'failed' : 'active')}
                 asOf={meta.fetchedAt.toLocaleTimeString()}
                 chips={
                   <>

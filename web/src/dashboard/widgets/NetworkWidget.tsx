@@ -24,13 +24,11 @@ export function NetworkWidget(): JSX.Element {
     <Plate quiet style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <ResourceView resource={resource} loadingLabel="Reading interfaces…">
         {(list, meta) => {
-          const failed = list.interfaces.filter((row) => row.health?.state === 'failed').length;
           return (
             <>
               <PlateHead
                 title="Network"
                 meta="ports, bridges and tunnels, and who configures each"
-                mark={healthOf(failed > 0 ? 'failed' : 'healthy')}
                 asOf={meta.fetchedAt.toLocaleTimeString()}
               >
                 <WidgetAction to="/network">All {list.count} ›</WidgetAction>

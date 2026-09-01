@@ -1,24 +1,22 @@
 /**
- * Applications, and the containers they are made of.
+ * Provider-derived container groups.
  *
  * The Workloads surface is built on a claim this product makes deliberately: **a workload
- * is a thing being run, and the runtime is only how it is being run.** An Application is the
- * first-class object — a named thing an operator operates — and its containers are the parts
- * it is made of. Reducing that to a flat container list loses the domain and keeps only the
- * mechanism.
+ * is a thing being run, and the runtime is only how it is being run.** This build does not
+ * yet have durable Application identity. It can still present the grouping Docker reports:
+ * Compose projects from explicit labels, plus unlabelled containers kept individually.
  *
  * The grouping is evidence-backed rather than inferred from names. The backend keeps a
  * deliberate allowlist of labels, and it happens to be exactly what this model needs:
  *
- *   com.docker.compose.project               the application's name
+ *   com.docker.compose.project               the Compose project name
  *   com.docker.compose.service               the part this container plays in it
  *   com.docker.compose.container-number      which replica of that part
  *   com.docker.compose.project.config_files  the declaration it came from
  *   com.docker.compose.project.working_dir   where that declaration lives
  *   com.docker.compose.config-hash           the digest of the declaration applied
  *
- * A container with no project label is not forced into one: it becomes a standalone
- * application of exactly itself.
+ * A container with no project label is not forced into a group.
  */
 import type { DockerContainer, Sweep } from '@/api/types';
 
@@ -29,20 +27,20 @@ export const LABEL_CONFIG_FILES = 'com.docker.compose.project.config_files';
 export const LABEL_WORKING_DIR = 'com.docker.compose.project.working_dir';
 export const LABEL_CONFIG_HASH = 'com.docker.compose.config-hash';
 
-export type ApplicationOrigin = 'compose' | 'standalone';
+export type ContainerGroupOrigin = 'compose' | 'standalone';
 
-export interface Application {
-  /** Stable id: the compose project, or the container's own object id when standalone. */
+export interface ContainerGroup {
+  /** A presentation key, not durable LocalPlane Application identity. */
   readonly id: string;
   readonly name: string;
-  readonly origin: ApplicationOrigin;
+  readonly origin: ContainerGroupOrigin;
   readonly containers: readonly DockerContainer[];
   readonly running: number;
-  /** The declaration this application came from, when compose named one. */
+  /** The declaration Compose reported for this project, when one was labelled. */
   readonly configFile: string | null;
   readonly workingDir: string | null;
   readonly configHash: string | null;
-  /** Distinct compose services within the application. Empty for a standalone container. */
+  /** Distinct Compose services within the group. Empty for a standalone container. */
   readonly services: readonly string[];
   /** Distinct docker network names the containers are attached to. */
   readonly networks: readonly string[];
@@ -57,15 +55,15 @@ function first(containers: readonly DockerContainer[], label: string): string | 
 }
 
 /**
- * Group containers into applications.
+ * Group containers using provider evidence.
  *
  * Order is stable and useful rather than alphabetical: compose projects first, then
  * standalone containers, each by name — which keeps the things an operator declared above
  * the things that merely exist.
  */
-export function groupIntoApplications(
+export function groupContainers(
   containers: readonly DockerContainer[],
-): readonly Application[] {
+): readonly ContainerGroup[] {
   const byProject = new Map<string, DockerContainer[]>();
   const standalone: DockerContainer[] = [];
 
@@ -80,29 +78,29 @@ export function groupIntoApplications(
     }
   }
 
-  const applications: Application[] = [];
+  const groups: ContainerGroup[] = [];
 
   for (const [project, members] of byProject) {
-    applications.push(buildApplication(project, project, 'compose', members));
+    groups.push(buildContainerGroup(project, project, 'compose', members));
   }
   for (const container of standalone) {
-    applications.push(
-      buildApplication(container.object_id, container.name, 'standalone', [container]),
+    groups.push(
+      buildContainerGroup(container.object_id, container.name, 'standalone', [container]),
     );
   }
 
-  return applications.sort((a, b) => {
+  return groups.sort((a, b) => {
     if (a.origin !== b.origin) return a.origin === 'compose' ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
 }
 
-function buildApplication(
+function buildContainerGroup(
   id: string,
   name: string,
-  origin: ApplicationOrigin,
+  origin: ContainerGroupOrigin,
   containers: readonly DockerContainer[],
-): Application {
+): ContainerGroup {
   const ordered = [...containers].sort((a, b) => {
     const sa = a.labels[LABEL_SERVICE] ?? a.name;
     const sb = b.labels[LABEL_SERVICE] ?? b.name;
@@ -130,10 +128,10 @@ function buildApplication(
   };
 }
 
-/** The application a container belongs to, for breadcrumbs on a detail page. */
-export function applicationOf(container: DockerContainer): {
+/** Compose grouping evidence for a container detail breadcrumb. */
+export function containerGroupOf(container: DockerContainer): {
   name: string;
-  origin: ApplicationOrigin;
+  origin: ContainerGroupOrigin;
   service: string | null;
 } {
   const project = container.labels[LABEL_PROJECT];
@@ -205,7 +203,7 @@ export interface RuntimeRow {
   readonly name: string;
   /** `observed` and `absent` are answers; `unsupported` means this build cannot tell. */
   readonly detection: 'observed' | 'absent' | 'unsupported';
-  readonly workloads: number | null;
+  readonly observedGroups: number | null;
   readonly note: string;
 }
 
@@ -217,15 +215,15 @@ export interface RuntimeRow {
  * Docker is only what is present today — but this build has no detector for them, so they
  * are `unsupported`: not "absent", which would be a claim that they are not installed.
  */
-export function runtimeRows(applications: readonly Application[] | null): readonly RuntimeRow[] {
-  const compose = applications?.filter((a) => a.origin === 'compose') ?? null;
-  const standalone = applications?.filter((a) => a.origin === 'standalone') ?? null;
+export function runtimeRows(groups: readonly ContainerGroup[] | null): readonly RuntimeRow[] {
+  const compose = groups?.filter((group) => group.origin === 'compose') ?? null;
+  const standalone = groups?.filter((group) => group.origin === 'standalone') ?? null;
 
   return [
     {
       name: 'docker compose',
       detection: compose === null ? 'unsupported' : compose.length > 0 ? 'observed' : 'absent',
-      workloads: compose?.length ?? null,
+      observedGroups: compose?.length ?? null,
       note:
         compose && compose.length > 0
           ? `${compose.length} project${compose.length === 1 ? '' : 's'}, from compose labels on the containers`
@@ -235,7 +233,7 @@ export function runtimeRows(applications: readonly Application[] | null): readon
       name: 'docker',
       detection:
         standalone === null ? 'unsupported' : standalone.length > 0 ? 'observed' : 'absent',
-      workloads: standalone?.length ?? null,
+      observedGroups: standalone?.length ?? null,
       note:
         standalone && standalone.length > 0
           ? 'standalone containers, observed only'
@@ -244,19 +242,19 @@ export function runtimeRows(applications: readonly Application[] | null): readon
     {
       name: 'podman',
       detection: 'unsupported',
-      workloads: null,
+      observedGroups: null,
       note: 'no provider reads podman in this build, so its absence here is not evidence it is absent',
     },
     {
       name: 'systemd-supervised',
       detection: 'unsupported',
-      workloads: null,
+      observedGroups: null,
       note: 'native workloads adopted from units would live here rather than under System',
     },
     {
       name: 'kubelet',
       detection: 'unsupported',
-      workloads: null,
+      observedGroups: null,
       note: 'no provider reads a kubelet in this build',
     },
   ];

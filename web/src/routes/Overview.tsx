@@ -73,18 +73,31 @@ export function Overview(): JSX.Element {
               interfaceList.count + containerList.count + unitList.count;
             const managed = interfaceList.interfaces.filter(
               (item) => item.management.state === 'managed',
-            ).length;
+            );
+            const unsettledManaged = managed.filter(
+              (item) => item.reconciliation !== 'in_sync' && item.reconciliation !== 'drifted',
+            );
 
             return (
               <AttentionRail
                 drifted={drifted}
                 findings={findingItems}
+                unresolved={unsettledManaged.length > 0}
+                unresolvedSummary={
+                  unsettledManaged.length > 0 ? (
+                    <>
+                      {unsettledManaged.length} managed object
+                      {unsettledManaged.length === 1 ? ' has' : 's have'} an unknown or in-progress
+                      reconciliation result. That is not an in-sync result.
+                    </>
+                  ) : undefined
+                }
                 quietSummary={
                   <>
                     {observed.toLocaleString()} objects observed ·{' '}
-                    {managed === 0
+                    {managed.length === 0
                       ? 'none managed, so nothing can drift'
-                      : `${managed} managed, all in sync`}{' '}
+                      : `${managed.length} managed, all in sync`}{' '}
                     · no open findings
                   </>
                 }

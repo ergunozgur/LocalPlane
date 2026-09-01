@@ -31,7 +31,6 @@ import { Gaps } from '@/components/semantic/Evidence';
 import { ResourceView } from '@/components/states/ResourceView';
 import {
   freshness as freshnessOf,
-  health as healthOf,
   managementPathState,
   humanise,
 } from '@/domain/vocabulary';
@@ -168,10 +167,14 @@ function DeviceOverview({
   const drifted = interfaces?.filter((item) => item.reconciliation === 'drifted').length ?? 0;
   const running = containers?.filter((item) => item.runtime.state === 'running').length ?? 0;
 
-  // The head's state chips. Health is the host's own; the rest are counts of what LocalPlane
-  // holds, and each is a fact rather than a score.
-  const hostHealth = agent.reachable
-    ? healthOf('healthy')
+  // Agent reachability says whether this request could observe the host. It is not a host
+  // health verdict: this build has no such contract.
+  const observability = agent.reachable
+    ? {
+        tone: 'good' as const,
+        label: 'agent reachable',
+        description: 'The agent answered this request. No overall host health is inferred.',
+      }
     : {
         tone: 'unknown' as const,
         label: 'not currently observable',
@@ -183,7 +186,7 @@ function DeviceOverview({
     <Plate lead className={styles.plate}>
       <PlateHead
         title={host.hostname ?? host.host_id}
-        mark={hostHealth}
+        mark={observability}
         meta={
           density === 'minimal'
             ? undefined
@@ -198,7 +201,7 @@ function DeviceOverview({
         asOf={fetchedAt.toLocaleTimeString()}
         chips={
           <>
-            <StatusPill semantic={hostHealth} size="sm" />
+            <StatusPill semantic={observability} size="sm" />
             <StatusPill semantic={freshnessOf(host.freshness)} size="sm" token={host.freshness} />
             {density !== 'minimal' && containers ? (
               <span className={styles.countChip}>

@@ -9,7 +9,7 @@ import { StatusMark } from '@/components/semantic/StatusPill';
 import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty } from '@/components/states/SurfaceState';
-import { containerState, health as healthOf } from '@/domain/vocabulary';
+import { containerState } from '@/domain/vocabulary';
 import { SweepCaveat, SweepFoot, WidgetAction } from './shared';
 
 const LIMIT = 8;
@@ -24,15 +24,11 @@ export function WorkloadsWidget(): JSX.Element {
     <Plate quiet style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <ResourceView resource={resource} loadingLabel="Reading containers…">
         {(list, meta) => {
-          const unhealthy = list.containers.filter(
-            (row) => row.container_health.status === 'unhealthy' || row.runtime.state === 'dead',
-          ).length;
           return (
             <>
               <PlateHead
                 title="Workloads"
-                meta="applications and the containers that make them up"
-                mark={healthOf(unhealthy > 0 ? 'degraded' : list.count > 0 ? 'healthy' : 'inactive')}
+                meta="Docker containers as the provider last reported them"
                 asOf={meta.fetchedAt.toLocaleTimeString()}
               >
                 <WidgetAction to="/workloads">All {list.count} ›</WidgetAction>

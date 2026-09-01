@@ -148,9 +148,9 @@ export function ObservationWidget(): JSX.Element {
                 />
               </div>
               <p className={styles.caveat}>
-                LocalPlane keeps no history of anything. Every number in this console is a
-                reading taken at the moment shown beside it, and these frames stay empty until
-                a host-metric capability exists to fill them.
+                This build keeps no host-metric history. These frames stay empty until a
+                host-metric capability supplies real readings; operational records and
+                observations elsewhere in LocalPlane remain separate history.
               </p>
             </PlateSection>
 

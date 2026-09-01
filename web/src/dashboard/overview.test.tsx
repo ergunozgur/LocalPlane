@@ -11,6 +11,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { Overview } from '@/routes/Overview';
 import { ViewerProvider } from '@/identity/viewer';
 import { urlOf } from '@/test/backend';
+import type { NetworkInterface } from '@/api/types';
 
 const HOST = {
   host_id: 'host_d68ecb94',
@@ -200,6 +201,55 @@ function stubBackend(): void {
   );
 }
 
+function managedInterface(
+  objectId: string,
+  reconciliation: Exclude<NetworkInterface['reconciliation'], undefined>,
+): NetworkInterface {
+  const list = ROUTES['/api/v1/network/interfaces'] as {
+    interfaces: readonly NetworkInterface[];
+  };
+  const base = list.interfaces[0];
+  if (!base) throw new Error('overview fixture must contain a network interface');
+  return {
+    ...base,
+    object_id: objectId,
+    name: objectId,
+    management: { state: 'managed', reason: 'operator_adopted' },
+    reconciliation,
+  };
+}
+
+function stubBackendWithInterfaces(
+  interfaces: readonly NetworkInterface[],
+  openFindings: readonly Record<string, unknown>[] = [],
+): void {
+  installResizeObserver(1400);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>((input) => {
+      const url = urlOf(input);
+      let body = ROUTES[url];
+      if (url === '/api/v1/network/interfaces') {
+        body = { ...(body as Record<string, unknown>), count: interfaces.length, interfaces };
+      } else if (url === '/api/v1/findings') {
+        body = {
+          ...(body as Record<string, unknown>),
+          count: openFindings.length,
+          findings: openFindings,
+        };
+      }
+      if (body === undefined) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: { code: 'http_404', message: 'no route', detail: {} } }), {
+            status: 404,
+          }),
+        );
+      }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }),
+  );
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 function renderOverview(): void {
@@ -274,6 +324,52 @@ describe('Overview', () => {
     // and the rail's quiet line has to say so rather than reporting a clean estate.
     expect(await screen.findByText(/Nothing needs attention/i)).toBeInTheDocument();
     expect(screen.getByText(/none managed, so nothing can drift/i)).toBeInTheDocument();
+  });
+
+  it('does not report all in sync while a managed reconciliation is unsettled', async () => {
+    // `applying` is a change in flight; it is not an in-sync result and must not be
+    // presented as one.
+    stubBackendWithInterfaces([managedInterface('obj_managed', 'applying')]);
+    renderOverview();
+
+    expect(await screen.findByText(/Attention could not be fully assessed/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/1 managed object has an unknown or in-progress reconciliation result/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/all in sync/i)).not.toBeInTheDocument();
+  });
+
+  it('reports all in sync only when every managed reconciliation is settled', async () => {
+    stubBackendWithInterfaces([managedInterface('obj_managed', 'in_sync')]);
+    renderOverview();
+
+    expect(await screen.findByText(/Nothing needs attention/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 managed, all in sync/i)).toBeInTheDocument();
+  });
+
+  it('keeps drift and findings visible while reconciliation assessment is incomplete', async () => {
+    stubBackendWithInterfaces(
+      [
+        managedInterface('obj_drifted', 'drifted'),
+        managedInterface('obj_applying', 'applying'),
+      ],
+      [
+        {
+          finding_id: 'finding_exposure',
+          object_name: 'sshd.service',
+          finding_type: 'open_exposure',
+        },
+      ],
+    );
+    renderOverview();
+
+    expect(await screen.findByRole('link', { name: /obj_drifted drifted/i })).toBeInTheDocument();
+    expect(screen.getByText('sshd.service')).toBeInTheDocument();
+    expect(screen.getByText(/Assessment incomplete/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/1 managed object has an unknown or in-progress reconciliation result/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/all in sync/i)).not.toBeInTheDocument();
   });
 
   it('states an unread estate rather than showing an empty Attached column', async () => {

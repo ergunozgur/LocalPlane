@@ -483,6 +483,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
     assert "Exactly two endpoints in this API can result in a host write" in description
     assert "POST /api/v1/runs/{id}/apply" in description
     assert "POST /api/v1/changes/{id}/recovery/retry" in description
+    assert "systemd to start, stop or restart one validated service unit" in description
     assert "Exactly one endpoint" not in description
     paths = document["paths"]
     assert set(paths) == {

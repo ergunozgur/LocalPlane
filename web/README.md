@@ -42,7 +42,7 @@ not make a console control exist.
   records.
 - **Network** — interface list and detail with addresses, state, ownership, provenance,
   intent, reconciliation, protection, and route evidence.
-- **Workloads** — Docker container list/detail, label-based application grouping, bounded
+- **Workloads** — Docker container list/detail, provider-derived Compose-project grouping, bounded
   logs, and on-demand current statistics.
 - **System** — bounded loaded systemd units with state, enablement, relationships, and typed
   service/socket/timer detail.

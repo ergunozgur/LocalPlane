@@ -13,7 +13,7 @@ import { useResource } from './useResource';
 export interface EstateCounts {
   interfaces: number | null;
   containers: number | null;
-  applications: number | null;
+  containerGroups: number | null;
   units: number | null;
   services: number | null;
   runs: number | null;
@@ -51,7 +51,7 @@ export function useEstateCounts(): EstateCounts {
   );
 
   const containerList = containers.status === 'success' ? containers.data.containers : null;
-  const applications =
+  const containerGroups =
     containerList === null
       ? null
       : new Set(
@@ -63,7 +63,7 @@ export function useEstateCounts(): EstateCounts {
   return {
     interfaces: interfaces.status === 'success' ? interfaces.data.count : null,
     containers: containers.status === 'success' ? containers.data.count : null,
-    applications,
+    containerGroups,
     units: units.status === 'success' ? units.data.count : null,
     services:
       units.status === 'success'

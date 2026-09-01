@@ -32,32 +32,36 @@ export function AttentionRail({
   findings,
   quietSummary,
   unresolved = false,
+  unresolvedSummary,
   reviewTo = '/operations',
 }: {
   drifted: readonly AttentionItem[];
   findings: readonly AttentionItem[];
   /** What was actually checked, when nothing needs attention. Never omitted. */
   quietSummary: ReactNode;
-  /** The reads behind this could not be made. Silence would read as "all clear". */
+  /** The evidence needed for a complete assessment is unavailable or unsettled. */
   unresolved?: boolean;
+  /** A precise reason assessment is incomplete. Defaults to failed supporting reads. */
+  unresolvedSummary?: ReactNode;
   reviewTo?: string;
 }): JSX.Element {
   // A rail that disappears when its reads fail is a rail that says "nothing needs attention"
   // by omission — the one thing it must never say without having looked.
-  if (unresolved) {
+  const state = drifted.length > 0 ? 'drift' : findings.length > 0 ? 'finding' : 'quiet';
+
+  if (unresolved && state === 'quiet') {
     return (
       <div className={styles.rail} data-state="unknown" aria-label="Attention">
         <span className={styles.unknownMark} aria-hidden="true" />
-        <b className={styles.quietTitle}>Attention could not be assessed</b>
+        <b className={styles.quietTitle}>Attention could not be fully assessed</b>
         <span className={styles.quietSummary}>
-          Drift and findings could not be read. This is not a statement that nothing needs
-          attention.
+          {unresolvedSummary ?? (
+            <>Drift and findings could not be read. This is not a statement that nothing needs attention.</>
+          )}
         </span>
       </div>
     );
   }
-
-  const state = drifted.length > 0 ? 'drift' : findings.length > 0 ? 'finding' : 'quiet';
 
   if (state === 'quiet') {
     return (
@@ -78,6 +82,15 @@ export function AttentionRail({
         <Segment kind="drift" count={drifted.length} word="drifted" items={drifted} />
         <Segment kind="finding" count={findings.length} word="findings" items={findings} />
       </div>
+      {unresolved ? (
+        <span className={styles.incomplete}>
+          <span className={styles.unknownMark} aria-hidden="true" />
+          <span>
+            <b>Assessment incomplete.</b>{' '}
+            {unresolvedSummary ?? 'Some relevant evidence could not be read.'}
+          </span>
+        </span>
+      ) : null}
       <Link to={reviewTo} className={styles.end}>
         Review ›
       </Link>
