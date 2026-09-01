@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from localplane.agent.server import AgentServer
 from localplane.agent.service import AgentService
-from localplane.backend.app import create_app
+from tests.conftest import AuthenticatedTestClient, create_authenticated_app
 from localplane.backend.config import Settings
 from localplane.backend.db.database import Database, open_database
 from localplane.backend.db.repositories import HostRepository
@@ -88,7 +88,7 @@ def _settings(tmp_path: Path, socket_path: Path, observe: bool = True) -> Settin
 def client(tmp_path: Path, running_agent: AgentServer) -> Iterator[TestClient]:
     settings = _settings(tmp_path, running_agent.socket_path)
     database = open_database(settings.database_path)
-    with TestClient(create_app(settings, database)) as test_client:
+    with AuthenticatedTestClient(create_authenticated_app(settings, database)) as test_client:
         yield test_client
     database.close()
 
@@ -98,7 +98,7 @@ def agentless_client(tmp_path: Path) -> Iterator[TestClient]:
     """A backend whose agent is not running — a state it must survive and report."""
     settings = _settings(tmp_path, tmp_path / "absent" / "agent.sock")
     database = open_database(settings.database_path)
-    with TestClient(create_app(settings, database)) as test_client:
+    with AuthenticatedTestClient(create_authenticated_app(settings, database)) as test_client:
         yield test_client
     database.close()
 
@@ -114,7 +114,7 @@ def test_status_is_backend_liveness_only(client: TestClient):
     body = client.get("/api/v1/status").json()
     assert body["status"] == "ok"
     assert body["database"]["schema_versions"] == [
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16
     ]
 
 
@@ -303,7 +303,7 @@ def test_capabilities_fall_back_to_what_was_recorded_and_say_so(
 ):
     settings = _settings(tmp_path, running_agent.socket_path)
     database = open_database(settings.database_path)
-    with TestClient(create_app(settings, database)) as client:
+    with AuthenticatedTestClient(create_authenticated_app(settings, database)) as client:
         assert client.get("/api/v1/agent/capabilities").json()["source"] == "live"
         running_agent.shutdown()
         running_agent.server_close()
@@ -487,6 +487,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
     assert "Exactly one endpoint" not in description
     paths = document["paths"]
     assert set(paths) == {
+        "/api/v1/session",
         "/api/v1/status",
         "/api/v1/host",
         "/api/v1/agent",
@@ -534,7 +535,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
 
 
 def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
-    """Eighteen endpoints are not a `GET`, and exactly two of them can change the host.
+    """Twenty endpoints are not exclusively a `GET`, and exactly two can change the host.
 
     Most of them change nothing at all. **Four read the host and record or return what
     they saw** — the interface sweep, container sweep, systemd sweep, and management-path
@@ -575,7 +576,11 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
     requires. It is not a second write path — it is a second authority on the one that
     already existed.
 
-    The document lists exactly these nineteen so a twentieth cannot appear unnoticed, and
+    **The twentieth is the session endpoint, and it cannot change the host.** Its `POST`
+    exchanges the master Bearer credential for a derived browser session; its `DELETE`
+    revokes only that browser session. Neither operation grants host-write authority.
+
+    The document lists exactly these twenty so a twenty-first cannot appear unnoticed, and
     the assertion is an equality rather than a containment for that reason.
 
     There is still deliberately no `/execute`, no `/operations/{name}/execute`, no generic
@@ -590,6 +595,7 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
         if set(methods) - {"get"}
     }
     assert non_get == {
+        "/api/v1/session": ["delete", "get", "post"],
         "/api/v1/network/observations/refresh": ["post"],
         "/api/v1/docker/containers/observations/refresh": ["post"],
         "/api/v1/systemd/observations/refresh": ["post"],
@@ -672,7 +678,7 @@ def test_an_unusable_capability_is_a_503_naming_the_capability(
     settings = _settings(tmp_path, server.socket_path, observe=False)
     database = open_database(settings.database_path)
     try:
-        with TestClient(create_app(settings, database)) as client:
+        with AuthenticatedTestClient(create_authenticated_app(settings, database)) as client:
             response = client.post("/api/v1/network/observations/refresh")
             assert response.status_code == 503
             body = response.json()["error"]
@@ -710,7 +716,7 @@ def test_a_degraded_sweep_reports_its_issues_over_http(
     settings = _settings(tmp_path, server.socket_path)
     database = open_database(settings.database_path)
     try:
-        with TestClient(create_app(settings, database)) as client:
+        with AuthenticatedTestClient(create_authenticated_app(settings, database)) as client:
             body = client.get("/api/v1/network/interfaces").json()
             assert body["last_sweep"]["status"] == "partial"
             assert {i["code"] for i in body["last_sweep"]["issues"]} == {"command_failed"}
@@ -742,7 +748,7 @@ def test_the_whole_stack_runs_with_logging_configured(tmp_path: Path, running_ag
     try:
         settings = _settings(tmp_path, running_agent.socket_path)
         database = open_database(settings.database_path)
-        with TestClient(create_app(settings, database)) as client:
+        with AuthenticatedTestClient(create_authenticated_app(settings, database)) as client:
             assert client.get("/api/v1/network/interfaces").json()["count"] == 9
             assert client.post("/api/v1/network/observations/refresh").json()["status"] == "ok"
         database.close()

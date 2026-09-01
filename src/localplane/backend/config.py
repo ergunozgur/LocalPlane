@@ -20,6 +20,9 @@ class Settings:
     freshness_ttl_s: float
     log_level: str
     observe_on_startup: bool
+    auth_secret_path: Path = Path("var/localplane-master.secret")
+    bind_host: str = "127.0.0.1"
+    development_origin: str | None = None
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Settings":
@@ -35,4 +38,7 @@ class Settings:
             freshness_ttl_s=float(get("FRESHNESS_TTL_S", str(DEFAULT_FRESHNESS_TTL_S))),
             log_level=get("LOG_LEVEL", "INFO"),
             observe_on_startup=get("OBSERVE_ON_STARTUP", "1") not in {"0", "false", "no"},
+            auth_secret_path=Path(get("AUTH_SECRET_PATH", "var/localplane-master.secret")),
+            bind_host=get("HOST", "127.0.0.1"),
+            development_origin=env.get(ENV_PREFIX + "DEVELOPMENT_ORIGIN") or None,
         )

@@ -1087,7 +1087,7 @@ def test_a_confirmation_names_a_run_and_a_preview_not_just_a_digest(ready: Estat
     confirmation = ready.confirm(first)
     assert confirmation.run_id == first.run_id
     assert confirmation.preview_id == first.preview.preview_id
-    assert confirmation.source == "unauthenticated_request"
+    assert confirmation.source == "authenticated_request"
     assert confirmation.consumed is False
 
     # Naming another Run's preview is refused by the service and by the store.
@@ -1117,7 +1117,7 @@ def test_a_confirmation_is_consumed_once_and_records_no_actor(ready: Estate):
     run = ready.plan("eth0").run
     confirmation = ready.confirm(run)
     row = dict(ready.database.query_one("SELECT * FROM run_confirmations"))
-    assert row["source"] == "unauthenticated_request"
+    assert row["source"] == "authenticated_request"
     assert not any(k in row for k in ("actor", "actor_id", "user", "user_id", "token"))
     with pytest.raises(sqlite3.IntegrityError):
         ready.database.connection.execute(
@@ -1638,7 +1638,7 @@ def test_upgrading_a_0006_store_keeps_its_data_its_checksums_and_its_schema(tmp_
     try:
         after = {r["version"]: r["checksum"]
                  for r in upgraded.query("SELECT * FROM schema_migrations")}
-        assert sorted(after) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        assert sorted(after) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
         assert {v: before[v] for v in before} == {v: after[v] for v in before}
 
         # Old rows survive unchanged, and the previews still say what they said.

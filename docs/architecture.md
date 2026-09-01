@@ -105,9 +105,15 @@ records capability evidence. It changes LocalPlane records but never the host.
 
 ## Current deployment boundary
 
-The backend binds to loopback by default. Authentication, browser sessions, Origin checking,
-TLS configuration, and a production serving topology are not implemented. The Operator
-Console is therefore a development client, not a remotely deployable security boundary.
+The backend binds to loopback by default and fails closed without a restrictively stored master
+credential. API callers use that credential as a Bearer token. Browsers exchange it once for a
+random, in-memory session whose raw token is delivered only in an `HttpOnly`, `SameSite=Strict`
+cookie. Cookie-authenticated unsafe requests require an exact accepted `Origin`; Bearer requests
+are Origin-exempt. Sessions expire absolutely after 12 hours and are invalidated by restart.
+
+This remains a single-process, loopback-development topology. TLS configuration, reverse-proxy
+trust, remote browser access, and production asset serving are not implemented. The Operator
+Console is not a remotely deployable security boundary.
 
 The accepted security design requires the operator's TCP connection to terminate in the
 backend so management-path evidence comes from the accepted socket. A reverse proxy must not

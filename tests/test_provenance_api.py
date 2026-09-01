@@ -25,7 +25,7 @@ from localplane.agent.providers.base import CommandResult
 from localplane.agent.providers.network_manager import GENERAL_ARGV
 from localplane.agent.server import AgentServer
 from localplane.agent.service import AgentService
-from localplane.backend.app import create_app
+from tests.conftest import AuthenticatedTestClient, create_authenticated_app
 from localplane.backend.config import Settings
 from localplane.backend.db.repositories import ObjectRecord
 from localplane.backend.domain.findings import FINDING_TYPE_OWNERSHIP_CONFLICT, finding_key
@@ -238,7 +238,7 @@ def client(estate: Estate, tmp_path: Path) -> TestClient:
         log_level="WARNING",
         observe_on_startup=True,
     )
-    with TestClient(create_app(settings, estate.database)) as test_client:
+    with AuthenticatedTestClient(create_authenticated_app(settings, estate.database)) as test_client:
         yield test_client
     server.shutdown()
     server.server_close()

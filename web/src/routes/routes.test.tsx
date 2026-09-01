@@ -104,10 +104,10 @@ describe('Run detail, from a real backend response', () => {
     expect(within(row).getByText('execution_not_implemented')).toBeInTheDocument();
   });
 
-  it('attributes the session honestly, with no invented user', async () => {
+  it('does not infer the current session into a run without persisted attribution', async () => {
     mockJson(runFixture);
     renderRun();
-    expect(await screen.findByText('unauthenticated_request')).toBeInTheDocument();
+    expect(await screen.findByText('not recorded')).toBeInTheDocument();
   });
 
   it('surfaces a backend failure without inventing data', async () => {

@@ -13,6 +13,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { App } from '@/App';
 import { ViewerProvider } from '@/identity/viewer';
 import { PreferencesProvider } from '@/preferences/preferences';
+import { AuthenticationProvider } from '@/auth/AuthProvider';
 import { stubBackend } from '@/test/backend';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -21,9 +22,11 @@ function renderAt(path: string): void {
   render(
     <ViewerProvider>
       <PreferencesProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <App />
-        </MemoryRouter>
+        <AuthenticationProvider>
+          <MemoryRouter initialEntries={[path]}>
+            <App />
+          </MemoryRouter>
+        </AuthenticationProvider>
       </PreferencesProvider>
     </ViewerProvider>,
   );
@@ -63,10 +66,10 @@ describe('columns', () => {
     expect((await screen.findAllByText('network')).length).toBeGreaterThan(0);
   });
 
-  it('attributes every row to an unauthenticated request rather than to a person', async () => {
+  it('does not infer the current session into summary rows without attribution', async () => {
     stubBackend();
     renderAt('/operations');
-    expect((await screen.findAllByText('unauthenticated_request')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('not recorded')).length).toBeGreaterThan(0);
   });
 
   it('has no Risk column, because it would cost one preview request per row', async () => {

@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 from localplane.agent.server import AgentServer
 from localplane.agent.service import AgentService
-from localplane.backend.app import create_app
+from tests.conftest import AuthenticatedTestClient, create_authenticated_app
 from localplane.backend.config import Settings
 from localplane.backend.db.database import open_database
 from tests.conftest import FakeRunner, json_result, write_interface
@@ -89,7 +89,7 @@ def client(
         observe_on_startup=True,
     )
     database = open_database(settings.database_path)
-    with TestClient(create_app(settings, database)) as test_client:
+    with AuthenticatedTestClient(create_authenticated_app(settings, database)) as test_client:
         yield test_client
     database.close()
     server.shutdown()

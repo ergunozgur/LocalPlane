@@ -27,7 +27,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from localplane.backend.agent_client import AgentClient, AgentError
-from localplane.backend.app import create_app
+from tests.conftest import AuthenticatedTestClient, create_authenticated_app
 from localplane.backend.config import Settings
 from localplane.backend.db.database import open_database
 
@@ -205,7 +205,7 @@ def live_client(tmp_path_factory, agent_process: Path) -> Iterator[TestClient]:
         observe_on_startup=True,
     )
     database = open_database(settings.database_path)
-    with TestClient(create_app(settings, database)) as client:
+    with AuthenticatedTestClient(create_authenticated_app(settings, database)) as client:
         yield client
     database.close()
 

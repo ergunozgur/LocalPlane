@@ -44,7 +44,7 @@ from localplane.backend.db.repositories import (
     RunGuardRecord,
     CONFIRMATION_PURPOSE_RECOVERY_RETRY,
     CONFIRMATION_PURPOSE_SELF_IMPACT_OVERRIDE,
-    CONFIRMATION_SOURCE_UNAUTHENTICATED,
+    CONFIRMATION_SOURCE_AUTHENTICATED,
     RunPreviewRecord,
     ChangeRecord,
     ChangeRepository,
@@ -254,8 +254,8 @@ class ChangeService:
         **Nothing is issued.** No token comes back and none is stored: the confirmation is a
         row naming this Run, and the only thing that can use it is an apply of this Run.
 
-        **Nobody is identified, and the record says so.** LocalPlane has no authentication, so
-        ``source`` records the only true thing.
+        **Nobody is identified.** ``source`` records only that this request crossed the
+        accepted authentication boundary.
 
         A blocked or stale plan cannot be confirmed. Confirming work that could not proceed is
         how blocked work acquires the means to reach an apply review.
@@ -347,7 +347,7 @@ class ChangeService:
                 "method": str(required),
                 "typed_statement": typed_statement,
                 "policy": run.preview.confirmation_policy,
-                "source": CONFIRMATION_SOURCE_UNAUTHENTICATED,
+                "source": CONFIRMATION_SOURCE_AUTHENTICATED,
                 "satisfied_at": _now(),
             })
             self._append(run.run_id, RunEvent.CONFIRMATION_SATISFIED, detail={
@@ -355,7 +355,7 @@ class ChangeService:
                 "preview_id": run.preview.preview_id,
                 "method": str(required),
                 "typed_statement": typed_statement,
-                "source": CONFIRMATION_SOURCE_UNAUTHENTICATED,
+                "source": CONFIRMATION_SOURCE_AUTHENTICATED,
             })
             stored = self.confirmations.for_run(run.run_id)
             assert stored is not None  # written in this transaction
@@ -399,8 +399,8 @@ class ChangeService:
         merely ``blocked``, where granting this would be authorising past a hazard nobody
         established.
 
-        **Nobody is identified.** LocalPlane has no authentication and the record says the
-        only true thing.
+        **Nobody is identified.** The record says only that the request crossed the
+        authentication boundary.
         """
         run = self._reread(run)
         if run.state not in _APPLIABLE:
@@ -452,7 +452,7 @@ class ChangeService:
                 "method": str(ConfirmationMethod.ACKNOWLEDGE),
                 "typed_statement": None,
                 "policy": run.preview.confirmation_policy,
-                "source": CONFIRMATION_SOURCE_UNAUTHENTICATED,
+                "source": CONFIRMATION_SOURCE_AUTHENTICATED,
                 "satisfied_at": _now(),
             })
             self._append(run.run_id, RunEvent.CONFIRMATION_SATISFIED, detail={
@@ -460,7 +460,7 @@ class ChangeService:
                 "purpose": CONFIRMATION_PURPOSE_SELF_IMPACT_OVERRIDE,
                 "preview_id": run.preview.preview_id,
                 "method": str(ConfirmationMethod.ACKNOWLEDGE),
-                "source": CONFIRMATION_SOURCE_UNAUTHENTICATED,
+                "source": CONFIRMATION_SOURCE_AUTHENTICATED,
                 "host_effect": "none",
                 "change_created": False,
             })
@@ -1898,7 +1898,7 @@ class ChangeService:
                 # end state the Change already records and has no second object to name.
                 "typed_statement": None,
                 "policy": run.preview.confirmation_policy,
-                "source": CONFIRMATION_SOURCE_UNAUTHENTICATED,
+                "source": CONFIRMATION_SOURCE_AUTHENTICATED,
                 "satisfied_at": _now(),
             })
             self._append(run.run_id, RunEvent.RECOVERY_CONFIRMATION_SATISFIED,
@@ -1906,7 +1906,7 @@ class ChangeService:
                          detail={"confirmation_id": confirmation_id,
                                  "recovery_reason": change.recovery_reason,
                                  "method": str(ConfirmationMethod.ACKNOWLEDGE),
-                                 "source": CONFIRMATION_SOURCE_UNAUTHENTICATED,
+                                 "source": CONFIRMATION_SOURCE_AUTHENTICATED,
                                  "host_effect": "none"})
             stored = self.confirmations.outstanding(
                 run.run_id, CONFIRMATION_PURPOSE_RECOVERY_RETRY)

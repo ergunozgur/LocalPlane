@@ -29,7 +29,6 @@ import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty } from '@/components/states/SurfaceState';
 import { FilterChips, type FilterOption } from '@/components/primitives/FilterChips';
-import { useViewer } from '@/identity/viewer';
 import { PageHeader } from '../PageHeader';
 import { ScopeBar } from '@/components/layout/ScopeBar';
 import { useEstateCounts } from '@/hooks/useEstateCounts';
@@ -90,7 +89,6 @@ function tally<T>(
 }
 
 export function Operations(): JSX.Element {
-  const viewer = useViewer();
   const [runState, setRunState] = useState<string>('');
   const [changeResultFilter, setChangeResultFilter] = useState<string>('');
   const counts = useEstateCounts();
@@ -304,11 +302,8 @@ export function Operations(): JSX.Element {
                     key: 'actor',
                     header: 'Actor',
                     render: () => (
-                      <span
-                        className={styles.actor}
-                        title="LocalPlane has no authentication. The record says an unauthenticated request satisfied the requirement rather than naming somebody who does not exist."
-                      >
-                        {viewer.attribution}
+                      <span className={styles.actor} title="Requester attribution is not present in this summary record.">
+                        not recorded
                       </span>
                     ),
                   },
@@ -410,11 +405,8 @@ export function Operations(): JSX.Element {
                     key: 'actor',
                     header: 'Actor',
                     render: () => (
-                      <span
-                        className={styles.actor}
-                        title="LocalPlane has no authentication. The record says an unauthenticated request satisfied the requirement rather than naming somebody who does not exist."
-                      >
-                        {viewer.attribution}
+                      <span className={styles.actor} title="Requester attribution is not present in this summary record.">
+                        not recorded
                       </span>
                     ),
                   },

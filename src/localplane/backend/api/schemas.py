@@ -35,6 +35,17 @@ class ErrorResponse(Model):
     error: ErrorBody
 
 
+# ----------------------------------------------------------------------- authentication
+
+
+class SessionStatus(Model):
+    authenticated: Literal[True] = True
+    mechanism: Literal["bearer", "session"]
+    expires_at: datetime | None = Field(
+        description="Absolute browser-session expiry; null for a master Bearer request."
+    )
+
+
 # ------------------------------------------------------------------------------- status
 
 
@@ -2303,8 +2314,8 @@ class KeepGuardedRunRequest(Model):
 class RunConfirmation(Model):
     """A confirmation that was actually satisfied. Durable, bound, single-use.
 
-    There is no actor and no token. LocalPlane has no authentication, so ``source`` records
-    the only true thing: an unauthenticated request satisfied the requirement. And nothing
+    There is no actor and no token. ``source`` records only that the request crossed the
+    accepted authentication boundary; it does not identify a person. Nothing
     was issued that a caller could present anywhere else — the confirmation is a row naming
     this Run and this plan, and the only thing that can use it is an apply of this Run.
     """
@@ -2324,8 +2335,8 @@ class RunConfirmation(Model):
     policy: str
     source: str = Field(
         description=(
-            "`unauthenticated_request`. There is no user model in this build and recording "
-            "one would be recording a fiction."
+            "`authenticated_request` for new records; historical unauthenticated records "
+            "remain unchanged. Neither value identifies a person."
         )
     )
     satisfied_at: datetime
@@ -2587,7 +2598,7 @@ class RecoveryAuthority(Model):
     required_method: str
     method: str
     policy: str
-    source: str = Field(description="Always `unauthenticated_request`; nobody is identified.")
+    source: str = Field(description="Authentication-boundary source; nobody is identified.")
     satisfied_at: datetime
 
 
@@ -2816,9 +2827,9 @@ class TransportEvidenceView(Model):
     them on: a management path proven from something the caller wrote is a request that has
     been believed rather than evidence that has been gathered.
 
-    It is transport, not identity. There is no authentication in this product and nobody on
-    the other end of this socket has been identified — the value of `peer_address` is
-    precisely that a caller cannot choose it, not that it says who anyone is.
+    It is transport, not identity. Authentication proves credential possession but identifies
+    nobody on the other end of this socket — the value of `peer_address` is precisely that a
+    caller cannot choose it, not that it says who anyone is.
     """
 
     peer_address: str | None = Field(

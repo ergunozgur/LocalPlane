@@ -18,6 +18,12 @@ import type * as T from './types';
 type Opts = Pick<RequestOptions, 'signal'>;
 
 export const endpoints = {
+  /* ------------------------------------------------------------ authentication & session */
+  session: (o?: Opts) => request<T.SessionStatus>('/session', o),
+  login: (masterCredential: string) =>
+    request<T.SessionStatus>('/session', { method: 'POST', bearer: masterCredential }),
+  logout: () => request<void>('/session', { method: 'DELETE' }),
+
   /* ------------------------------------------------------------------ status & identity */
   status: (o?: Opts) => request<T.BackendStatus>('/status', o),
   host: (o?: Opts) => request<T.Host>('/host', o),

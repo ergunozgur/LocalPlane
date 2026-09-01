@@ -80,7 +80,7 @@ def test_the_management_axis_still_has_exactly_three_values(database):
 
 def test_migrations_are_recorded_with_a_checksum(database):
     rows = database.query("SELECT * FROM schema_migrations ORDER BY version")
-    assert [row["version"] for row in rows] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    assert [row["version"] for row in rows] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     assert all(len(row["checksum"]) == 64 for row in rows)
     assert all(row["applied_at"] for row in rows)
 
@@ -93,7 +93,7 @@ def test_reopening_an_existing_store_does_not_reapply(tmp_path: Path):
     path = tmp_path / "reopen.db"
     open_database(path).close()
     database = open_database(path)
-    assert len(database.query("SELECT * FROM schema_migrations")) == 15
+    assert len(database.query("SELECT * FROM schema_migrations")) == 16
     database.close()
 
 

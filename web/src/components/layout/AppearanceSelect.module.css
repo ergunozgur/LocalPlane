@@ -106,6 +106,9 @@
 /* Deferred entries carry no hover, no cursor and no affordance: they mark where a feature
  * will land, and must not read as a control that failed to work. */
 .deferred { padding: 7px; border-radius: var(--r-sm); }
+.signOut { width: 100%; padding: 7px; border: 0; border-radius: var(--r-sm); background: transparent; text-align: left; cursor: pointer; }
+.signOut:hover { background: var(--inset); }
+.logoutError { margin: 3px 7px 7px; color: var(--crimson); font-size: 11px; line-height: 1.4; }
 .deferred .entryTitle { color: var(--dim); font-weight: 600; }
 
 .deferredTag {

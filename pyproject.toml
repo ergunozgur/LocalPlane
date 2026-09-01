@@ -27,6 +27,7 @@ dev = [
 [project.scripts]
 localplane-agent = "localplane.agent.__main__:main"
 localplane-backend = "localplane.backend.__main__:main"
+localplane-auth = "localplane.backend.auth_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

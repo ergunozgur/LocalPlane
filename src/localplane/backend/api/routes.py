@@ -53,13 +53,23 @@ privileged helper: an attempt to reach any of them fails the only way it can, wi
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, Security
 
 from localplane import __version__
 from localplane.backend.agent_client import AgentError
 from localplane.backend.api import schemas, views
 from localplane.backend.api.transport import request_connection_of, transport_of
+from localplane.backend.auth import (
+    SESSION_COOKIE,
+    AuthenticatedRequest,
+    app_authentication,
+    cookie_is_secure,
+    require_authentication,
+    require_browser_session,
+    require_master_bearer,
+)
 from localplane.backend.context import AppContext
 from localplane.backend.db.repositories import ChangeRecord, ObjectRecord
 from localplane.backend.domain.identity import (
@@ -88,7 +98,15 @@ from localplane.protocol.wire import (
     ErrorCode,
 )
 
-router = APIRouter(prefix="/api/v1")
+session_router = APIRouter(prefix="/api/v1")
+router = APIRouter(
+    prefix="/api/v1",
+    dependencies=[Depends(require_authentication)],
+    responses={
+        401: {"model": schemas.ErrorResponse},
+        403: {"model": schemas.ErrorResponse},
+    },
+)
 
 # An agent failure is not one kind of failure. "You asked for an interface name the kernel
 # could not have given a link" and "the agent is not running" are different conditions
@@ -165,6 +183,80 @@ def _require_interface(context: AppContext, object_id: str) -> ObjectRecord:
             },
         )
     return record
+
+
+# ----------------------------------------------------------------------------- session
+
+
+@session_router.post(
+    "/session",
+    response_model=schemas.SessionStatus,
+    tags=["session"],
+    responses={401: {"model": schemas.ErrorResponse}, 403: {"model": schemas.ErrorResponse}},
+)
+def create_browser_session(
+    request: Request,
+    response: Response,
+    _master: Annotated[AuthenticatedRequest, Security(require_master_bearer)],
+) -> schemas.SessionStatus:
+    authentication = app_authentication(request)
+    secure = cookie_is_secure(request, authentication)
+    token, expires_at = authentication.create_session(request.cookies.get(SESSION_COOKIE))
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=12 * 60 * 60,
+        expires=expires_at,
+        path="/",
+        secure=secure,
+        httponly=True,
+        samesite="strict",
+    )
+    return schemas.SessionStatus(
+        authenticated=True, mechanism="session", expires_at=expires_at
+    )
+
+
+@session_router.get(
+    "/session",
+    response_model=schemas.SessionStatus,
+    tags=["session"],
+    responses={401: {"model": schemas.ErrorResponse}},
+)
+def get_browser_session(
+    request: Request,
+    authenticated: Annotated[AuthenticatedRequest, Security(require_authentication)],
+) -> schemas.SessionStatus:
+    return schemas.SessionStatus(
+        authenticated=True,
+        mechanism=authenticated.mechanism,
+        expires_at=authenticated.expires_at,
+    )
+
+
+@session_router.delete(
+    "/session",
+    status_code=204,
+    response_class=Response,
+    tags=["session"],
+    responses={401: {"model": schemas.ErrorResponse}, 403: {"model": schemas.ErrorResponse}},
+)
+def delete_browser_session(
+    request: Request,
+    response: Response,
+    authenticated: Annotated[AuthenticatedRequest, Security(require_browser_session)],
+) -> Response:
+    assert authenticated.session_token is not None
+    app_authentication(request).sessions.revoke(authenticated.session_token)
+    response.status_code = 204
+    response.delete_cookie(
+        SESSION_COOKIE,
+        path="/",
+        secure=cookie_is_secure(request, app_authentication(request)),
+        httponly=True,
+        samesite="strict",
+    )
+    return response
 
 
 # ------------------------------------------------------------------------------- status
@@ -1745,9 +1837,8 @@ def confirm_run(run_id: str, body: schemas.ConfirmRunRequest, request: Request) 
     naming this run and this plan, it is single-use, and it is consumed atomically by an
     apply of *this* run and by nothing else.
 
-    **Nobody is identified.** LocalPlane has no authentication. The record says what is
-    true — that an unauthenticated request satisfied the requirement — rather than inventing
-    an actor to attribute it to.
+    **Nobody is identified.** The record says only that this request crossed the accepted
+    authentication boundary rather than inventing an actor to attribute it to.
 
     A stale plan cannot be confirmed, and neither can a blocked one. Confirming work that
     could not proceed is how blocked work acquires the means to reach an apply review.

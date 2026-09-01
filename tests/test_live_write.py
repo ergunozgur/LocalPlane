@@ -232,7 +232,7 @@ def test_localplane_really_set_an_mtu_and_proved_it(live_report: dict):
     assert published["confirmation_method"] == "acknowledge"
     assert (published["current_value"], published["desired_value"]) == (1500, 1400)
 
-    assert success["confirmation"]["source"] == "unauthenticated_request"
+    assert success["confirmation"]["source"] == "authenticated_request"
     assert success["confirmation"]["consumed_before_apply"] is False
     assert success["confirmation"]["consumed_after_apply"] is True
     assert success["checkpoint_existed_before_apply"] is True, "armed before it was needed"
@@ -400,7 +400,7 @@ def test_a_real_retry_that_must_write_needs_authority_the_apply_did_not_leave_be
     assert facts["refusals"] == ["recovery_confirmation_required"]
     assert facts["authority"]["purpose"] == "recovery_retry"
     assert facts["authority"]["method"] == "acknowledge"
-    assert facts["authority"]["source"] == "unauthenticated_request"
+    assert facts["authority"]["source"] == "authenticated_request"
     assert facts["authority"]["consumed_when_granted"] is False
     assert facts["authority"]["is_the_apply_confirmation"] is False
 

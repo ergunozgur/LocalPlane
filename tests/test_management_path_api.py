@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 
 from localplane.agent.server import AgentServer
 from localplane.agent.service import AgentService
-from localplane.backend.app import create_app
+from tests.conftest import AuthenticatedTestClient, create_authenticated_app
 from localplane.backend.config import Settings
 from localplane.backend.db.database import open_database
 from tests.conftest import FakeRouteQuery, FakeRunner, json_result, netlink_route, write_interface
@@ -135,8 +135,8 @@ def _client(
         observe_on_startup=True,
     )
     database = open_database(settings.database_path)
-    with TestClient(
-        create_app(settings, database),
+    with AuthenticatedTestClient(
+        create_authenticated_app(settings, database),
         base_url=f"http://{endpoint}:8080",
         client=(peer, 44321),
     ) as test_client:
@@ -456,7 +456,7 @@ def test_another_peer_gets_no_benefit_from_this_ones_proof(
         peer=OPERATOR, endpoint=ENDPOINT,
     ):
         assert observe(first)["management_path"]["state"] == "confirmed"
-        with TestClient(
+        with AuthenticatedTestClient(
             first.app, base_url=f"http://{ENDPOINT}:8080", client=(IMPOSTOR, 51000)
         ) as second:
             body = second.get(f"{API}/management-path").json()
@@ -556,7 +556,7 @@ def test_a_preview_read_over_a_transport_that_proves_nothing_becomes_stale(
         body = plan(operator, drift(operator, "eth0"))
         assert body["preview"]["validity"]["state"] == "current"
 
-        with TestClient(
+        with AuthenticatedTestClient(
             operator.app, base_url="http://127.0.0.1:8080", client=("127.0.0.1", 51000)
         ) as automation:
             stale = automation.get(f"{API}/runs/{body['run_id']}/preview").json()
@@ -642,8 +642,8 @@ def test_the_management_path_needs_a_host_before_it_can_answer(
         observe_on_startup=False,
     )
     database = open_database(settings.database_path)
-    with TestClient(
-        create_app(settings, database),
+    with AuthenticatedTestClient(
+        create_authenticated_app(settings, database),
         base_url=f"http://{ENDPOINT}:8080",
         client=(OPERATOR, 44321),
     ) as blank:
@@ -678,8 +678,8 @@ def test_an_agent_that_is_gone_leaves_the_path_unresolved_rather_than_erroring(
         observe_on_startup=True,
     )
     database = open_database(settings.database_path)
-    with TestClient(
-        create_app(settings, database),
+    with AuthenticatedTestClient(
+        create_authenticated_app(settings, database),
         base_url=f"http://{ENDPOINT}:8080",
         client=(OPERATOR, 44321),
     ) as client:

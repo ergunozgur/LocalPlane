@@ -1968,8 +1968,8 @@ class ConfirmationRecord:
     would authorise the wrong Run. The digest is kept beside it as evidence of *what* was
     confirmed, never as the thing that authorises.
 
-    There is no actor. LocalPlane has no authentication, so ``source`` records the only
-    thing that is true: an unauthenticated request satisfied the requirement.
+    There is no actor. ``source`` records only whether the request crossed the accepted
+    authentication boundary; it does not identify a person.
     """
 
     confirmation_id: str
@@ -2002,8 +2002,10 @@ class ConfirmationRecord:
         return cls(**dict(row))
 
 
-#: The one value ``run_confirmations.source`` may hold in a build with no authentication.
+#: Historical value retained by migration 0016 without rewriting prior evidence.
 CONFIRMATION_SOURCE_UNAUTHENTICATED = "unauthenticated_request"
+#: New confirmations crossed the authentication boundary; this identifies no person.
+CONFIRMATION_SOURCE_AUTHENTICATED = "authenticated_request"
 
 #: What a confirmation authorises. An apply confirmation authorises crossing the write
 #: boundary once; a recovery confirmation authorises one recovery retry of an already-crossed

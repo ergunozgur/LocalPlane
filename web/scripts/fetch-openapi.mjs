@@ -12,9 +12,17 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const origin = process.env.LOCALPLANE_API_ORIGIN ?? 'http://127.0.0.1:8080';
+const bearer = process.env.LOCALPLANE_API_BEARER;
 const target = join(dirname(dirname(fileURLToPath(import.meta.url))), 'openapi.json');
 
-const response = await fetch(new URL('/openapi.json', origin));
+if (!bearer) {
+  console.error('LOCALPLANE_API_BEARER is required to read the protected OpenAPI document');
+  process.exit(1);
+}
+
+const response = await fetch(new URL('/openapi.json', origin), {
+  headers: { authorization: `Bearer ${bearer}` },
+});
 if (!response.ok) {
   console.error(`GET ${origin}/openapi.json -> ${response.status}`);
   process.exit(1);

@@ -91,9 +91,9 @@ export function Settings(): JSX.Element {
             </KeyValue>
           </KeyValueList>
           <p className="note" style={{ marginTop: 11, maxWidth: '80ch' }}>
-            LocalPlane has no authentication in this build, and the backend records every
-            confirmation as <span className="mono">unauthenticated_request</span> rather than
-            inventing a person. Nothing here grants or withholds permission: the backend
+            This browser crossed the authentication boundary, but LocalPlane has no user model.
+            New confirmations record <span className="mono">authenticated_request</span> without
+            inventing a person; historical records retain their original source. Nothing here grants or withholds permission: the backend
             refuses what must be refused whether or not this console draws a control.
           </p>
         </PlateBody>

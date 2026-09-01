@@ -11,6 +11,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { App } from '@/App';
 import { ViewerProvider } from '@/identity/viewer';
 import { PreferencesProvider } from '@/preferences/preferences';
+import { AuthenticationProvider } from '@/auth/AuthProvider';
 import { stubBackend } from '@/test/backend';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -19,9 +20,11 @@ function renderAt(path: string): void {
   render(
     <ViewerProvider>
       <PreferencesProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <App />
-        </MemoryRouter>
+        <AuthenticationProvider>
+          <MemoryRouter initialEntries={[path]}>
+            <App />
+          </MemoryRouter>
+        </AuthenticationProvider>
       </PreferencesProvider>
     </ViewerProvider>,
   );
@@ -120,7 +123,7 @@ describe('navigation', () => {
   it('reaches findings from the Operations menu with a live count', async () => {
     stubBackend();
     renderAt('/operations');
-    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    const nav = await screen.findByRole('navigation', { name: 'Primary' });
 
     // Operations has sub-surfaces, so its control is a menu trigger rather than a link.
     const trigger = await within(nav).findByRole('button', { name: /Operations/ });

@@ -171,6 +171,9 @@ const DRIFT_FINDING = {
 };
 
 export const BACKEND: Record<string, unknown> = {
+  '/api/v1/session': {
+    authenticated: true, mechanism: 'session', expires_at: '2026-08-28T09:47:11Z',
+  },
   '/api/v1/status': { status: 'ok', version: '0.1.0', database: { path: '/x', schema_versions: [12] } },
   '/api/v1/host': {
     host_id: 'host_1', identity_basis: 'machine_id', identity_confidence: 'high',

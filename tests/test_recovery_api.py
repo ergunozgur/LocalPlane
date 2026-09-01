@@ -210,7 +210,7 @@ def test_granting_authority_shows_up_and_changes_what_may_be_done_next(planned: 
 
     recovery = answer.json()["recovery"]
     assert recovery["authority"]["method"] == "acknowledge"
-    assert recovery["authority"]["source"] == "unauthenticated_request"
+    assert recovery["authority"]["source"] == "authenticated_request"
     assert recovery["available_actions"] == ["retry", "resolve"]
     assert recovery["state"] == "unresolved"
     # No token comes back that a caller could present anywhere else.

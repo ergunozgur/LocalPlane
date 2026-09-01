@@ -6,6 +6,154 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/session": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Create Browser Session",
+        "operationId": "create_browser_session_api_v1_session_post",
+        "security": [
+          {
+            "MasterBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Get Browser Session",
+        "operationId": "get_browser_session_api_v1_session_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Delete Browser Session",
+        "operationId": "delete_browser_session_api_v1_session_delete",
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/status": {
       "get": {
         "tags": [
@@ -24,8 +172,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/host": {
@@ -45,8 +221,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/agent": {
@@ -67,8 +271,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/agent/capabilities": {
@@ -89,8 +321,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/network/interfaces": {
@@ -111,8 +371,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/network/interfaces/{object_id}": {
@@ -122,6 +410,14 @@
         ],
         "summary": "Get Network Interface",
         "operationId": "get_network_interface_api_v1_network_interfaces__object_id__get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -144,6 +440,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -165,6 +481,14 @@
         "summary": "Get Network Interface Protection",
         "description": "Whether this interface is protected, why, and on what evidence.\n\nPure: derived for this request from evidence LocalPlane already holds, contacting\nnothing and writing nothing.\n\n**A separate axis from ownership.** Ownership asks whose this object is; protection asks\nwhat changing it would put at risk. An interface can be LocalPlane's own and protected,\nor externally configured and not protected at all, and neither answer implies the other\n— a Run against a Docker-configured bridge can truthfully publish `protection: clear`\nwhile remaining blocked because Docker demonstrably configures it.\n\nOne protection reason is implemented: the management path. `implemented_reasons` says\nso out loud, because `clear` means \"these were evaluated and none applied\" and a reader\nis entitled to know what \"these\" were.\n\nThe answer depends on the connection asking. Read over a transport that cannot establish\na management path — from loopback, or through a reverse proxy — every interface is\n`unknown`, including the ones obviously not carrying it. Marking the rest clear while\nthe path itself is unresolved would be inventing a negative from an absence.",
         "operationId": "get_network_interface_protection_api_v1_network_interfaces__object_id__protection_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -187,6 +511,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -208,6 +552,14 @@
         "summary": "Get Network Interface Evidence",
         "description": "The raw sysfs values and netlink objects the newest observation was derived from.\n\nA separate resource because it is large and rarely wanted — but it is available,\nbecause a claim about an operator's host that cannot be checked is worth less than one\nthat can.",
         "operationId": "get_network_interface_evidence_api_v1_network_interfaces__object_id__evidence_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -230,6 +582,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -251,6 +623,14 @@
         "summary": "Get Network Interface Provenance",
         "description": "Who made this interface, who configures it, and the evidence for both.\n\nA separate resource from the interface because the evidence is heavy: the exact Docker\nnetwork a bridge's address belongs to, the NetworkManager connection bound to a device,\nthe daemon addresses that matched. The interface itself carries the conclusion and the\nreason codes; this carries what they rest on, plus every source that was consulted —\nincluding the ones that answered \"nothing to do with me\", because a settled question\nand an unexamined one are different states and both are worth seeing.\n\nComputed for this request. Ownership is never stored: it is a function of the newest\nobservation and the newest provider readings, and a recorded verdict would be a second\ncopy of something that moves whenever either does.",
         "operationId": "get_network_interface_provenance_api_v1_network_interfaces__object_id__provenance_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -273,6 +653,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -294,6 +694,14 @@
         "summary": "Refresh Network Observations",
         "description": "Observe the host's network interfaces now and take ownership of the result.\n\nRead-only with respect to the host: this reads sysfs and rtnetlink and writes only\nLocalPlane's own store. No interface is created, modified or brought up or down.",
         "operationId": "refresh_network_observations_api_v1_network_observations_refresh_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "names",
@@ -328,6 +736,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -359,8 +787,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/systemd/units/{object_id}": {
@@ -371,6 +827,14 @@
         "summary": "Get Systemd Unit",
         "description": "One stored unit by LocalPlane object id, never by caller-supplied unit name.",
         "operationId": "get_systemd_unit_api_v1_systemd_units__object_id__get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -392,6 +856,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
           },
           "422": {
             "description": "Validation Error",
@@ -424,8 +908,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/docker/containers": {
@@ -446,8 +958,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/docker/containers/{object_id}": {
@@ -458,6 +998,14 @@
         "summary": "Get Docker Container",
         "description": "One container: what it is, what it is doing, and what it is attached to.\n\nEnough that an operator does not need `docker ps` or `docker inspect` for routine\ninspection — image and digest, creation and start times, restart policy, health, port\nbindings, mounts, attached networks and the labels worth operating on.",
         "operationId": "get_docker_container_api_v1_docker_containers__object_id__get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -479,6 +1027,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
           },
           "422": {
             "description": "Validation Error",
@@ -511,8 +1079,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/docker/containers/{object_id}/logs": {
@@ -523,6 +1119,14 @@
         "summary": "Read Container Logs",
         "description": "The most recent lines this container wrote.\n\n`POST` rather than `GET` for the reason every observation in this API is a `POST`: it\ncontacts the host. LocalPlane stores no copy of a container's output — Docker keeps the\nlogs, and building a second copy of them would be a log platform rather than a control\nplane. Read-only with respect to the host, and bounded by lines and by bytes.",
         "operationId": "read_container_logs_api_v1_docker_containers__object_id__logs_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -559,6 +1163,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -580,6 +1204,14 @@
         "summary": "Read Container Stats",
         "description": "One current sample of what this container is using.\n\nA snapshot, and deliberately only a snapshot: there is no history, no series and no\nretention, because a metrics database is a product this build does not have and a field\non a container is not the place to grow one. Read-only with respect to the host, and a\n`POST` for the same reason the log read is.",
         "operationId": "read_container_stats_api_v1_docker_containers__object_id__stats_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -601,6 +1233,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
           },
           "422": {
             "description": "Validation Error",
@@ -633,8 +1285,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/management-path": {
@@ -655,8 +1335,36 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
       }
     },
     "/api/v1/observations/sweeps": {
@@ -666,6 +1374,14 @@
         ],
         "summary": "List Sweeps",
         "operationId": "list_sweeps_api_v1_observations_sweeps_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "limit",
@@ -691,6 +1407,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -712,6 +1448,14 @@
         "summary": "Adopt Network Interface",
         "description": "Adopt this interface: ``observed → managed``.\n\nRecords the currently verified values of the fields LocalPlane can be answerable for —\n``admin_up`` and ``mtu`` — as a new intent version, and starts comparing against them.\n\n**This does not change the host.** Adoption is LocalPlane agreeing to notice, not\nLocalPlane taking control: the values it stores are the ones that were already there.\nIt is refused rather than approximated when the object is observe-only, when it is\nalready managed, when the newest observation is too old, when a value it would control\ncould not be read — or when another system is demonstrably running the object.\n\nThat last refusal is what the ownership axis is for. A bridge the Docker daemon created\nand configures, an interface NetworkManager holds an active profile for: LocalPlane has\nno write model that could share either of them, so it declines to become answerable\nrather than retaining an intent it could not honour. The refusal names the owner and\nthe evidence.",
         "operationId": "adopt_network_interface_api_v1_network_interfaces__object_id__adopt_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -733,6 +1477,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
           },
           "422": {
             "description": "Validation Error",
@@ -755,6 +1519,14 @@
         "summary": "Release Network Interface",
         "description": "Release this interface: ``managed → observed``.\n\nDrops the retained intent so LocalPlane stops being answerable for the object, and\nresolves any drift it had open about it — because a claim that the runtime disagrees\nwith the intent stops being true when there is no intent.\n\n**This does not change the host, and it is not a rollback.** Nothing is restored,\nbecause nothing was ever applied. An interface released while it is down stays down.\nEvery intent version is retained as history.",
         "operationId": "release_network_interface_api_v1_network_interfaces__object_id__release_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -777,6 +1549,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -798,6 +1590,14 @@
         "summary": "Revise Network Interface Intent",
         "description": "Retain new desired values for an interface LocalPlane already manages.\n\nThis is the operator saying what they now want. It writes a **new immutable intent\nversion**, moves the active-intent pointer to it and leaves the version it replaced\nexactly as it was — the whole chain stays readable, so what was intended at any point\nand why it stopped being intended are both still answerable.\n\n**This does not change the host, and it is not an apply.** An MTU revised to 1400 is an\nMTU nobody has set; if the interface already carries 1400 the two now agree, and they\nagree because the intent moved. That is the second truthful answer to drift, and it is\nthe answer LocalPlane uses when the machine is right and the declaration is out of date.\n\nManagement does not move: the object was ``managed`` before and is ``managed`` after.\nOnly fields the active intent already controls may be given a value — widening what\nLocalPlane is answerable for is an adoption decision, made against verified evidence,\nnot something a request body may do. A field left out keeps the value it had.\n\nRefused rather than approximated when the object is not managed, when the version named\nin ``expected_intent_id`` is no longer in force, when the newest observation is too old\nto have decided against, when a name is not one LocalPlane controls, when a value is of\nthe wrong type, when the request would retain exactly what is already retained — or\nwhen another system is demonstrably running the object, which is the same gate adopt\napplies and for the same reason.",
         "operationId": "revise_network_interface_intent_api_v1_network_interfaces__object_id__intent_revise_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -830,6 +1630,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -851,6 +1671,14 @@
         "summary": "Adopt Runtime As Network Interface Intent",
         "description": "Make what this interface currently has the retained desired state.\n\nA separate endpoint from ``revise`` on purpose. The two are different acts — one is a\nstatement about what should be, the other a statement that what *is* was right all\nalong — and folding them into one request with a mode flag would leave a history in\nwhich nobody could tell afterwards which had happened.\n\nOnly currently verified values are taken, and only for the fields the active intent\nalready controls. A controlled field the newest observation could not read refuses the\nwhole revision: \"adopt what is there\" cannot be said about a value nobody could see,\nand filling it in from the version being replaced would be inventing agreement.\n\n**This does not change the host.** Every value recorded here was read from it, which is\nwhy the result is ``in_sync`` and why nothing needed applying to get there. Any drift\nthis settles is resolved as ``intent_revised`` — never as though the runtime had been\nput right.",
         "operationId": "adopt_runtime_as_network_interface_intent_api_v1_network_interfaces__object_id__intent_adopt_runtime_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -883,6 +1711,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -904,6 +1752,14 @@
         "summary": "Get Network Interface Intent",
         "description": "The intent currently in force for this interface.\n\n404 when there is none. That is not an error condition — an observed object is a\nperfectly healthy thing to be — but \"no intent\" and \"an intent controlling nothing\"\nare different answers and this resource only has one of them to give.",
         "operationId": "get_network_interface_intent_api_v1_network_interfaces__object_id__intent_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -926,6 +1782,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -947,6 +1823,14 @@
         "summary": "Get Network Interface Intent History",
         "description": "Every intent version ever retained for this interface, and every transition.\n\nRelease does not delete anything, so a released object still answers here with what it\nwas managed as, and the transition that ended it.",
         "operationId": "get_network_interface_intent_history_api_v1_network_interfaces__object_id__intent_history_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -969,6 +1853,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -990,6 +1894,14 @@
         "summary": "Get Network Interface Reconciliation",
         "description": "Compare this interface's retained intent with its newest observation.\n\nComputed for this request, not read from a column. An object that is not managed\nanswers ``reconciliation: null`` with a 200: \"there is nothing to compare\" is the\ncorrect answer, and it is not the same as ``in_sync``.",
         "operationId": "get_network_interface_reconciliation_api_v1_network_interfaces__object_id__reconciliation_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -1012,6 +1924,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1033,6 +1965,14 @@
         "summary": "List Findings",
         "description": "LocalPlane's claims about this host.\n\nA finding is an interpretation, and it is not the same thing as a state: an object's\n``reconciliation`` is recomputed on every read, while a finding remembers when the\ndisagreement started and survives being resolved. Re-observing the same disagreement\nupdates one finding rather than adding another, and a finding that stops being true is\nresolved with the reason — never deleted.\n\nTwo kinds are reported here, and ``evidence`` is shaped by ``finding_type``. Drift is a\nmanaged object disagreeing with its retained intent. An ownership conflict is a managed\nobject another system is demonstrably running — which is a safety claim rather than a\nconfiguration one, and is never raised for an object LocalPlane merely watches.",
         "operationId": "list_findings_api_v1_findings_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "status",
@@ -1089,6 +2029,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1109,6 +2069,14 @@
         ],
         "summary": "Get Finding",
         "operationId": "get_finding_api_v1_findings__finding_id__get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "finding_id",
@@ -1131,6 +2099,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1152,6 +2140,14 @@
         "summary": "Create Run",
         "description": "Plan one typed operation and publish its preview.\n\n**This endpoint does not change the host.** What it creates is a Run — the durable\nrecord that somebody asked what an operation would involve — together with an immutable\npreview answering it. Confirmation and apply remain separate generic endpoints. The\nsystemd operations have a registered executor like the container operations do, so an\neligible one proceeds through those endpoints to a real host write; planning here\nreaches none of it.\n\nThe preview answers seven questions as precisely as current truth allows: what would\nchange, why, how it would run, what evidence it rests on, what it risks, what would have\nto be verified afterwards and what could be recovered. Where LocalPlane does not know,\nit says `unknown` — most importantly about whether this interface carries the path the\noperator is reaching it over, which nothing in the current observation model can prove\nand which is therefore never guessed.\n\n**A preview can exist while execution is blocked, and that is the useful case.** An\ninterface Docker configures still gets a plan saying \"MTU 1400 → 1500\", with the\nownership conflict listed as a blocker. Refusing to describe it would be less\ninformative and no safer.\n\nPlanning is refused, with nothing written, when there is no honest plan to make: the\nobject is not managed, its active intent does not control the field, nobody has\nobserved it recently enough, the current value cannot be read — or the runtime already\ncarries the intended value, which is a truthful no-op rather than a plan that would\nchange nothing.\n\nThe desired value is never taken from this request. It comes from the retained intent,\nand an operator who wants a different one revises the intent first.",
         "operationId": "create_run_api_v1_runs_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1173,6 +2169,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1192,6 +2208,14 @@
         "summary": "List Runs",
         "description": "Every Run on this host, newest first.\n\nNone of them is a Change. Nothing here has written to the host, and the `validity` on\neach says whether the plan it published still describes what would happen.",
         "operationId": "list_runs_api_v1_runs_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "state",
@@ -1248,6 +2272,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1269,6 +2313,14 @@
         "summary": "Get Run",
         "description": "One Run and the plan it published.\n\nPure. Reading a Run does not contact the host, does not refresh an observation, does\nnot re-plan the stored preview and does not move a timestamp because somebody looked.\n`preview.validity` *is* derived for this request — from records LocalPlane already had,\nand writing nothing — because whether a plan still holds is a question about now.",
         "operationId": "get_run_api_v1_runs__run_id__get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "run_id",
@@ -1291,6 +2343,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1312,6 +2384,14 @@
         "summary": "Get Run Preview",
         "description": "The immutable plan this Run published.\n\nThis is the document a future confirmation would be checked against: its\n`preview_digest` is a hash of a canonical form of the plan, so \"the operator confirmed\nthis\" can one day be verified rather than assumed. It is stored, never rewritten — a\ntrigger in the store refuses every update — so a stale plan stays readable exactly as\nit was published, and the remedy for staleness is a new Run.",
         "operationId": "get_run_preview_api_v1_runs__run_id__preview_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "run_id",
@@ -1334,6 +2414,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1353,8 +2453,16 @@
           "runs"
         ],
         "summary": "Confirm Run",
-        "description": "Satisfy the confirmation this run's published plan requires.\n\n**The body names the preview, not just a digest.** Two identical concurrent plans share\none digest, so a confirmation keyed on content could not say which of them an operator\nlooked at, and a confirmation for one run must never authorise another. `preview_id` is\nrequired and must be the one this run published; a digest may be supplied as an\noptional cross-check.\n\n**Nothing is issued.** No token comes back and none is stored. The confirmation is a row\nnaming this run and this plan, it is single-use, and it is consumed atomically by an\napply of *this* run and by nothing else.\n\n**Nobody is identified.** LocalPlane has no authentication. The record says what is\ntrue — that an unauthenticated request satisfied the requirement — rather than inventing\nan actor to attribute it to.\n\nA stale plan cannot be confirmed, and neither can a blocked one. Confirming work that\ncould not proceed is how blocked work acquires the means to reach an apply review.\n\nNothing about the host is touched here, and no Change is created: confirming is a\ndecision about LocalPlane's own records, exactly as adopting and revising are.",
+        "description": "Satisfy the confirmation this run's published plan requires.\n\n**The body names the preview, not just a digest.** Two identical concurrent plans share\none digest, so a confirmation keyed on content could not say which of them an operator\nlooked at, and a confirmation for one run must never authorise another. `preview_id` is\nrequired and must be the one this run published; a digest may be supplied as an\noptional cross-check.\n\n**Nothing is issued.** No token comes back and none is stored. The confirmation is a row\nnaming this run and this plan, it is single-use, and it is consumed atomically by an\napply of *this* run and by nothing else.\n\n**Nobody is identified.** The record says only that this request crossed the accepted\nauthentication boundary rather than inventing an actor to attribute it to.\n\nA stale plan cannot be confirmed, and neither can a blocked one. Confirming work that\ncould not proceed is how blocked work acquires the means to reach an apply review.\n\nNothing about the host is touched here, and no Change is created: confirming is a\ndecision about LocalPlane's own records, exactly as adopting and revising are.",
         "operationId": "confirm_run_api_v1_runs__run_id__confirm_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "run_id",
@@ -1387,6 +2495,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1408,6 +2536,14 @@
         "summary": "Grant Self Impact Override",
         "description": "Accept that carrying this plan out may interrupt LocalPlane itself.\n\n**A second, separate authority, and it is not a confirmation.** Confirming answers \"do\nyou want this change\". This answers a different question about a different fact: this\nplan's effect closure reaches the infrastructure LocalPlane's own backend depends on, so\nexecuting it may take LocalPlane away — temporarily for a restart, indefinitely for a\nstop — and nothing here has verified another way to reach this host. Both are required,\nneither substitutes for the other, and the write boundary demands each through its own\ndatabase trigger.\n\n**It is offered for one hazard and one shape of evidence.** The plan's `how.eligibility`\nmust be `self_impact_override_required`, which a plan reaches only where its self-impact\nderivation is `proven` under `docker-direct-unix-v1`, the closure touches the management\npath through the backend's runtime owner and nothing else, the agent is proven to be a\nhost-side service outside that closure, and no gap remains. A `possible` impact is\nsurfaced and never authorised. An unresolved one, an agent in a container, an incomplete\neffect graph, a provider whose owner could not be resolved, an applicability failure, a\nstale preview, a digest mismatch or any blocker a later build adds all leave the plan\n`blocked` — and a blocked plan has no override to grant.\n\n**There is nothing to force and nothing to name.** No `force`, no `ignore_safety`, no\nlist of blockers to bypass: a caller cannot choose what is being overridden, because the\nbackend derived whether this exact published plan is eligible for this one authority.\nNor is any display text echoed back — everything the acknowledgement is about is in the\nimmutable preview this request names, bound by the digest it optionally cross-checks.\n\n**Protection does not move.** `protected` stays `protected` and `unknown` stays\n`unknown`; every blocker stays published; the risk tier and the confirmation requirement\nare untouched. Granting this opens a path, it does not soften a verdict.\n\n**It is single-use and bound to one plan.** One grant per run, ever; it names the\npreview that run published; it is re-validated against fresh evidence when granted and\nagain when spent; and it is consumed atomically with the apply confirmation by the one\nattempt that uses it. Nothing is issued and no token comes back.",
         "operationId": "grant_self_impact_override_api_v1_runs__run_id__self_impact_override_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "run_id",
@@ -1440,6 +2576,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1461,6 +2617,14 @@
         "summary": "Apply Run",
         "description": "Execute this run's published plan. One of the two endpoints that can write.\n\nThe other is `POST /changes/{id}/recovery/retry`, which re-attempts the end state of a\nchange that could not be settled. Both dispatch through the same executors, and neither\ntakes a request body.\n\n**There is no request body, and that is the design.** Every authoritative value is\nalready named by the run: the object, the operation, the intent version, the field and\nboth ends of the change. There is no parameter here for an MTU, a desired value, an\ninterface, an object id, a command, an argv, an executable, a provider, a shell, a\npatch or a field set — not because they are validated away, but because there is\nnothing to name them to. An operator who wants a different value revises the intent and\nplans a new run.\n\n**Everything is re-proved for this request before anything is armed.** The object is\nre-read, the published preview must itself say execution was available and this plan\neligible, its validity is re-derived under *this* request's management-path evidence,\nand every execution gate — ownership, protection, capability, and that the target is\nproven **not** to be the path this request arrived over — is checked again against\ncurrent truth. Nothing is silently replanned: the remedy for a stale run is a new run.\n\n**A second concurrent apply against the same object and field is refused**, with a typed\nconflict, by a durable lock in the database rather than a mutex in one process.\n\n**The order after that is the safety argument.** The confirmation is consumed\natomically; a checkpoint holding the value to restore is written and committed *before*\nanything else can be; only then does a Change come into existence; and only then is the\nmutation dispatched. A checkpoint that cannot be written ends the run `failed` with no\nChange, because nothing about the host could have moved.\n\n**What comes back is what is known.** `change.mutation.outcome` is `not_written`,\n`written` or `write_unknown`, and the third is never converted into either of the others\nby reading the value back — that answers what the host holds now, which is a different\nquestion from whether this write occurred. A `written` mutation is verified by a fresh\nobservation through the ordinary path before the run can succeed, and a verification\nthat cannot prove the intended value sends the run to restoration. A restoration that\ncannot be proven ends in `recovery_required`, which is a truthful ending rather than an\nerror, and holds this object's write lock until somebody looks.",
         "operationId": "apply_run_api_v1_runs__run_id__apply_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "run_id",
@@ -1483,6 +2647,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1504,6 +2688,14 @@
         "summary": "Keep Guarded Run",
         "description": "Keep a guarded change, by proving over the changed object that you are still here.\n\n**The proof is this request.** A guarded change is one made to the object carrying the\noperator's own management path, and nothing LocalPlane can read from the host settles\nwhether that path survived it — the value comes back perfectly over a link nobody can\ntalk to. What settles it is a request that *arrived*, whose own transport re-establishes\nthe management path by the same two-source rule the path is always proven by and\nresolves it to the very object that was changed. That evidence travels over the path\nunder test, which is what makes it a proof.\n\nSo a request that cannot prove it can never keep the change — not because it is refused\na permission, but because the one thing it would have to establish is the one thing it\nhas failed to establish. It is refused with `guard_connection_not_proved` and the guard\ngoes on holding.\n\n**This endpoint cannot write to the host**, and there is no parameter through which it\ncould. The only body field is a statement of intent; it names no object, no value, no\ninterface, no route, no command and no deadline. What it can do is *prevent* a write:\nreleasing the guard is what stops the reversal that would otherwise happen.\n\n**Doing nothing is a decision, and it is the safe one.** If the window passes with no\nsuch proof, the agent on the host dispatches the reversal on its own — without this\nprocess, without this connection and without being asked again. Calling this afterwards\ndoes not undo that; it collects what the guard did, reads the target back, and ends the\nrun truthfully: `rolled_back` where a reading proves the previous value is back,\n`recovery_required` where nothing does.",
         "operationId": "keep_guarded_run_api_v1_runs__run_id__guard_keep_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "run_id",
@@ -1536,6 +2728,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1557,6 +2769,14 @@
         "summary": "Cancel Run",
         "description": "Cancel a Run before the write boundary.\n\nThe easy cancellation, and the only one that exists: nothing has been written, so\nnothing has to be put back. **No Change is created** — LocalPlane's first invariant is that a\ncancelled run carries no change record, and here there is not even a table one could\nlive in. The host is untouched, the retained intent is untouched, reconciliation and\nfindings are untouched, and the published preview remains inspectable as the history it\nis.\n\nThis says nothing about cancelling an execution. Cancelling during an apply means the\neffect of the interrupted step is unknown and the run goes to recovery; cancelling\nduring a rollback is not a rollback. Neither is designed here, and neither is\nreachable — there is no state to interrupt.",
         "operationId": "cancel_run_api_v1_runs__run_id__cancel_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "run_id",
@@ -1579,6 +2799,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1600,6 +2840,14 @@
         "summary": "List Changes",
         "description": "Every Change on this host, newest first. Pure: reading history changes nothing.",
         "operationId": "list_changes_api_v1_changes_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "object_id",
@@ -1661,6 +2909,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1682,6 +2950,14 @@
         "summary": "Get Change",
         "description": "One Change, its apply transcript, and what LocalPlane does and does not know.\n\nPure. Reading a Change contacts no host, refreshes no observation and writes nothing —\nincluding for a Change that ended in `recovery_required`, where the temptation to \"check\nwhether it is fine now\" is exactly the read that must not silently become a write.",
         "operationId": "get_change_api_v1_changes__change_id__get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "change_id",
@@ -1704,6 +2980,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1725,6 +3021,14 @@
         "summary": "Confirm Change Recovery",
         "description": "Authorise one recovery retry of this change to write to the host again.\n\n**The confirmation that authorised the original apply is not reusable and this is not\nit.** That one authorised an attempt and the attempt happened. This is a second, separate\ngrant, recorded in the same table under the same single-use rule, consumed by exactly one\nretry — and at most one may be outstanding at a time, so authority cannot be accumulated.\n\n**A retry does not need this to begin.** The first thing a retry does is take a fresh\nreading and ask the operation whether it already proves the end state; one that does\ncompletes with no host mutation and consumes nothing. Grant this when a retry has told you\nit cannot proceed without it, or in advance if you already know the write must happen.\n\nThe current management-path gate applies here as it does to the retry itself: authority\nover a write that could remove the operator's own path is granted over a connection that\nhas proven it is not the one at risk, or it is not granted.\n\nNothing about the host is touched, and no Change is created or altered.",
         "operationId": "confirm_change_recovery_api_v1_changes__change_id__recovery_confirm_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "change_id",
@@ -1757,6 +3061,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1778,6 +3102,14 @@
         "summary": "Retry Change Recovery",
         "description": "Try again to reach the end state this change wanted. The way out of a recovery hold.\n\n**There is no request body, and that is the design.** Every authoritative value is\nalready named by the change: the operation, the object, the field and both ends of it, or\nthe verb and the state it promised. There is no parameter here for a value, a verb, a\ntarget, a provider, a command or a shell — not because they are validated away, but\nbecause there is nothing to name them to. A retry re-attempts *this* change; an operator\nwho wants something else plans a new run.\n\n**It looks before it writes.** The first thing it does is re-read the target through the\nordinary observation path and ask the operation whether that reading already proves the\nend state — an uncertain write may in fact have landed, a container may now be proven\nrunning, a restart may now be provable from the daemon's own record of when it last\nstarted. If it is proven, recovery completes with **no host mutation at all** and the\nobject is given back. Writing again merely because somebody pressed retry would be a host\nchange nobody needed.\n\n**Everything is re-proved for this request.** The management-path judgement comes from the\ntransport this call arrived on, not from the failed run's; ownership, capability,\nobservation currency and eligibility are re-derived against current truth; and a re-plan\nthat would now produce a different desired value, verb or expected state is **refused**,\nbecause recovery may not substitute today's intent for the one the change was for.\n\n**A retry that must write needs authority nobody has spent.** It is refused with\n`recovery_confirmation_required` until one is granted, and the refusal is recorded as an\nattempt that provably wrote nothing.\n\n**The hold is kept through every ending but two.** `not_written`, `write_unknown` and a\nwrite that could not be proven all leave the question open, so the object stays held. The\noriginal change is never rewritten by any of this: it goes on saying it required recovery\nand goes on saying why.",
         "operationId": "retry_change_recovery_api_v1_changes__change_id__recovery_retry_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "change_id",
@@ -1800,6 +3132,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1821,6 +3173,14 @@
         "summary": "Resolve Change Recovery",
         "description": "Release this change's recovery hold by hand. **No host mutation happens here.**\n\nThe explicit human escape, and the store enforces what it may be: a resolution row may\ncarry no confirmation, no dispatch, no mutation outcome, no host effect and no\nverification, so a build that decided otherwise would fail to write it.\n\n**It claims nothing.** Not that the change succeeded, not that the mutation happened, not\nthat the host is safe, not that anything was rolled back, not that the intended state was\nreached. The original result and the original recovery reason are left saying exactly what\nthey said and stay inspectable afterwards; what is added is that at this time a person\nreleased the hold.\n\n**Whatever can be observed is recorded beside it**, through the ordinary observation path,\nand recorded as what it is. If the reading happens to prove the end state the change\nwanted, the record says so and the outcome is still `resolved` — a human's decision is not\nsilently upgraded into a verification. If nothing can be read, that stays visible rather\nthan becoming an absence a reader could mistake for a clean result.\n\n`acknowledge_object` is the object's name, typed out. The operator types the held\ndomain's name for the same reason: an escape from a safety hold should not be one\naccidental click, and the statement is recorded rather than merely required.\n\nOnly the lock this change holds is released, and only while this change still holds it.",
         "operationId": "resolve_change_recovery_api_v1_changes__change_id__recovery_resolve_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
         "parameters": [
           {
             "name": "change_id",
@@ -1852,6 +3212,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
           },
           "422": {
             "description": "Validation Error",
@@ -4404,6 +5784,19 @@
           "message"
         ],
         "title": "ErrorBody"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
       },
       "Evidence": {
         "properties": {
@@ -8534,7 +9927,7 @@
           "source": {
             "type": "string",
             "title": "Source",
-            "description": "Always `unauthenticated_request`; nobody is identified."
+            "description": "Authentication-boundary source; nobody is identified."
           },
           "satisfied_at": {
             "type": "string",
@@ -9209,7 +10602,7 @@
           "source": {
             "type": "string",
             "title": "Source",
-            "description": "`unauthenticated_request`. There is no user model in this build and recording one would be recording a fiction."
+            "description": "`authenticated_request` for new records; historical unauthenticated records remain unchanged. Neither value identifies a person."
           },
           "satisfied_at": {
             "type": "string",
@@ -9261,7 +10654,7 @@
           "consumed_by_attempt_id"
         ],
         "title": "RunConfirmation",
-        "description": "A confirmation that was actually satisfied. Durable, bound, single-use.\n\nThere is no actor and no token. LocalPlane has no authentication, so ``source`` records\nthe only true thing: an unauthenticated request satisfied the requirement. And nothing\nwas issued that a caller could present anywhere else — the confirmation is a row naming\nthis Run and this plan, and the only thing that can use it is an apply of this Run."
+        "description": "A confirmation that was actually satisfied. Durable, bound, single-use.\n\nThere is no actor and no token. ``source`` records only that the request crossed the\naccepted authentication boundary; it does not identify a person. Nothing\nwas issued that a caller could present anywhere else — the confirmation is a row naming\nthis Run and this plan, and the only thing that can use it is an apply of this Run."
       },
       "RunEventView": {
         "properties": {
@@ -9956,6 +11349,44 @@
         ],
         "title": "SelfImpactOverrideRequest",
         "description": "Accept the one typed hazard a self-impact plan publishes. Nothing else.\n\n**Everything this authority is about is already in the preview.** Which unit is at\nrisk, whether LocalPlane may disappear, and whether it may come back are all in the\nimmutable document this request names — bound into `expected_preview_digest`, which is\nchecked. So there is nothing to echo back: asking a client to retype a display name\nwould turn copied text into authority, and the copy could only ever agree with the\ndocument until the day it did not.\n\n**There is no field for choosing what to bypass.** No `force`, no `ignore_safety`, no\nlist of blockers. A caller cannot name a hazard, a status or a verdict; the backend\nderived whether this exact plan is eligible for this one authority, and the only thing\nsupplied here is that a person said yes to it."
+      },
+      "SessionStatus": {
+        "properties": {
+          "authenticated": {
+            "type": "boolean",
+            "const": true,
+            "title": "Authenticated",
+            "default": true
+          },
+          "mechanism": {
+            "type": "string",
+            "enum": [
+              "bearer",
+              "session"
+            ],
+            "title": "Mechanism"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "Absolute browser-session expiry; null for a master Bearer request."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mechanism",
+          "expires_at"
+        ],
+        "title": "SessionStatus"
       },
       "Statistics": {
         "properties": {
@@ -11874,7 +13305,7 @@
           "reason"
         ],
         "title": "TransportEvidenceView",
-        "description": "What the server side of *this* connection says about how the request arrived.\n\nRead from the accepted socket, never from a header. `X-Forwarded-For`, `X-Real-IP` and\n`Forwarded` are not consulted anywhere on this path, and there is no setting that turns\nthem on: a management path proven from something the caller wrote is a request that has\nbeen believed rather than evidence that has been gathered.\n\nIt is transport, not identity. There is no authentication in this product and nobody on\nthe other end of this socket has been identified — the value of `peer_address` is\nprecisely that a caller cannot choose it, not that it says who anyone is."
+        "description": "What the server side of *this* connection says about how the request arrived.\n\nRead from the accepted socket, never from a header. `X-Forwarded-For`, `X-Real-IP` and\n`Forwarded` are not consulted anywhere on this path, and there is no setting that turns\nthem on: a management path proven from something the caller wrote is a request that has\nbeen believed rather than evidence that has been gathered.\n\nIt is transport, not identity. Authentication proves credential possession but identifies\nnobody on the other end of this socket — the value of `peer_address` is precisely that a\ncaller cannot choose it, not that it says who anyone is."
       },
       "TypedValue": {
         "properties": {
@@ -11956,6 +13387,17 @@
           "code"
         ],
         "title": "ValidityReason"
+      }
+    },
+    "securitySchemes": {
+      "MasterBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "BrowserSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "localplane_session"
       }
     }
   }

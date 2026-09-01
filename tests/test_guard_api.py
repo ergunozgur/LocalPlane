@@ -28,7 +28,7 @@ from fastapi.testclient import TestClient
 
 from localplane.agent.server import AgentServer
 from localplane.agent.service import AgentService
-from localplane.backend.app import create_app
+from tests.conftest import AuthenticatedTestClient, create_authenticated_app
 from localplane.backend.config import Settings
 from localplane.backend.db.database import open_database
 from localplane.helper.client import HelperClient
@@ -138,7 +138,7 @@ class _Wired:
         return int((self.sysfs / name / "mtu").read_text().strip())
 
     def loopback_client(self) -> TestClient:
-        return TestClient(self.app, base_url="http://127.0.0.1:8080",
+        return AuthenticatedTestClient(self.app, base_url="http://127.0.0.1:8080",
                           client=("127.0.0.1", 51000))
 
 
@@ -160,8 +160,8 @@ def wired(sysfs: Path, fake_root: Path, tmp_path: Path, absent_docker: Path) -> 
                         agent_socket=agent.socket_path, agent_timeout_s=10.0,
                         freshness_ttl_s=60.0, log_level="WARNING", observe_on_startup=False)
     database = open_database(settings.database_path)
-    app = create_app(settings, database)
-    with TestClient(app, base_url=f"http://{ENDPOINT}:8080",
+    app = create_authenticated_app(settings, database)
+    with AuthenticatedTestClient(app, base_url=f"http://{ENDPOINT}:8080",
                     client=(OPERATOR, 44321)) as client:
         yield _Wired(client, kernel, sysfs, timers, app)
     database.close()

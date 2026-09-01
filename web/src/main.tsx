@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { PreferencesProvider } from './preferences/preferences';
 import { ViewerProvider } from './identity/viewer';
+import { AuthenticationProvider } from './auth/AuthProvider';
 import './styles/tokens.css';
 import './styles/base.css';
 
@@ -12,12 +13,14 @@ if (!container) throw new Error('#root is missing from the document');
 
 createRoot(container).render(
   <StrictMode>
-    <ViewerProvider>
-      <PreferencesProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </PreferencesProvider>
-    </ViewerProvider>
+    <PreferencesProvider>
+      <BrowserRouter>
+        <AuthenticationProvider>
+          <ViewerProvider>
+            <App />
+          </ViewerProvider>
+        </AuthenticationProvider>
+      </BrowserRouter>
+    </PreferencesProvider>
   </StrictMode>,
 );

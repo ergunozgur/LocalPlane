@@ -1,0 +1,12 @@
+.boundary { min-height: 100%; display: grid; place-items: center; padding: var(--sp-6); background: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px), var(--bg); background-size: 28px 28px; }
+.card { width: min(430px, 100%); padding: 30px; border: 1px solid var(--rule); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-pop); }
+.wordmark { margin-bottom: var(--sp-6); color: var(--ink); font-family: var(--wordmark); font-size: 20px; }
+.wordmark i { color: var(--accent); }
+.annotation { margin: var(--sp-3) 0 var(--sp-5); color: var(--dim); line-height: 1.55; }
+.card form { display: grid; gap: var(--sp-2); }
+.card label { color: var(--faint); font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.card input { width: 100%; padding: 10px 11px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--inset); color: var(--ink); font-family: var(--mono); }
+.card button { margin-top: var(--sp-2); padding: 9px 12px; border: 1px solid var(--accent-line); border-radius: var(--r-sm); background: var(--accent-soft); color: var(--ink); cursor: pointer; }
+.card button:disabled { cursor: default; opacity: .5; }
+.error { margin: var(--sp-1) 0 0; color: var(--crimson); font-size: 12px; }
+.limit { margin-top: var(--sp-5); color: var(--faint); font-family: var(--mono); font-size: 10px; }

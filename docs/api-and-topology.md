@@ -25,6 +25,19 @@ The console calls `/api/v1` on its own origin. In development, Vite proxies `/ap
 loopback backend because the backend has no CORS middleware. The proxy is a development
 convenience, not a security boundary.
 
+## Authentication
+
+Every current user-facing API operation requires authentication. Automation and API clients send
+`Authorization: Bearer <master-secret>`. `POST /api/v1/session` requires that master Bearer and
+returns a derived browser session only through `Set-Cookie`; `GET /api/v1/session` reports bounded
+session state, and cookie-authenticated `DELETE /api/v1/session` revokes it.
+
+Ordinary operations accept either the master Bearer or a valid browser cookie. Cookie-authenticated
+POST, PUT, PATCH, and DELETE require an exact same-origin value, with at most one configured Vite
+development origin. Missing and foreign origins fail with 403. Bearer calls do not require Origin.
+`/docs`, `/redoc`, and `/openapi.json` are protected too. Authentication identifies no person and
+does not replace the Change Engine or provider/privilege safety boundaries.
+
 ## API domains
 
 | Domain | Purpose |
@@ -39,7 +52,7 @@ convenience, not a security boundary.
 | Runs | Create, inspect, preview, confirm, apply, keep a guard, cancel, and grant a bounded self-impact override |
 | Changes | Inspect mutation history and confirm, retry, or resolve recovery |
 
-The current committed contract contains 43 paths and 44 operations. Those counts describe
+The current committed contract contains 44 paths and 47 operations. Those counts describe
 this pre-release snapshot, not a compatibility guarantee.
 
 ## Reads, observations, and records

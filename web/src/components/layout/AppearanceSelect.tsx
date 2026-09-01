@@ -5,11 +5,9 @@
  * palette they select — which reads far better than a list of names, because the
  * choice being made is a visual one.
  *
- * The account card above it says what this session actually is: "operator · local
- * session" — and this build means it literally, because there is no authentication and
- * the backend records every confirmation as
- * `unauthenticated_request`. When a real user model arrives, this card gains values rather
- * than the menu gaining a concept.
+ * The account card says exactly what authentication establishes: an authenticated local
+ * session with no user model. It never turns credential possession into a named person,
+ * role, or client-side permission.
  *
  * The options are exactly the themes that exist. No "system", no "auto", no greyed-out
  * coming-soon entry.
@@ -18,6 +16,7 @@ import { Link } from 'react-router-dom';
 import { THEMES, usePreferences, type ThemeId } from '@/preferences/preferences';
 import { useViewer } from '@/identity/viewer';
 import { useEstateCounts } from '@/hooks/useEstateCounts';
+import { useAuthentication } from '@/auth/AuthProvider';
 import { Menu, MenuLabel, MenuSeparator } from './Menu';
 import styles from './AppearanceSelect.module.css';
 
@@ -31,6 +30,7 @@ export function AppearanceSelect(): JSX.Element {
   const { theme, setTheme } = usePreferences();
   const viewer = useViewer();
   const { changes: changeCount } = useEstateCounts();
+  const { logout, logoutError } = useAuthentication();
 
   return (
     <Menu label="Account and appearance" trigger={<span className={styles.avatar} aria-hidden="true" />}>
@@ -102,18 +102,11 @@ export function AppearanceSelect(): JSX.Element {
         </span>
       </div>
 
-      {/* The menu ends with Sign out. There is no session to end: the backend records
-          every confirmation as `unauthenticated_request`, and a sign-out control would be
-          the one thing in this console that does nothing at all. */}
-      <div className={styles.deferred}>
-        <span className={styles.entryTitle}>
-          Sign out
-          <span className={styles.deferredTag}>no session</span>
-        </span>
-        <span className={styles.entryDescription}>
-          This build has no authentication, so there is nothing to sign out of.
-        </span>
-      </div>
+      <button className={styles.signOut} type="button" onClick={() => void logout()}>
+        <span className={styles.entryTitle}>Sign out</span>
+        <span className={styles.entryDescription}>End this browser session on LocalPlane.</span>
+      </button>
+      {logoutError ? <p className={styles.logoutError} role="alert">{logoutError}</p> : null}
     </Menu>
   );
 }

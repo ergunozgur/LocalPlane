@@ -1546,11 +1546,9 @@ def test_the_migrations_through_0008_are_byte_identical_to_head():
 def test_only_the_migrations_that_declared_it_suspend_foreign_keys():
     """0009 rebuilds two leaves, which needs no escape, and it still declares nothing.
 
-    Five migrations in the repository declare it and are named rather than counted: 0008
-    rebuilt `objects`, 0010 rebuilt four referenced tables, 0012 rebuilds the referenced
-    Run/preview pair for the closed systemd planning vocabulary, 0013 rebuilds
-    `run_previews` again for the backend self-impact derivation, and 0014 rebuilds it once
-    more together with `run_confirmations` for the override authority. The escape is visible
+    The migrations that rebuild referenced tables declare the escape and are named rather
+    than merely counted. Migration 0016 rebuilds `run_confirmations` to widen truthful
+    authentication attribution while preserving every existing authority trigger. The escape is visible
     in each, travels inside the checksummed file, and another appearing without a change that
     argued for it fails here.
     """
@@ -1565,6 +1563,7 @@ def test_only_the_migrations_that_declared_it_suspend_foreign_keys():
         "0013_self_impact.sql",
         "0014_self_impact_override.sql",
         "0015_systemd_lifecycle_changes.sql",
+        "0016_authentication.sql",
     ]
 
 

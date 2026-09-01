@@ -100,26 +100,30 @@ Recovery is append-only. A retry first observes and writes only if the required 
 not already proved and fresh authority permits another attempt. A manual resolution releases
 the hold without touching the host. Neither rewrites the original Change's history.
 
-## Accepted but not implemented
+## Authentication boundary
 
-The authentication design is accepted and deliberately separated from operation safety:
+Authentication is implemented and deliberately separated from operation safety:
 
-- a locally generated master secret is verified in the backend;
-- CLI and automation use it as a bearer credential;
-- a browser presents it once to create a separate random, expiring, in-memory session;
-- the browser receives only an `HttpOnly`, `SameSite=Strict` cookie;
-- cookie-authenticated unsafe requests must pass a fail-closed `Origin` check;
-- bearer-authenticated requests do not require browser Origin handling;
-- authentication is applied at router level, including API documentation and OpenAPI.
+- a one-shot local command creates one 256-bit master credential in a restrictive file;
+- normal startup fails closed rather than generating or replacing that credential;
+- CLI and automation use it as a Bearer credential verified with constant-time comparison;
+- a browser presents it once to create a separate random, 12-hour, non-sliding in-memory session;
+- only the SHA-256 session-token hash and absolute expiry remain server-side;
+- the browser receives the raw session token only in an `HttpOnly`, `SameSite=Strict`, host-only cookie;
+- cookie-authenticated POST, PUT, PATCH, and DELETE require an exact accepted `Origin`;
+- bearer-authenticated requests are Origin-exempt, and an explicit invalid Bearer never falls back to a cookie;
+- authentication is applied at the FastAPI router boundary, including documentation and OpenAPI.
 
-None of this is implemented. There is no login, session endpoint, router authentication
-dependency, Origin check, role model, TLS configuration, or authenticated actor attribution
-today. No frontend write control may ship before this boundary exists.
+There is one credential and no user, role, RBAC, named identity, password database, or persistent
+session store. New confirmation records say `authenticated_request`; that states only that the
+request crossed this boundary. Historical `unauthenticated_request` evidence is retained unchanged.
+The Operator Console remains read-only. Authentication cannot waive planning, preview binding,
+confirmation, protection, provider authority, helper/systemd authorization, verification, recovery,
+or write locks.
 
 ## Deployment constraints
 
-The backend binds to loopback by default. Non-loopback exposure requires authentication and
-TLS terminating in the backend process so the accepted connection remains authoritative for
-management-path evidence. The production asset-serving topology is unresolved. Until those
-boundaries are implemented and validated, LocalPlane must be treated as local development
-software.
+The backend binds to loopback by default. Plain-HTTP browser sessions are issued only for that
+configured loopback topology. Non-loopback browser exposure still requires a separately accepted
+HTTPS/TLS topology that preserves authoritative connection evidence. Production asset serving is
+unresolved, so LocalPlane remains local development software.

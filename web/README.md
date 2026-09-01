@@ -12,8 +12,9 @@ understanding Linux systems and making guarded, evidence-backed changes.
 > Interfaces, data shapes, and layout may change.
 
 > [!WARNING]
-> LocalPlane authentication is accepted in design but not implemented. The console and API
-> must remain on a trusted local boundary.
+> The console requires a derived browser session. Plain-HTTP browser sessions are supported only
+> for the configured loopback development topology; production TLS and asset serving remain
+> unresolved.
 
 ## Current behavior
 
@@ -29,8 +30,9 @@ It is deliberately **read-only**:
 - `OPERATIONS_WITH_UI_CONTROLS` is empty;
 - recovery actions are displayed as records, never as controls.
 
-The backend implements seven typed host-mutation operations. The console does not expose
-them and no frontend write control may ship before authentication is implemented.
+The backend implements seven typed host-mutation operations. Authentication is now enforced,
+but the console still does not expose those operations: authentication does not grant frontend
+write authority or bypass the Change Engine.
 
 The committed OpenAPI snapshot and generated types are integrated with the backend in this
 tree, including systemd lifecycle planning and execution records. Contract availability does
@@ -48,7 +50,7 @@ not make a console control exist.
   service/socket/timer detail.
 - **Operations** — Runs, Changes, and findings with detail views and backend-backed filters.
 - **Topology** — evidence-backed network and container relationships inside the overview.
-- **Settings** — appearance preferences and truthful unauthenticated-request attribution.
+- **Settings** — appearance preferences, authenticated-session truth, and no invented user identity.
 
 Some frames intentionally state that data is unavailable: host resource charts have no
 metrics contract, network traffic has no time series, and Docker runtime information does
@@ -56,7 +58,7 @@ not include a system-info contract. These are not zero values or simulated data.
 
 ## Not implemented
 
-- Authentication, login, or browser sessions
+- Users, roles, RBAC, named identity, or persistent/multi-process browser sessions
 - Record-writing or host-writing controls
 - A production static-asset and TLS serving topology
 - Polling or a claim that a one-time read is live
@@ -83,16 +85,21 @@ on-demand provider reads that way. They do not write the host or LocalPlane reco
 
 - Node.js `^18.0.0`, `^20.0.0`, or `>=22.0.0`
 - npm with the committed lockfile
-- A running LocalPlane backend on a trusted local boundary
+- A running loopback LocalPlane backend with an initialized master credential
 
 ## Quick start
 
-From `web/`:
+Initialize authentication and start the backend as described in the repository quick start.
+Then, from `web/`:
 
 ```sh
 npm ci
 npm run dev
 ```
+
+On first load, enter the master credential. The console sends it only in the Bearer header of the
+session-exchange request, clears its React input state after submission, and thereafter uses the
+derived `HttpOnly` cookie. It does not store the master in browser storage.
 
 The development server listens on `http://127.0.0.1:5178`. It proxies `/api` to
 `http://127.0.0.1:8080` by default:
@@ -115,6 +122,7 @@ security topology.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `LOCALPLANE_API_ORIGIN` | `http://127.0.0.1:8080` | Backend origin proxied by the development server and read by `api:snapshot` |
+| `LOCALPLANE_API_BEARER` | none | Required master Bearer credential for `api:snapshot`; never written to generated files |
 
 There is no build-time API-base setting. Production code calls `/api/v1` on the origin that
 served it.
@@ -142,7 +150,8 @@ running backend.
 To refresh both against the intended loopback backend:
 
 ```sh
-LOCALPLANE_API_ORIGIN=http://127.0.0.1:8080 npm run api:snapshot
+LOCALPLANE_API_ORIGIN=http://127.0.0.1:8080 \
+  LOCALPLANE_API_BEARER='<master-secret>' npm run api:snapshot
 npm run api:types
 ```
 
@@ -159,7 +168,8 @@ web/
     dashboard/     overview grid and density model
     domain/        vocabulary, formatting, and execution presentation
     hooks/         request state and layout hooks
-    identity/      current unauthenticated attribution seam
+    auth/          authenticated boot, login, expiry, and logout boundary
+    identity/      no-user authenticated attribution seam
     preferences/   appearance preferences
     routes/        domain pages and object detail routes
     styles/        design tokens and base styles
@@ -170,9 +180,11 @@ web/
 
 ## Security and licences
 
-The console adds no authentication or authorization boundary. Serving it does not make the
-backend safe for untrusted network exposure. Read the repository [safety model](../docs/safety-model.md)
-before changing its deployment topology.
+The console establishes a browser session but adds no user, role, or client-side authorization
+model. Authentication remains separate from the backend's operation-safety and privilege
+boundaries. Plain HTTP remains loopback-development-only; serving built assets does not create a
+production TLS or remote-exposure topology. Read the repository [safety model](../docs/safety-model.md)
+before changing deployment.
 
 LocalPlane is licensed under the [Apache License 2.0](../LICENSE). The bundled Inter,
 JetBrains Mono, and Instrument Serif files, their immutable sources, hashes, copyrights, and

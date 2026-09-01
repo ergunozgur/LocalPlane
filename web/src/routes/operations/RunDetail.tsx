@@ -25,7 +25,6 @@ import { ResourceView } from '@/components/states/ResourceView';
 import { Empty } from '@/components/states/SurfaceState';
 import { DataTable } from '@/components/primitives/DataTable';
 import { PageHeader } from '../PageHeader';
-import { useViewer } from '@/identity/viewer';
 import { executionGate } from '@/domain/execution';
 import {
   executionAvailability,
@@ -41,7 +40,6 @@ import styles from './RunDetail.module.css';
 
 export function RunDetail(): JSX.Element {
   const { runId = '' } = useParams();
-  const viewer = useViewer();
   const { resource } = useResource(
     `run:${runId}`,
     useCallback((signal) => endpoints.run(runId, { signal }), [runId]),
@@ -265,8 +263,8 @@ export function RunDetail(): JSX.Element {
                       >
                         {preview.confirmation.satisfiable ? 'yes' : 'no'}
                       </KeyValue>
-                      <KeyValue label="Attribution" hint="no user model in this build">
-                        <span className="mono">{viewer.attribution}</span>
+                      <KeyValue label="Attribution" hint="persisted confirmation source; no person is identified">
+                        <span className="mono">{run.confirmation?.source ?? 'not recorded'}</span>
                       </KeyValue>
                     </KeyValueList>
                     <p className={styles.policy}>{preview.confirmation.policy}</p>

@@ -12,6 +12,7 @@ import { fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { App } from '@/App';
 import { ViewerProvider } from '@/identity/viewer';
+import { AuthenticationProvider } from '@/auth/AuthProvider';
 import { PreferencesProvider } from '@/preferences/preferences';
 import { stubBackend } from '@/test/backend';
 
@@ -19,13 +20,15 @@ afterEach(() => vi.unstubAllGlobals());
 
 function renderAt(path: string): void {
   render(
-    <ViewerProvider>
-      <PreferencesProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <App />
-        </MemoryRouter>
-      </PreferencesProvider>
-    </ViewerProvider>,
+    <PreferencesProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <AuthenticationProvider>
+          <ViewerProvider>
+            <App />
+          </ViewerProvider>
+        </AuthenticationProvider>
+      </MemoryRouter>
+    </PreferencesProvider>,
   );
 }
 
@@ -77,28 +80,28 @@ describe('the account menu', () => {
   it('marks Customize dashboard as unavailable without offering a control', async () => {
     stubBackend();
     renderAt('/settings');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Account and appearance' })[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Account and appearance' }))[0]!);
 
     const entry = screen.getByText('Customize dashboard').closest('div') as HTMLElement;
     expect(within(entry).getByText('not in this build')).toBeInTheDocument();
     expect(entry.closest('a')).toBeNull();
   });
 
-  it('does not offer a functional sign out', async () => {
+  it('offers a functional sign out and returns to the login boundary', async () => {
     stubBackend();
     renderAt('/settings');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Account and appearance' })[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Account and appearance' }))[0]!);
 
-    const entry = screen.getByText('Sign out').closest('div') as HTMLElement;
-    expect(entry.closest('a')).toBeNull();
-    expect(within(entry).queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.getByText(/no authentication, so there is nothing to sign out of/i)).toBeInTheDocument();
+    const signOut = screen.getByRole('button', { name: /sign out/i });
+    expect(signOut.closest('a')).toBeNull();
+    fireEvent.click(signOut);
+    expect(await screen.findByRole('heading', { name: 'Open the operator console' })).toBeInTheDocument();
   });
 
   it('links the change ledger to a real destination with a real count', async () => {
     stubBackend();
     renderAt('/settings');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Account and appearance' })[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Account and appearance' }))[0]!);
 
     const ledger = screen.getByText('Change ledger').closest('a');
     expect(ledger).toHaveAttribute('href', '/operations');

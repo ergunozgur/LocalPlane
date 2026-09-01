@@ -823,7 +823,7 @@ def api(tmp_path: Path, fake_root: Path, sysfs_net: Path, daemon) -> Iterator[An
     from fastapi.testclient import TestClient
 
     from localplane.agent.server import AgentServer
-    from localplane.backend.app import create_app
+    from tests.conftest import AuthenticatedTestClient, create_authenticated_app
     from localplane.backend.config import Settings
     from localplane.backend.db.database import open_database
 
@@ -850,7 +850,7 @@ def api(tmp_path: Path, fake_root: Path, sysfs_net: Path, daemon) -> Iterator[An
         log_level="WARNING", observe_on_startup=True,
     )
     database = open_database(settings.database_path)
-    with TestClient(create_app(settings, database)) as client:
+    with AuthenticatedTestClient(create_authenticated_app(settings, database)) as client:
         client.post("/api/v1/docker/containers/observations/refresh")
         yield client, made
     database.close()
@@ -1103,7 +1103,7 @@ def test_upgrading_a_0007_store_keeps_its_data_its_checksums_and_its_schema(tmp_
     try:
         after = {r["version"]: r["checksum"]
                  for r in upgraded.query("SELECT * FROM schema_migrations")}
-        assert sorted(after) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        assert sorted(after) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
         assert {v: before[v] for v in before} == {v: after[v] for v in before}
 
         # Every pre-Docker row is a field change and says so, and none of them acquired an
@@ -1173,7 +1173,7 @@ def test_only_migrations_that_declared_it_suspend_foreign_keys():
     declared = {m.name for m in load_migrations(MIGRATIONS_DIR) if m.suspends_foreign_keys}
     assert declared == {
         "docker", "connection_guard", "systemd_lifecycle", "self_impact",
-        "self_impact_override", "systemd_lifecycle_changes",
+        "self_impact_override", "systemd_lifecycle_changes", "authentication",
     }
     # And it cannot be changed without the checksum noticing, because it travels in the file.
     for name in (
@@ -1183,6 +1183,7 @@ def test_only_migrations_that_declared_it_suspend_foreign_keys():
         "0013_self_impact.sql",
         "0014_self_impact_override.sql",
         "0015_systemd_lifecycle_changes.sql",
+        "0016_authentication.sql",
     ):
         assert FOREIGN_KEYS_OFF_DIRECTIVE in (MIGRATIONS_DIR / name).read_text()
 

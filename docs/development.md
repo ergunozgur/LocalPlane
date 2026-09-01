@@ -23,6 +23,17 @@ python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 ```
 
+Create the restrictive default secret directory and initialize the master credential once:
+
+```sh
+install -d -m 700 var
+.venv/bin/localplane-auth init
+```
+
+The initializer refuses overwrite and prints the new credential only on successful creation.
+Normal backend startup never generates a replacement and fails closed if the configured file is
+missing or unsafe.
+
 Start the agent:
 
 ```sh
@@ -45,6 +56,8 @@ Common settings:
 | `LOCALPLANE_AGENT_SOCKET` | `$XDG_RUNTIME_DIR/localplane/agent.sock` | Agent/backend Unix socket |
 | `LOCALPLANE_AGENT_TIMEOUT_S` | `10` | Backend timeout for an agent request |
 | `LOCALPLANE_DB_PATH` | `var/localplane.db` | SQLite store |
+| `LOCALPLANE_AUTH_SECRET_PATH` | `var/localplane-master.secret` | Restrictive local master-credential file |
+| `LOCALPLANE_DEVELOPMENT_ORIGIN` | none | Exactly one additional Vite development Origin when required |
 | `LOCALPLANE_HOST` | `127.0.0.1` | Backend bind address |
 | `LOCALPLANE_PORT` | `8080` | Backend port |
 | `LOCALPLANE_FRESHNESS_TTL_S` | `60` | Observation freshness horizon |
@@ -52,8 +65,8 @@ Common settings:
 | `LOCALPLANE_DOCKER_SOCKET` | `/var/run/docker.sock` | Docker Engine Unix socket used by the agent |
 | `LOCALPLANE_LOG_LEVEL` | `INFO` | Process log level |
 
-Do not change `LOCALPLANE_HOST` to a non-loopback address as a substitute for authentication
-or TLS. Neither is implemented.
+Do not change `LOCALPLANE_HOST` to a non-loopback address as a substitute for TLS. Authentication
+is implemented, but remote/non-loopback plain-HTTP browser sessions are deliberately refused.
 
 ## Optional privileged helper
 
@@ -121,13 +134,15 @@ With the intended backend running on loopback:
 
 ```sh
 cd web
-LOCALPLANE_API_ORIGIN=http://127.0.0.1:8080 npm run api:snapshot
+LOCALPLANE_API_ORIGIN=http://127.0.0.1:8080 \
+  LOCALPLANE_API_BEARER='<master-secret>' npm run api:snapshot
 npm run api:types
 ```
 
 Both files are generated artifacts and should be refreshed and reviewed together. Contract
-generation contacts a live backend and writes repository files; do not use it as a read-only
-inspection command.
+generation contacts the protected live backend, requires an explicit master Bearer credential,
+and writes repository files. The script never writes the credential to either generated artifact;
+do not use it as a read-only inspection command.
 
 ## Repository layout
 

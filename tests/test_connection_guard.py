@@ -1647,7 +1647,7 @@ def test_there_is_still_no_generic_execution_surface(guarded: Estate):
     """
     from fastapi.testclient import TestClient
 
-    from localplane.backend.app import create_app
+    from tests.conftest import AuthenticatedTestClient, create_authenticated_app
     from localplane.backend.config import Settings
 
     run_id = guarded_apply(guarded).run.run_id
@@ -1655,7 +1655,7 @@ def test_there_is_still_no_generic_execution_surface(guarded: Estate):
                         agent_socket=guarded.agent_server.socket_path,
                         agent_timeout_s=10.0, freshness_ttl_s=60.0, log_level="WARNING",
                         observe_on_startup=False)
-    with TestClient(create_app(settings, guarded.database)) as client:
+    with AuthenticatedTestClient(create_authenticated_app(settings, guarded.database)) as client:
         for path in (
             "/api/v1/execute",
             "/api/v1/guards",
@@ -1728,13 +1728,14 @@ def test_a_pre_0010_store_upgrades_without_losing_or_inventing_anything(
         "0013_self_impact.sql",
         "0014_self_impact_override.sql",
         "0015_systemd_lifecycle_changes.sql",
+        "0016_authentication.sql",
     ):
         shutil.copy(MIGRATIONS_DIR / name, staged / name)
     upgraded = open_database(tmp_path / "staged.db", staged)
     fresh = open_database(tmp_path / "fresh.db")
     try:
         after = {v: c for v, c in upgraded.query("SELECT version, checksum FROM schema_migrations")}
-        assert sorted(after) == list(range(1, 16))
+        assert sorted(after) == list(range(1, 17))
         assert {v: after[v] for v in before} == before  # nothing earlier was rewritten
 
         preview = dict(upgraded.query("SELECT * FROM run_previews")[0])

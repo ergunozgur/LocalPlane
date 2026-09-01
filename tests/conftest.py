@@ -13,6 +13,7 @@ the provider actually has to handle.
 
 from __future__ import annotations
 
+import base64
 import http.server
 import json
 import os
@@ -24,8 +25,39 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, Sequence
 
 import pytest
+from fastapi.testclient import TestClient
 
 from localplane.agent.providers.base import CommandFailure, CommandResult
+from localplane.backend.app import create_app
+from localplane.backend.auth import Authentication
+from localplane.backend.config import Settings
+from localplane.backend.db.database import Database
+
+TEST_MASTER_SECRET = base64.urlsafe_b64encode(bytes(range(32))).decode().rstrip("=")
+TEST_AUTHORIZATION = {"Authorization": f"Bearer {TEST_MASTER_SECRET}"}
+
+
+class AuthenticatedTestClient(TestClient):
+    """Existing API regressions run as an authenticated automation caller."""
+
+    def __init__(self, *args, headers=None, **kwargs):
+        merged = dict(TEST_AUTHORIZATION)
+        if headers is not None:
+            merged.update(headers)
+        super().__init__(*args, headers=merged, **kwargs)
+
+
+def create_authenticated_app(settings: Settings, database: Database):
+    return create_app(
+        settings,
+        database,
+        authentication=Authentication(
+            TEST_MASTER_SECRET,
+            bind_host=settings.bind_host,
+            development_origin=settings.development_origin,
+        ),
+    )
+
 
 # --------------------------------------------------------------------------- sysfs tree
 

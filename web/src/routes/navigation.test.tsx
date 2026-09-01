@@ -10,6 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { App } from '@/App';
 import { ViewerProvider } from '@/identity/viewer';
+import { AuthenticationProvider } from '@/auth/AuthProvider';
 import { PreferencesProvider } from '@/preferences/preferences';
 import { BACKEND, stubBackend } from '@/test/backend';
 
@@ -25,14 +26,16 @@ function AddressProbe(): JSX.Element {
 
 function renderAt(path: string): void {
   render(
-    <ViewerProvider>
-      <PreferencesProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <App />
-          <AddressProbe />
-        </MemoryRouter>
-      </PreferencesProvider>
-    </ViewerProvider>,
+    <PreferencesProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <AuthenticationProvider>
+          <ViewerProvider>
+            <App />
+            <AddressProbe />
+          </ViewerProvider>
+        </AuthenticationProvider>
+      </MemoryRouter>
+    </PreferencesProvider>,
   );
 }
 
@@ -65,10 +68,10 @@ describe('every route renders', () => {
     expect((await screen.findAllByText(expected)).length).toBeGreaterThan(0);
   });
 
-  it('shows a not-found surface for an unknown address', () => {
+  it('shows a not-found surface for an unknown address', async () => {
     stubBackend();
     renderAt('/nope');
-    expect(screen.getByText('No such page')).toBeInTheDocument();
+    expect(await screen.findByText('No such page')).toBeInTheDocument();
   });
 });
 
@@ -77,7 +80,7 @@ describe('the shell', () => {
     stubBackend();
     renderAt('/network');
 
-    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    const nav = await screen.findByRole('navigation', { name: 'Primary' });
 
     // A domain that is one surface is a link; a domain with sub-surfaces is a menu trigger,
     // and the chevron on the second kind is the only warning an operator gets that pressing
@@ -101,7 +104,7 @@ describe('the shell', () => {
     stubBackend();
     renderAt('/network');
 
-    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    const nav = await screen.findByRole('navigation', { name: 'Primary' });
     const trigger = within(nav).getByRole('button', { name: /Workloads/ });
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
@@ -121,7 +124,7 @@ describe('the shell', () => {
     stubBackend();
     renderAt('/operations');
     // The host sits in the bar itself: every number on every screen is a claim about it.
-    const bar = screen.getByRole('banner');
+    const bar = await screen.findByRole('banner');
     expect(await within(bar).findByText('demo-host')).toBeInTheDocument();
     expect(within(bar).getByText('127.0.0.1')).toBeInTheDocument();
   });
@@ -135,7 +138,7 @@ describe('the shell', () => {
       },
     });
     renderAt('/');
-    const bar = screen.getByRole('banner');
+    const bar = await screen.findByRole('banner');
     expect(await within(bar).findByRole('img', { name: /agent unreachable/i })).toBeInTheDocument();
     expect((await screen.findAllByText('agent unreachable')).length).toBeGreaterThan(0);
   });
@@ -351,10 +354,10 @@ describe('appearance', () => {
 
     // Appearance sits behind the account menu, as swatch buttons rather than a list of
     // names — the choice being made is a visual one.
-    await user.click(screen.getAllByRole('button', { name: 'Account and appearance' })[0]!);
+    await user.click((await screen.findAllByRole('button', { name: 'Account and appearance' }))[0]!);
 
     const graphite = screen.getByRole('button', { name: /graphite/i });
-    expect(screen.getByRole('button', { name: /localplane/i })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /^localplane default$/i })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
@@ -373,7 +376,7 @@ describe('appearance', () => {
   it('attributes the session without inventing a user', async () => {
     stubBackend();
     renderAt('/settings');
-    expect((await screen.findAllByText('unauthenticated_request')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('authenticated_request')).length).toBeGreaterThan(0);
     expect(screen.getByText('none')).toBeInTheDocument();
   });
 });

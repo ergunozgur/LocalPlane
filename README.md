@@ -29,9 +29,9 @@ evidence-backed changes.
 > model, packaging, and deployment requirements may change.
 
 > [!WARNING]
-> **Local use only.** Authentication is designed but not implemented. The backend binds to
-> loopback by default and must not be exposed to an untrusted network. Anyone who can reach
-> the API can read host information and request the supported mutations.
+> **Loopback development only.** LocalPlane requires a locally initialized master credential.
+> Browser sessions over plain HTTP are issued only for the configured loopback bind. Production
+> TLS, remote browser access, reverse-proxy trust, and production asset serving are not implemented.
 
 LocalPlane turns provider facts into an operational model: identity, observation, evidence,
 ownership, intent, findings, Runs, Changes, verification, recovery, and history. It respects
@@ -132,6 +132,19 @@ python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 ```
 
+Initialize the master credential once from the repository root. The parent directory must be
+owned by the invoking service identity and must not be group- or world-writable:
+
+```sh
+install -d -m 700 var
+.venv/bin/localplane-auth init
+```
+
+The command creates `var/localplane-master.secret` atomically with mode `0600`, refuses to
+overwrite it, and prints the generated credential once. Store that output securely. Normal
+backend startup never creates or replaces the credential and fails closed if the file is missing,
+malformed, unreadable, or insecure.
+
 Start the agent and backend in separate terminals:
 
 ```sh
@@ -142,9 +155,13 @@ Start the agent and backend in separate terminals:
 .venv/bin/localplane-backend
 ```
 
-The backend listens on `127.0.0.1:8080` by default. Interactive API documentation is at
-`http://127.0.0.1:8080/docs`; the generated contract is at
-`http://127.0.0.1:8080/openapi.json`.
+The backend listens on `127.0.0.1:8080` by default. API and automation callers send
+`Authorization: Bearer <master-secret>`. The Operator Console exchanges the master credential
+once for an `HttpOnly`, `SameSite=Strict` browser cookie. Sessions expire absolutely after 12
+hours, do not slide, and are invalidated by backend restart or logout.
+
+Interactive API documentation at `http://127.0.0.1:8080/docs` and the generated contract at
+`http://127.0.0.1:8080/openapi.json` are authenticated surfaces too.
 
 The privileged helper is not needed for observation or Docker/systemd lifecycle actions.
 It is needed for the MTU write and requires an explicit peer UID or GID allowlist. See

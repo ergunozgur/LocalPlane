@@ -12,12 +12,14 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from localplane import __version__
 from localplane.backend.agent_client import AgentError
-from localplane.backend.api.routes import router
+from localplane.backend.api.routes import router, session_router
+from localplane.backend.auth import Authentication, load_master_secret, require_authentication
 from localplane.backend.config import Settings
 from localplane.backend.context import AppContext
 from localplane.backend.db.database import Database, open_database
@@ -88,12 +90,23 @@ Eight things are worth knowing before reading a response:
 """
 
 
-def create_app(settings: Settings | None = None, database: Database | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    database: Database | None = None,
+    *,
+    authentication: Authentication | None = None,
+) -> FastAPI:
     settings = settings or Settings.from_env()
     owns_database = database is None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        active_authentication = authentication or Authentication(
+            load_master_secret(settings.auth_secret_path),
+            bind_host=settings.bind_host,
+            development_origin=settings.development_origin,
+        )
+        app.state.authentication = active_authentication
         db = database if database is not None else open_database(settings.database_path)
         context = AppContext.build(settings, db)
         app.state.context = context
@@ -119,8 +132,39 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
         version=__version__,
         description=DESCRIPTION,
         lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
+    app.include_router(session_router)
     app.include_router(router)
+
+    @app.get(
+        "/openapi.json",
+        dependencies=[Depends(require_authentication)],
+        include_in_schema=False,
+    )
+    def protected_openapi() -> JSONResponse:
+        return JSONResponse(app.openapi())
+
+    @app.get(
+        "/docs",
+        dependencies=[Depends(require_authentication)],
+        include_in_schema=False,
+        response_class=HTMLResponse,
+    )
+    def protected_docs() -> HTMLResponse:
+        return get_swagger_ui_html(openapi_url="/openapi.json", title="LocalPlane — Swagger UI")
+
+    @app.get(
+        "/redoc",
+        dependencies=[Depends(require_authentication)],
+        include_in_schema=False,
+        response_class=HTMLResponse,
+    )
+    def protected_redoc() -> HTMLResponse:
+        return get_redoc_html(openapi_url="/openapi.json", title="LocalPlane — ReDoc")
+
     app.add_exception_handler(HTTPException, _http_exception_handler)
     return app
 
@@ -260,4 +304,4 @@ async def _http_exception_handler(request: Request, exc: Exception) -> JSONRespo
         }
     else:
         body = {"code": f"http_{exc.status_code}", "message": str(detail), "detail": {}}
-    return JSONResponse(status_code=exc.status_code, content={"error": body})
+    return JSONResponse(status_code=exc.status_code, content={"error": body}, headers=exc.headers)

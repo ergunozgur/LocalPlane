@@ -29,9 +29,9 @@ and questions that remain unresolved.
 | OpenAPI integration | **CURRENT** | The committed snapshot and generated TypeScript types reflect this integrated backend tree |
 | Relationship model | **FOUNDATION** | Evidence-backed network, Docker, systemd, containment, and operational relationships; coverage follows implemented providers |
 | Host explorer breadth | **FOUNDATION** | Object workspaces and provider seams exist; files, storage, packages, users, processes, and general logs are not implemented |
-| Authentication and browser sessions | **ACCEPTED-NOT-IMPLEMENTED** | Master secret, derived expiring browser sessions, and router-level enforcement are designed but absent |
-| Cookie Origin/CSRF boundary | **ACCEPTED-NOT-IMPLEMENTED** | Fail-closed Origin checking for cookie-authenticated unsafe requests is designed but absent |
-| Frontend write workflow | **ACCEPTED-NOT-IMPLEMENTED** | No write control ships before authentication; no current console control calls write routes |
+| Authentication and browser sessions | **CURRENT** | One local master Bearer credential, derived 12-hour non-sliding in-memory browser sessions, logout, and router-level enforcement |
+| Cookie Origin/CSRF boundary | **CURRENT** | Cookie-authenticated unsafe requests require exact accepted Origin; Bearer requests are exempt |
+| Frontend write workflow | **ACCEPTED-NOT-IMPLEMENTED** | Authentication exists, but no current console control calls record-writing or host-writing routes |
 | Production console delivery and TLS | **UNRESOLVED** | No accepted asset-serving topology; non-loopback TLS is not configured |
 | Docker management-path protection | **UNRESOLVED** | Container lifecycle cannot prove whether a particular container carries the operator route |
 | Database request concurrency | **UNRESOLVED** | The shared SQLite connection needs a bounded concurrency proof; production readiness is not established |
@@ -47,8 +47,9 @@ surface will ship. Source and generated contract decide what is **CURRENT**.
 
 ## Current limitations that affect safe use
 
-- No authentication, login, session, role model, or TLS configuration is implemented.
-- The API must remain on a trusted local boundary; loopback is the default.
+- Authentication uses one local credential; there are no users, roles, RBAC, or named identity.
+- Browser sessions are process-local, expire absolutely after 12 hours, and disappear on restart.
+- Plain-HTTP browser use remains loopback-only; TLS and production remote exposure are not implemented.
 - Rootful Docker socket access is effectively root-equivalent.
 - The Operator Console is read-only and has no accepted production serving topology.
 - Container lifecycle lacks authoritative operator-route protection.

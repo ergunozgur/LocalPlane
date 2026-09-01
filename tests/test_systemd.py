@@ -27,7 +27,7 @@ from localplane.agent.providers.systemd import (
 from localplane.agent.capabilities import _probe_systemd
 from localplane.agent.server import AgentServer
 from localplane.agent.service import AgentService
-from localplane.backend.app import create_app
+from tests.conftest import AuthenticatedTestClient, create_authenticated_app
 from localplane.backend.config import Settings
 from localplane.backend.db.database import open_database
 from localplane.backend.domain.identity import (
@@ -942,7 +942,7 @@ def systemd_api(
         agent_timeout_s=20, freshness_ttl_s=60, log_level="WARNING", observe_on_startup=False,
     )
     database = open_database(settings.database_path)
-    with TestClient(create_app(settings, database)) as client:
+    with AuthenticatedTestClient(create_authenticated_app(settings, database)) as client:
         yield client, state
     database.close()
     server.shutdown()
@@ -1172,7 +1172,7 @@ def test_no_runtime_systemd_mirror_table_exists(database):
         for row in database.query("SELECT name FROM sqlite_master WHERE type='table'")
     }
     assert not {"systemd_units", "systemd_state", "systemd_relationships"} & tables
-    assert max(row["version"] for row in database.query("SELECT version FROM schema_migrations")) == 15
+    assert max(row["version"] for row in database.query("SELECT version FROM schema_migrations")) == 16
 
 
 def test_inventory_default_bound_is_not_accidentally_unbounded():

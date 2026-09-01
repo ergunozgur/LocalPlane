@@ -128,11 +128,10 @@ _ROUTE_FAILURE_REASONS: dict[str, ManagementPathReason] = {
 class TransportEvidence:
     """What the *server side of this connection* says about how the request arrived.
 
-    Deliberately not called an actor, a session or an identity. There is no authentication
-    in this product; nobody on the other end of this socket has been identified, and naming
-    the peer anything that implies otherwise would invite a later build to treat it as
-    though somebody had. It is a transport fact, and its whole value is that a caller
-    cannot choose it.
+    Deliberately not called an actor, a session or an identity. Authentication proves
+    credential possession but identifies nobody on the other end of this socket, and naming
+    the peer anything that implies otherwise would invite a later build to treat it as though
+    somebody had. It is a transport fact, and its whole value is that a caller cannot choose it.
     """
 
     peer_address: str | None

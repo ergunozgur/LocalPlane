@@ -76,12 +76,24 @@ export interface RequestOptions {
   signal?: AbortSignal | undefined;
   /** Milliseconds before the request is abandoned. Defaults to 15s. */
   timeoutMs?: number | undefined;
-  method?: 'GET' | 'POST' | undefined;
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | undefined;
+  /** A one-request credential exchange. Callers must not retain this value. */
+  bearer?: string | undefined;
   query?: Record<string, string | number | undefined> | undefined;
   body?: unknown;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+
+type AuthenticationFailureHandler = () => void;
+let authenticationFailureHandler: AuthenticationFailureHandler | null = null;
+
+/** Register the shell boundary that handles expired or revoked sessions. */
+export function setAuthenticationFailureHandler(
+  handler: AuthenticationFailureHandler | null,
+): void {
+  authenticationFailureHandler = handler;
+}
 
 function buildUrl(path: string, query: RequestOptions['query']): string {
   const url = `${API_BASE}${path}`;
@@ -104,7 +116,7 @@ function buildUrl(path: string, query: RequestOptions['query']): string {
  * silently empty object.
  */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { signal, timeoutMs = DEFAULT_TIMEOUT_MS, method = 'GET', query, body } = options;
+  const { signal, timeoutMs = DEFAULT_TIMEOUT_MS, method = 'GET', bearer, query, body } = options;
   const url = buildUrl(path, query);
 
   const timeout = AbortSignal.timeout(timeoutMs);
@@ -112,11 +124,14 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   let response: Response;
   try {
+    const headers: Record<string, string> = { accept: 'application/json' };
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    if (bearer !== undefined) headers.authorization = `Bearer ${bearer}`;
     response = await fetch(url, {
       method,
       signal: composed,
-      headers: body === undefined ? { accept: 'application/json' }
-        : { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      headers,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch (cause) {
@@ -150,6 +165,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   if (!response.ok) {
+    if (response.status === 401 && path !== '/session') authenticationFailureHandler?.();
     if (isErrorEnvelope(parsed)) {
       throw new ApiError({
         kind: 'backend',
@@ -168,6 +184,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       status: response.status,
     });
   }
+
+  if (response.status === 204) return undefined as T;
 
   if (parsed === undefined) {
     throw new ApiError({

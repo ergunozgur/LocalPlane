@@ -17,6 +17,7 @@ export type AgentIdentity = S['AgentIdentity'];
 export type Capabilities = S['Capabilities'];
 export type Capability = S['Capability'];
 export type ErrorBody = S['ErrorBody'];
+export type SessionStatus = S['SessionStatus'];
 
 /* -------------------------------------------------------------------------- observation */
 export type Sweep = S['Sweep'];
