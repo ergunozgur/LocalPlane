@@ -56,8 +56,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          : "${RUNNER_TEMP:?must be set to the runner temporary directory}"
+
           db_path="${RUNNER_TEMP}/localplane-contract.db"
           backend_log="${RUNNER_TEMP}/localplane-backend.log"
+          auth_dir="${RUNNER_TEMP}/localplane-auth"
+          auth_secret_path="${auth_dir}/localplane-master.secret"
           backend_pid=""
 
           stop_backend() {
@@ -73,6 +77,7 @@ jobs:
             fi
             wait "$backend_pid" 2>/dev/null || true
             rm -f "$db_path" "$db_path-wal" "$db_path-shm" "$backend_log"
+            rm -rf "$auth_dir"
           }
 
           on_exit() {
@@ -86,15 +91,33 @@ jobs:
           trap 'trap - EXIT; stop_backend; exit 130' INT
           trap 'trap - EXIT; stop_backend; exit 143' TERM
 
+          # The backend fails closed unless the configured master credential already exists,
+          # and var/ is not checked in, so the runner provisions one the way README.md and
+          # docs/development.md do: a 0700 parent owned by the invoking identity, then the
+          # one-shot initializer that writes the secret 0600 and prints it once. No credential
+          # is stored in the repository, and the generated value is masked out of the log.
+          install -d -m 700 "$auth_dir"
+          master_secret="$(
+            LOCALPLANE_AUTH_SECRET_PATH="$auth_secret_path" \
+              python -m localplane.backend.auth_cli init
+          )"
+          if [[ -z "$master_secret" ]]; then
+            echo "::error::the master-secret initializer produced no credential"
+            exit 1
+          fi
+          echo "::add-mask::$master_secret"
+
           LOCALPLANE_HOST=127.0.0.1 \
           LOCALPLANE_PORT=8080 \
           LOCALPLANE_OBSERVE_ON_STARTUP=0 \
           LOCALPLANE_DB_PATH="$db_path" \
+          LOCALPLANE_AUTH_SECRET_PATH="$auth_secret_path" \
             python -m localplane.backend >"$backend_log" 2>&1 &
           backend_pid=$!
 
           deadline=$((SECONDS + 30))
-          until curl -fsS http://127.0.0.1:8080/openapi.json -o /dev/null; do
+          until curl -fsS -H "Authorization: Bearer $master_secret" \
+            http://127.0.0.1:8080/openapi.json -o /dev/null; do
             if ! kill -0 "$backend_pid" 2>/dev/null; then
               echo "::error::LocalPlane backend exited before the OpenAPI endpoint became ready"
               cat "$backend_log"
@@ -116,7 +139,8 @@ jobs:
 
           (
             cd web
-            LOCALPLANE_API_ORIGIN=http://127.0.0.1:8080 npm run api:snapshot
+            LOCALPLANE_API_ORIGIN=http://127.0.0.1:8080 \
+              LOCALPLANE_API_BEARER="$master_secret" npm run api:snapshot
             npm run api:types
           )
 
