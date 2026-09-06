@@ -25,7 +25,7 @@ and questions that remain unresolved.
 | Docker | **CURRENT** | Container observation, bounded logs/current stats, and start/stop/restart through the Engine API |
 | systemd | **CURRENT** | Bounded loaded-unit observation and eligible service start/stop/restart through D-Bus |
 | Runs and Changes | **CURRENT** | Immutable previews, confirmation, typed apply, fresh verification, and durable recovery holds |
-| Operator Console | **CURRENT** | Substantial read-only interface; no record-writing or host-writing controls |
+| Operator Console | **CURRENT** | Substantial read-only interface, including cross-domain search over observed interfaces, systemd units and Docker containers; no record-writing or host-writing controls |
 | OpenAPI integration | **CURRENT** | The committed snapshot and generated TypeScript types reflect this integrated backend tree |
 | Relationship model | **FOUNDATION** | Evidence-backed network, Docker, systemd, containment, and operational relationships; coverage follows implemented providers |
 | Host explorer breadth | **FOUNDATION** | Object workspaces and provider seams exist; files, storage, packages, users, processes, and general logs are not implemented |
@@ -38,6 +38,14 @@ and questions that remain unresolved.
 | Broader infrastructure control plane | **FUTURE** | More systems, networks, workloads, applications, and providers are direction, not current capability |
 | Unified metrics, logs, and historical replay | **FUTURE** | Bounded container samples and operational records exist; general series, log aggregation, and replay do not |
 | Fleet and automation | **FUTURE** | Not implemented and not a near-term commitment stated by this document |
+
+## Object search
+
+The authenticated shell includes a read-only Search objects palette. It reads the existing typed
+list endpoints for network interfaces, loaded systemd units and Docker containers only when
+opened, filters the returned observations by name or stable object ID, and links to the existing
+object detail routes. It does not create Applications or issue operations. The typed Run/composer
+workflow remains deferred and is not represented by this search control.
 
 ## What the screenshot means
 

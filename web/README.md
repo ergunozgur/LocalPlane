@@ -51,6 +51,10 @@ not make a console control exist.
 - **Operations** — Runs, Changes, and findings with detail views and backend-backed filters.
 - **Topology** — evidence-backed network and container relationships inside the overview.
 - **Settings** — appearance preferences, authenticated-session truth, and no invented user identity.
+- **Search objects** — a read-only palette available from every authenticated route with the
+  app-bar button or Ctrl/Cmd+K. Filters observed interfaces, systemd units, and containers by
+  name or stable object ID; selection opens the existing detail. Lists are fetched on open,
+  not while typing. Partial read failures remain visible and do not hide successful domains.
 
 Some frames intentionally state that data is unavailable: host resource charts have no
 metrics contract, network traffic has no time series, and Docker runtime information does
@@ -64,7 +68,7 @@ not include a system-info contract. These are not zero values or simulated data.
 - Polling or a claim that a one-time read is live
 - Historical replay controls
 - General host metrics, unified logs, storage, packages, users, or processes
-- Search, dashboard editing, terminal access, fleet operation, or automation
+- Typed Run/action search, dashboard editing, terminal access, fleet operation, or automation
 
 The V4.2 image in the repository overview is product/interface direction, not a capture of
 this application and not a current feature matrix.

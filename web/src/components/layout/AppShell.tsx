@@ -3,14 +3,13 @@
  *
  * Proportions and composition: a 54 px bar carrying the wordmark, the host it is
  * looking at, the navigation, a freshness stamp and the account menu — with the app bar's
- * single `backdrop-filter`, which is the only glass effect in the product.
+ * existing glass treatment. The search palette uses the accepted full-viewport scrim.
  *
- * The bar is the only navigation layer. The design direction also carries a search palette,
- * a "Run" control and a live-observation toggle; none is present here. Search over objects
- * has no backing endpoint, "Run" opens a composer for guarded operations this read-only
- * console does not expose pending authentication, and a "live" indicator would claim a
- * polling behaviour this build does not perform. Each is omitted rather than drawn as an
- * inert affordance.
+ * The bar is the only navigation layer. Search is a read-only index over the three typed
+ * object-list endpoints this build actually exposes. "Run" opens a composer for guarded
+ * operations this read-only console does not expose, and a "live" indicator would claim a
+ * polling behaviour this build does not perform. Those controls remain omitted rather than
+ * drawn as inert affordances.
  *
  * The layout uses the full viewport width. LocalPlane is a dense infrastructure interface and
  * a wide display should carry more rows and more columns, not the same narrow column with
@@ -22,6 +21,7 @@ import { useEstateCounts } from '@/hooks/useEstateCounts';
 import { AppearanceSelect } from './AppearanceSelect';
 import { HostScope } from './HostScope';
 import { ReadStamp } from './ReadStamp';
+import { GlobalSearch } from './GlobalSearch';
 import styles from './AppShell.module.css';
 
 /**
@@ -164,6 +164,7 @@ export function AppShell(): JSX.Element {
         <DomainNav domains={DOMAINS(counts)} />
 
         <div className={styles.barRight}>
+          <GlobalSearch />
           <ReadStamp />
           <AppearanceSelect />
         </div>
