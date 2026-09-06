@@ -25,9 +25,9 @@ and questions that remain unresolved.
 | Docker | **CURRENT** | Container observation, bounded logs/current stats, and start/stop/restart through the Engine API |
 | systemd | **CURRENT** | Bounded loaded-unit observation and eligible service start/stop/restart through D-Bus |
 | Runs and Changes | **CURRENT** | Immutable previews, confirmation, typed apply, fresh verification, and durable recovery holds |
-| Operator Console | **CURRENT** | Substantial read-only interface, including cross-domain search over observed interfaces, systemd units and Docker containers; no record-writing or host-writing controls |
+| Operator Console | **CURRENT** | Substantial read-only interface, including cross-domain search and evidence-backed Relationships tabs for observed interfaces and Docker containers; no record-writing or host-writing controls |
 | OpenAPI integration | **CURRENT** | The committed snapshot and generated TypeScript types reflect this integrated backend tree |
-| Relationship model | **FOUNDATION** | Evidence-backed network, Docker, systemd, containment, and operational relationships; coverage follows implemented providers |
+| Relationship model | **CURRENT** | Object-scoped Relationships tabs on network interfaces and Docker containers show only identifier-backed Docker network, container, master-interface and guarded management-path joins; unread streams and unresolved targets stay explicit |
 | Host explorer breadth | **FOUNDATION** | Object workspaces and provider seams exist; files, storage, packages, users, processes, and general logs are not implemented |
 | Authentication and browser sessions | **CURRENT** | One local master Bearer credential, derived 12-hour non-sliding in-memory browser sessions, logout, and router-level enforcement |
 | Cookie Origin/CSRF boundary | **CURRENT** | Cookie-authenticated unsafe requests require exact accepted Origin; Bearer requests are exempt |

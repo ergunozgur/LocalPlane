@@ -29,6 +29,7 @@ import { Value } from '@/components/semantic/UnknownValue';
 import { NotAssessed, Empty } from '@/components/states/SurfaceState';
 import { ResourceView } from '@/components/states/ResourceView';
 import { ObjectWorkspace, ObjectColumns, type ObjectTab } from '@/components/object/ObjectWorkspace';
+import { ObjectRelationships } from '@/components/object/ObjectRelationships';
 import { ScopeBar } from '@/components/layout/ScopeBar';
 import { ResourceUsage } from '@/components/semantic/ResourceUsage';
 import { ContainerLogPanel } from '@/components/semantic/ContainerLogPanel';
@@ -58,6 +59,18 @@ export function WorkloadDetail(): JSX.Element {
   const { resource } = useResource(
     `container:${objectId}`,
     useCallback((signal) => endpoints.container(objectId, { signal }), [objectId]),
+  );
+  const { resource: interfaces } = useResource(
+    'interfaces',
+    useCallback((signal) => endpoints.interfaces({ signal }), []),
+  );
+  const { resource: containers } = useResource(
+    'containers',
+    useCallback((signal) => endpoints.containers({ signal }), []),
+  );
+  const { resource: managementPath } = useResource(
+    'management-path',
+    useCallback((signal) => endpoints.managementPath({ signal }), []),
   );
 
   return (
@@ -339,6 +352,22 @@ export function WorkloadDetail(): JSX.Element {
                       <ResourceUsagePanel objectId={data.object_id} />
                     </PlateBody>
                   </Plate>
+                }
+              />
+            ),
+          },
+          {
+            id: 'relationships',
+            label: 'Relationships',
+            render: () => (
+              <ObjectColumns
+                main={
+                  <ObjectRelationships
+                    subject={data}
+                    interfaces={interfaces}
+                    containers={containers}
+                    managementPath={managementPath}
+                  />
                 }
               />
             ),

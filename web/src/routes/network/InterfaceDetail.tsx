@@ -27,6 +27,7 @@ import { Conclusion, Disclosure, Gaps, RawEvidence } from '@/components/semantic
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty } from '@/components/states/SurfaceState';
 import { ObjectWorkspace, ObjectColumns, type ObjectTab } from '@/components/object/ObjectWorkspace';
+import { ObjectRelationships } from '@/components/object/ObjectRelationships';
 import { ProtectionPanel } from '@/components/semantic/ProtectionPanel';
 import { IntentPanel } from '@/components/semantic/IntentPanel';
 import { ScopeBar } from '@/components/layout/ScopeBar';
@@ -73,6 +74,18 @@ export function InterfaceDetail(): JSX.Element {
   const { resource: intentHistory } = useResource(
     `interface-intent-history:${objectId}`,
     useCallback((signal) => endpoints.interfaceIntentHistory(objectId, { signal }), [objectId]),
+  );
+  const { resource: interfaces } = useResource(
+    'interfaces',
+    useCallback((signal) => endpoints.interfaces({ signal }), []),
+  );
+  const { resource: containers } = useResource(
+    'containers',
+    useCallback((signal) => endpoints.containers({ signal }), []),
+  );
+  const { resource: managementPath } = useResource(
+    'management-path',
+    useCallback((signal) => endpoints.managementPath({ signal }), []),
   );
 
   return (
@@ -348,6 +361,22 @@ export function InterfaceDetail(): JSX.Element {
                       </p>
                     </PlateBody>
                   </Plate>
+                }
+              />
+            ),
+          },
+          {
+            id: 'relationships',
+            label: 'Relationships',
+            render: () => (
+              <ObjectColumns
+                main={
+                  <ObjectRelationships
+                    subject={data}
+                    interfaces={interfaces}
+                    containers={containers}
+                    managementPath={managementPath}
+                  />
                 }
               />
             ),

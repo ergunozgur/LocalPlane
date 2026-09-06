@@ -1,0 +1,57 @@
+.notices {
+  padding: 9px 11px 3px;
+  border-bottom: 1px solid var(--rule3);
+}
+
+.type,
+.evidence,
+.noOpen {
+  color: var(--faint);
+}
+
+.evidence {
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.target {
+  color: var(--ink);
+}
+
+.target:hover,
+.open:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.unresolved {
+  color: var(--amber);
+  font-style: italic;
+}
+
+.guarded {
+  margin-left: 7px;
+}
+
+.open,
+.noOpen {
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+
+.footerNote {
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+@media (max-width: 700px) {
+  /* `min-width` does nothing on a non-replaced inline element, so the span has to become an
+     inline-block for the floor to apply. Without it the mono evidence breaks mid-token into a
+     ten-character ribbon; with it the cell keeps a readable width and DataTable's own
+     `overflow-x: auto` wrapper scrolls the table, which is the accepted narrow behaviour. */
+  .evidence {
+    display: inline-block;
+    min-width: 280px;
+  }
+}

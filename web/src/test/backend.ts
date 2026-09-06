@@ -53,6 +53,44 @@ const INTERFACE = {
   first_seen_at: '2026-08-27T21:46:55Z', last_seen_at: '2026-08-27T21:47:11Z',
 };
 
+/** A Docker-attributed bridge used by relationship-surface tests. */
+export const RELATIONSHIP_BRIDGE = {
+  ...INTERFACE,
+  object_id: 'if-bridge',
+  name: 'br-app',
+  interface_kind: 'bridge',
+  ownership: {
+    ...INTERFACE.ownership,
+    // `externally_configured`: provenance._docker_claims emits a created_by AND a configured_by
+    // claim from one evidence record, and _assemble returns `externally_configured` whenever any
+    // configured_by owner is external. `externally_created` is the created-by-external-only
+    // branch, which _assemble reaches only when no external configured_by claim exists; none of
+    // today's derivations gets there, since Docker and Tailscale both emit configured_by too.
+    reason: 'externally_configured',
+    // Both relations carry the SAME docker claim, because one evidence record produces both.
+    // Keeping the base interface's NetworkManager configured_by beside a docker created_by
+    // would model two providers configuring one link, which provenance reports as
+    // `conflicting_claims` rather than publishing.
+    created_by: {
+      ...INTERFACE.ownership.created_by,
+      owner: { provider: 'docker', instance: 'net1', label: 'app_default', version: null },
+      // provenance.py publishes CORROBORATED for this evidence code: a provider declaration
+      // matched against a kernel fact, not the provider naming the object itself.
+      confidence: 'corroborated',
+      reason: 'docker_ipam_gateway_on_link',
+      evidence_sources: ['docker.networks'],
+    },
+    configured_by: {
+      ...INTERFACE.ownership.configured_by,
+      relation: 'configured_by',
+      owner: { provider: 'docker', instance: 'net1', label: 'app_default', version: null },
+      confidence: 'corroborated',
+      reason: 'docker_ipam_gateway_on_link',
+      evidence_sources: ['docker.networks'],
+    },
+  },
+};
+
 const CONTAINER = {
   object_id: 'obj_ct', kind: 'docker.container', name: 'grafana',
   container_id: 'abc123def4567890', short_id: 'abc123def456',
@@ -209,6 +247,7 @@ export const BACKEND: Record<string, unknown> = {
   '/api/v1/observations/sweeps': { host_id: 'host_1', count: 1, sweeps: [SWEEP] },
   '/api/v1/network/interfaces': { host_id: 'host_1', last_sweep: SWEEP, count: 1, interfaces: [INTERFACE] },
   '/api/v1/network/interfaces/obj_if': INTERFACE,
+  '/api/v1/network/interfaces/if-bridge': RELATIONSHIP_BRIDGE,
   '/api/v1/network/interfaces/obj_if/protection': {
     object_id: 'obj_if', object_name: 'enx020000000012', status: 'unknown', reasons: [],
     unresolved: ['management_path'], management_path: 'unknown', reason: 'transport_peer_local',
