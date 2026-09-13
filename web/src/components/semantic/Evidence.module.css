@@ -44,12 +44,23 @@
 .gapsLabel { margin-bottom: 0; flex: none; }
 
 .gapList {
+  min-width: 0;
+  max-width: 100%;
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* Evidence codes remain readable on narrow operation previews. */
+.gapList li { min-width: 0; max-width: 100%; }
+.gapList li > span {
+  height: auto;
+  min-height: 17px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .remainder {

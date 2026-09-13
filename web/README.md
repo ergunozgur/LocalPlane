@@ -2,7 +2,7 @@
 
 [Back to the repository overview](../README.md)
 
-The read-only browser interface for LocalPlane, a local-first operations control plane for
+The authenticated browser interface for LocalPlane, a local-first operations control plane for
 understanding Linux systems and making guarded, evidence-backed changes.
 
 **Observe everything. Manage what you choose.**
@@ -22,17 +22,16 @@ The console presents stored and explicitly sampled backend data for host overvie
 networking, workloads, systemd, topology, Runs, Changes, and findings. It preserves evidence,
 freshness, and `unknown` values instead of filling gaps with fallback data.
 
-It is deliberately **read-only**:
+The first management flow is limited to loaded systemd services:
 
-- the API adapter binds no record-writing or host-writing endpoint;
-- it renders no Start, Stop, Restart, Apply, Confirm, Adopt, Release, or intent-revision
-  control;
-- `OPERATIONS_WITH_UI_CONTROLS` is empty;
-- recovery actions are displayed as records, never as controls.
+- Open a service's Lifecycle tab and plan start, stop or restart.
+- Open its Change Composer, inspect the published preview and required confirmation, then apply the approved preview only when the backend gate permits it.
+- Reopen the same durable Run from Operations, refresh its state and inspect its Change for mutation and verification outcomes.
+- Cancel only before the write boundary. Closing Composer does not cancel execution or imply rollback.
 
-The backend implements seven typed host-mutation operations. Authentication is now enforced,
-but the console still does not expose those operations: authentication does not grant frontend
-write authority or bypass the Change Engine.
+A lost response is an unknown outcome. Composer never automatically retries a request and does not repeat an apply attempted from this browser tab, including after reload. Inspect the Run and Change before considering another plan. The tab must allow session storage to retain the apply-attempt marker before dispatch.
+
+Docker, MTU, self-impact overrides, generic commands, adoption, intent revision and recovery controls remain absent. Authentication does not bypass the Change Engine. Docker operator-route protection, production TLS/asset serving and deployment authority remain unresolved.
 
 The committed OpenAPI snapshot and generated types are integrated with the backend in this
 tree, including systemd lifecycle planning and execution records. Contract availability does

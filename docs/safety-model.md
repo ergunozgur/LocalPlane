@@ -117,7 +117,10 @@ Authentication is implemented and deliberately separated from operation safety:
 There is one credential and no user, role, RBAC, named identity, password database, or persistent
 session store. New confirmation records say `authenticated_request`; that states only that the
 request crossed this boundary. Historical `unauthenticated_request` evidence is retained unchanged.
-The Operator Console remains read-only. Authentication cannot waive planning, preview binding,
+The Operator Console offers start/stop/restart Composer controls for loaded systemd services, using
+the existing Run API. Docker, MTU and self-impact override controls remain absent. Closing the
+Composer detaches its view; uncertain apply responses require inspection of the same Run and Change,
+not automatic redispatch. Authentication cannot waive planning, preview binding,
 confirmation, protection, provider authority, helper/systemd authorization, verification, recovery,
 or write locks.
 

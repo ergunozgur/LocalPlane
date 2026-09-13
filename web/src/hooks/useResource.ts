@@ -58,6 +58,11 @@ function subscribeToGlobalRefresh(listener: () => void): () => void {
 
 const readGlobalRefresh = (): number => globalRefreshCount;
 
+/** Share the shell's refresh signal with durable operation views as well as resources. */
+export function useRefreshVersion(): number {
+  return useSyncExternalStore(subscribeToGlobalRefresh, readGlobalRefresh, readGlobalRefresh);
+}
+
 /**
  * In-flight request sharing.
  *
@@ -142,11 +147,7 @@ export function useResource<T>(
   // Held so a refresh can keep the previous body on screen rather than dropping to loading.
   const dataRef = useRef<{ key: string; data: T; fetchedAt: Date } | null>(null);
   const [nonce, setNonce] = useState(0);
-  const globalNonce = useSyncExternalStore(
-    subscribeToGlobalRefresh,
-    readGlobalRefresh,
-    readGlobalRefresh,
-  );
+  const globalNonce = useRefreshVersion();
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 

@@ -1,0 +1,11 @@
+.composer { margin-bottom: 14px; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 12px; }
+.button { border: 1px solid var(--rule); border-radius: 5px; padding: 7px 12px; background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; font-size: 12px; }
+.primary { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.button:disabled { opacity: .5; cursor: not-allowed; }
+.note { font-size: 12px; line-height: 1.5; color: var(--dim); overflow-wrap: anywhere; }
+.identity { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; font-size: 12px; }
+.input { max-width: 100%; min-width: 0; padding: 7px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+.error { border-left: 2px solid var(--amber); padding-left: 10px; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .actions { align-items: stretch; } .button { min-height: 40px; } }

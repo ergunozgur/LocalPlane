@@ -181,10 +181,8 @@ describe('authenticated boot boundary', () => {
     expect(screen.queryByText(/^shell:/)).not.toBeInTheDocument();
   });
 
-  it('does not introduce frontend Change Engine write controls', () => {
+  it('does not bind general-purpose planning or recovery controls', () => {
     expect('createRun' in endpoints).toBe(false);
-    expect('confirmRun' in endpoints).toBe(false);
-    expect('applyRun' in endpoints).toBe(false);
     expect('retryRecovery' in endpoints).toBe(false);
   });
 });

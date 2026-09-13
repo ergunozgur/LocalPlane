@@ -17,8 +17,7 @@
  * does not. A UI that gated a Start button on the capability list would render an enabled
  * control for whatever the plan does not allow. So the gate reads `PlanExecution`, which
  * only a published plan carries, and the absence of a plan is reported as what it is: not
- * assessed. This console exposes no lifecycle write controls at all, authenticated or not;
- * authentication does not exist yet.
+ * assessed. Authenticated systemd controls use this gate and the published confirmation.
  *
  * Nothing here decides whether an operation is *safe*. That judgement is the backend's and
  * arrives already made, in `availability`, `eligibility` and `blockers`. This file only
@@ -103,15 +102,13 @@ export function executionGate(
   }
 }
 
-/**
- * Whether this build offers *any* control for an operation type.
- *
- * This foundation is read-only: it renders the write boundary in full and produces nothing
- * across it. The list is empty rather than absent so that the seam is visible — later
- * work adds a member here and a control, and the gate above still has the final word.
- */
-export const OPERATIONS_WITH_UI_CONTROLS: readonly string[] = Object.freeze([]);
+/** The only operation family with frontend management controls. */
+export const OPERATIONS_WITH_UI_CONTROLS = Object.freeze([
+  'systemd.service.start',
+  'systemd.service.stop',
+  'systemd.service.restart',
+] as const);
 
 export function buildOffersControl(operationType: string): boolean {
-  return OPERATIONS_WITH_UI_CONTROLS.includes(operationType);
+  return OPERATIONS_WITH_UI_CONTROLS.some((operation) => operation === operationType);
 }

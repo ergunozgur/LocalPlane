@@ -74,6 +74,8 @@ export type ContainerLogLine = S['ContainerLogLine'];
 
 /* --------------------------------------------------------------------- runs and changes */
 export type Run = S['Run'];
+export type SystemdServiceOperation = S['SystemdServiceLifecycleOperation'];
+export type ConfirmRunRequest = S['ConfirmRunRequest'];
 export type RunList = S['RunList'];
 export type RunSummary = S['RunSummary'];
 export type RunPreview = S['RunPreview'];
