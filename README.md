@@ -65,8 +65,10 @@ There is no generic command, shell, arbitrary Docker request, general D-Bus exec
 terminal, or provider passthrough surface.
 
 The React/Vite Operator Console shows host overview, networking, workloads, systemd,
-topology, Runs, Changes, and findings. It sends no record-writing or host-writing requests
-and renders no Start, Stop, Restart, Apply, Adopt, or intent-revision controls.
+topology, Runs, Changes, and findings. Its read-only global palette searches observed objects
+and bounded recent operational records, then opens their detail views. Authenticated systemd
+service start/stop/restart uses the guarded Composer; Docker, MTU, Adopt and intent-revision
+controls remain absent. See [project status](docs/project-status.md) for scope and limits.
 
 ## How a change works
 
