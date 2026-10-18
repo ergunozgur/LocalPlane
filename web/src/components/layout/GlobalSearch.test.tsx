@@ -3,6 +3,43 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { GlobalSearch } from './GlobalSearch';
+import { BACKEND } from '@/test/backend';
+import type { NetworkInterfaceList, SystemdUnitList, DockerContainerList } from '@/api/types';
+
+const networkTemplate = BACKEND['/api/v1/network/interfaces'] as NetworkInterfaceList;
+const unitTemplate = BACKEND['/api/v1/systemd/units'] as SystemdUnitList;
+const emptyContainers: DockerContainerList = {
+  ...(BACKEND['/api/v1/docker/containers'] as DockerContainerList), count: 0, containers: [],
+};
+
+function networkList(count = 1): NetworkInterfaceList {
+  return {
+    ...networkTemplate, count,
+    interfaces: Array.from({ length: count }, (_, index) => ({
+      ...networkTemplate.interfaces[0]!, object_id: index === 0 ? 'shared/id?#' : `network/${index}`,
+      name: `network-${index}`,
+    })),
+  };
+}
+
+function systemList(): SystemdUnitList {
+  return {
+    ...unitTemplate, count: 2,
+    units: ['system/a', 'shared/id?#'].map((id, index) => ({
+      ...unitTemplate.units[0]!, object_id: id, canonical_id: `system-${index}.service`,
+    })),
+  };
+}
+
+function expectSelection(name: string): HTMLElement {
+  const option = screen.getByRole('option', { name });
+  expect(screen.getAllByRole('option', { selected: true })).toEqual([option]);
+  expect(screen.getByRole('combobox')).toHaveAttribute('aria-activedescendant', option.id);
+  expect(document.getElementById(option.id)).toBe(option);
+  return option;
+}
+
+const systemB = 'Open System systemd unit system-1.service, shared/id?#';
 
 const mocks = vi.hoisted(() => ({
   interfaces: vi.fn(),
@@ -60,6 +97,123 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('global object search', () => {
+  it.each([false, true])('retains explicit System identity after Network prepends (continued arrows: %s)', async (continuedArrows) => {
+    const pending = deferred<NetworkInterfaceList>();
+    mocks.interfaces.mockReturnValue(pending.promise);
+    mocks.systemdUnits.mockResolvedValue(systemList());
+    mocks.containers.mockResolvedValue(emptyContainers);
+    const user = userEvent.setup();
+    renderSearch();
+    await user.click(screen.getByRole('button', { name: /search objects/i }));
+    await screen.findByText('system-1.service');
+    await user.keyboard('{ArrowDown}');
+    const chosen = expectSelection(systemB);
+    const scroll = vi.fn();
+    chosen.scrollIntoView = scroll;
+
+    pending.resolve(networkList());
+    await screen.findByText('network-0');
+    expect.soft(screen.getByRole('option', { selected: true })).toBe(chosen);
+    expect.soft(document.getElementById(screen.getByRole('combobox').getAttribute('aria-activedescendant')!)).toBe(chosen);
+    expect(chosen.className).toMatch(/active/);
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+    if (continuedArrows) {
+      await user.keyboard('{ArrowUp}');
+      expectSelection('Open System systemd unit system-0.service, system/a');
+      await user.keyboard('{ArrowDown}');
+      expectSelection(systemB);
+    }
+    await user.keyboard('{Enter}');
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/system\/shared%2Fid%3F%23$/);
+  });
+
+  it.each(['ArrowDown', 'ArrowUp'])('clears a cap-displaced choice and reselects with %s', async (arrow) => {
+    const pending = deferred<NetworkInterfaceList>();
+    mocks.interfaces.mockReturnValue(pending.promise);
+    mocks.systemdUnits.mockResolvedValue(systemList());
+    mocks.containers.mockResolvedValue(emptyContainers);
+    const user = userEvent.setup();
+    renderSearch();
+    await user.click(screen.getByRole('button', { name: /search objects/i }));
+    await screen.findByText('system-1.service');
+    await user.keyboard('{ArrowDown}');
+    expectSelection(systemB);
+    pending.resolve(networkList(40));
+    await screen.findByText('network-39');
+    expect(screen.getAllByRole('option')).toHaveLength(40);
+    expect(screen.queryByText('system-1.service')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('option', { selected: true })).toHaveLength(0);
+    expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-activedescendant');
+    await user.keyboard('{Enter}');
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await user.keyboard(`{${arrow}}`);
+    const index = arrow === 'ArrowDown' ? 0 : 39;
+    const id = index === 0 ? 'shared/id?#' : 'network/39';
+    expectSelection(`Open Network interface network-${index}, ${id}`);
+    // Ordinary wrapping continues from the newly chosen visible identity.
+    await user.keyboard(arrow === 'ArrowDown' ? '{ArrowUp}{ArrowDown}' : '{ArrowDown}{ArrowUp}');
+    expectSelection(`Open Network interface network-${index}, ${id}`);
+    await user.keyboard('{Enter}');
+    expect(screen.getByTestId('location').textContent).toBe(`/network/${encodeURIComponent(id)}`);
+  });
+
+  it('follows default-first arrivals and resets explicit selection on query changes and reopen', async () => {
+    const pending = deferred<NetworkInterfaceList>();
+    mocks.interfaces.mockReturnValueOnce(pending.promise).mockResolvedValue(networkList());
+    mocks.systemdUnits.mockResolvedValue(systemList());
+    mocks.containers.mockResolvedValue(emptyContainers);
+    const user = userEvent.setup();
+    renderSearch();
+    const trigger = screen.getByRole('button', { name: /search objects/i });
+    await user.click(trigger);
+    await screen.findByText('system-1.service');
+    expectSelection('Open System systemd unit system-0.service, system/a');
+    pending.resolve(networkList());
+    await screen.findByText('network-0');
+    const first = 'Open Network interface network-0, shared/id?#';
+    expectSelection(first);
+    await user.keyboard('{ArrowUp}');
+    expectSelection(systemB);
+    const input = screen.getByRole('combobox');
+    await user.type(input, 'system');
+    expectSelection('Open System systemd unit system-0.service, system/a');
+    await user.type(input, '-missing');
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+    await user.keyboard('{ArrowDown}{ArrowUp}{Enter}');
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
+    await user.clear(input);
+    expectSelection(first);
+    expect(mocks.interfaces).toHaveBeenCalledTimes(1);
+    await user.keyboard('{ArrowUp}{Escape}');
+    await user.click(trigger);
+    await screen.findByText('network-0');
+    expectSelection(first);
+    expect(screen.getByRole('combobox')).toHaveValue('');
+    expect(mocks.interfaces).toHaveBeenCalledTimes(2);
+    await user.keyboard('{Enter}');
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/network\/shared%2Fid%3F%23$/);
+  });
+
+  it('retains an explicit choice when a pending earlier domain fails', async () => {
+    const pending = deferred<NetworkInterfaceList>();
+    mocks.interfaces.mockReturnValue(pending.promise);
+    mocks.systemdUnits.mockResolvedValue(systemList());
+    mocks.containers.mockResolvedValue(emptyContainers);
+    const user = userEvent.setup();
+    renderSearch();
+    await user.click(screen.getByRole('button', { name: /search objects/i }));
+    await screen.findByText('system-1.service');
+    await user.keyboard('{ArrowDown}');
+    expectSelection(systemB);
+    pending.reject(new Error('unavailable'));
+    expect(await screen.findByRole('status')).toHaveTextContent('Network');
+    expectSelection(systemB);
+    await user.keyboard('{Enter}');
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/system\/shared%2Fid%3F%23$/);
+  });
+
   it('fetches once on open, searches across domains, and navigates with an encoded ID', async () => {
     const user = userEvent.setup();
     renderSearch();

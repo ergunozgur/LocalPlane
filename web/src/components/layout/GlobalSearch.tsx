@@ -38,7 +38,7 @@ export function GlobalSearch(): JSX.Element {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [sources, setSources] = useState<Source[]>(loadingSources);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIdentity, setActiveIdentity] = useState<Pick<SearchItem, 'domain' | 'id'> | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -50,7 +50,7 @@ export function GlobalSearch(): JSX.Element {
     const active = document.activeElement;
     previousFocusRef.current = active instanceof HTMLElement ? active : triggerRef.current;
     setQuery('');
-    setActiveIndex(0);
+    setActiveIdentity(null);
     setOpen(true);
   }, [open]);
 
@@ -151,11 +151,11 @@ export function GlobalSearch(): JSX.Element {
   const failed = sources.filter((source) => source.status === 'failed');
   const successful = sources.filter((source) => source.status === 'success');
   const fullFailure = !loading && successful.length === 0;
-  const selectedIndex = Math.min(activeIndex, Math.max(0, visibleMatches.length - 1));
-
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [query]);
+  // Until explicit keyboard intent, follow the first result. A displaced explicit
+  // identity selects nothing rather than silently opening a replacement or hidden item.
+  const selectedIndex = activeIdentity
+    ? visibleMatches.findIndex((item) => item.domain === activeIdentity.domain && item.id === activeIdentity.id)
+    : visibleMatches.length > 0 ? 0 : -1;
 
   useEffect(() => {
     if (open) document.getElementById(resultId(selectedIndex))?.scrollIntoView?.({ block: 'nearest' });
@@ -178,11 +178,11 @@ export function GlobalSearch(): JSX.Element {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       if (visibleMatches.length === 0) return;
       event.preventDefault();
-      setActiveIndex((index) =>
-        event.key === 'ArrowDown'
-          ? (index + 1) % visibleMatches.length
-          : (index - 1 + visibleMatches.length) % visibleMatches.length,
-      );
+      const nextIndex = event.key === 'ArrowDown'
+        ? (selectedIndex + 1) % visibleMatches.length
+        : (selectedIndex < 0 ? visibleMatches.length - 1 : (selectedIndex - 1 + visibleMatches.length) % visibleMatches.length);
+      const next = visibleMatches[nextIndex]!;
+      setActiveIdentity({ domain: next.domain, id: next.id });
       inputRef.current?.focus();
       return;
     }
@@ -261,7 +261,10 @@ export function GlobalSearch(): JSX.Element {
                 aria-expanded="true"
                 aria-controls={`${instanceId}-results`}
                 aria-activedescendant={visibleMatches[selectedIndex] ? resultId(selectedIndex) : undefined}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setActiveIdentity(null);
+                }}
               />
               <button
                 type="button"
