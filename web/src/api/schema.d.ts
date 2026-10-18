@@ -4995,6 +4995,18 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** SystemdIncomingReference */
+        SystemdIncomingReference: {
+            /** Source Object Id */
+            source_object_id: string;
+            /** Source Canonical Id */
+            source_canonical_id: string;
+            source_observation: components["schemas"]["Observation"] | null;
+            /** Source Observed In Latest Sweep */
+            source_observed_in_latest_sweep: boolean | null;
+            /** @description Original source-to-target relation, not an invented inverse kind. */
+            relationship: components["schemas"]["SystemdRelationship"];
+        };
         /** SystemdJob */
         SystemdJob: {
             /** Id */
@@ -5068,6 +5080,30 @@ export interface components {
             directory_mode: string | null;
             /** Result */
             result: string | null;
+        };
+        /**
+         * SystemdReferenceContext
+         * @description Stored evidence only; neither a complete live graph nor an action effect graph.
+         */
+        SystemdReferenceContext: {
+            /** Host Id */
+            host_id: string;
+            last_inventory_sweep: components["schemas"]["Sweep"] | null;
+            /**
+             * Inventory Freshness
+             * @description current | stale | unknown
+             */
+            inventory_freshness: string;
+            /**
+             * Excluded Ambiguous Count
+             * @description Candidate edges excluded because the snapshot proves conflicting alias ownership.
+             */
+            excluded_ambiguous_count: number;
+            /**
+             * References
+             * @description Resolved/current edges from the latest inventory snapshot, joined by exact host and target object identity. Includes stale/partial source evidence; empty does not prove no dependents. Only loaded units are inventoried; unresolved targets are not joined.
+             */
+            references: components["schemas"]["SystemdIncomingReference"][];
         };
         /** SystemdRelationship */
         SystemdRelationship: {
@@ -5278,6 +5314,8 @@ export interface components {
             };
             /** Relationships */
             relationships: components["schemas"]["SystemdRelationship"][];
+            /** @description Detail-only investigation context; null means not projected. */
+            incoming_references?: components["schemas"]["SystemdReferenceContext"] | null;
             service?: components["schemas"]["SystemdServiceFacts"] | null;
             socket?: components["schemas"]["SystemdSocketFacts"] | null;
             timer?: components["schemas"]["SystemdTimerFacts"] | null;

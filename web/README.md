@@ -146,6 +146,22 @@ served it.
 | `npm run api:snapshot` | Replace the committed OpenAPI snapshot from a running backend |
 | `npm run api:types` | Regenerate TypeScript declarations from the snapshot |
 
+## System unit relationship investigation
+
+System unit Relationships includes **References from this unit** (the latest stored unit
+observation) and **Referenced by** (source observations from the latest loaded-unit inventory
+snapshot). The shared filter matches kind, group or unit. Incoming links open the source unit's
+Relationships tab and preserve the original source-to-target relation kind; they do not invent
+inverse relations or predict action effects.
+
+Incoming references require an exact same-host resolved/current target object ID. Historical
+unresolved IDs are excluded, as are candidate edges with demonstrably conflicting alias ownership
+in the snapshot. Inventory status/time/freshness, issues and source observation fidelity/gaps
+remain visible. A newer targeted read does not replace the incoming inventory snapshot, and a
+failed latest inventory never falls back to a previous successful one. Missing/unloaded units,
+unresolved targets and unreported relationship properties remain outside coverage—even an `ok`
+inventory or an empty result cannot prove that a unit has no dependents or that an action is safe.
+
 ## OpenAPI and generated types
 
 `openapi.json` is the committed backend contract snapshot. `src/api/schema.d.ts` is generated

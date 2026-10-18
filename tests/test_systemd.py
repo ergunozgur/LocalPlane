@@ -1003,6 +1003,77 @@ def test_targeted_systemd_read_updates_one_object_without_replacing_estate_sweep
     assert trigger["estate_state"] == "current"
 
 
+def test_incoming_references_use_inventory_not_newer_targeted_facts(systemd_api):
+    client, state = systemd_api
+    full = client.post("/api/v1/systemd/observations/refresh").json()
+    units = client.get("/api/v1/systemd/units").json()["units"]
+    target = next(u for u in units if u["canonical_id"] == "alpha.service")
+    source = next(u for u in units if u["canonical_id"] == "alpha.socket")
+    state.units["alpha.socket"]["Triggers"] = []
+    targeted = client.app.state.context.coordinator.refresh_systemd_unit("alpha.socket")
+    calls = list(state.calls)
+    before_changes = client.app.state.context.database.connection.total_changes
+    detail = client.get(f"/api/v1/systemd/units/{target['object_id']}").json()
+    incoming = detail["incoming_references"]
+    trigger = next(r for r in incoming["references"] if r["source_object_id"] == source["object_id"] and r["relationship"]["kind"] == "Triggers")
+    assert trigger["source_observation"]["sweep_id"] == full["sweep_id"]
+    assert incoming["last_inventory_sweep"]["sweep_id"] == full["sweep_id"]
+    outgoing = client.get(f"/api/v1/systemd/units/{source['object_id']}").json()
+    assert outgoing["observation"]["sweep_id"] == targeted.sweep_id
+    assert not any(r["kind"] == "Triggers" for r in outgoing["relationships"])
+    assert state.calls == calls
+    assert client.app.state.context.database.connection.total_changes == before_changes
+
+
+@pytest.mark.parametrize("status", ["failed", "partial", "ok"])
+def test_incoming_latest_empty_inventory_never_falls_back(systemd_api, status):
+    client, _ = systemd_api
+    client.post("/api/v1/systemd/observations/refresh")
+    context = client.app.state.context
+    units = client.get("/api/v1/systemd/units").json()
+    target = next(u for u in units["units"] if u["canonical_id"] == "alpha.service")
+    sweep = dict(units["last_sweep"], sweep_id="empty", host_id=units["host_id"], status=status, object_count=0)
+    sweep["received_at"] = "2099-01-01T00:00:00+00:00"
+    sweep["completed_at"] = "2000-01-01T00:00:00+00:00"
+    context.ingestor.sweeps.insert(sweep)
+    result = client.get(f"/api/v1/systemd/units/{target['object_id']}").json()["incoming_references"]
+    assert result["references"] == []
+    assert result["last_inventory_sweep"]["status"] == status
+    assert result["inventory_freshness"] == "stale"
+
+
+def test_incoming_without_inventory_does_not_use_targeted_estate(systemd_api):
+    client, _ = systemd_api
+    context = client.app.state.context
+    context.coordinator.refresh_systemd_unit("alpha.service")
+    units = client.get("/api/v1/systemd/units").json()["units"]
+    target = next(u for u in units if u["canonical_id"] == "alpha.service")
+    incoming = client.get(f"/api/v1/systemd/units/{target['object_id']}").json()["incoming_references"]
+    assert incoming["last_inventory_sweep"] is None
+    assert incoming["inventory_freshness"] == "unknown"
+    assert incoming["references"] == []
+
+
+def test_incoming_partial_snapshot_retains_positive_rows_and_source_gaps(systemd_api):
+    client, _ = systemd_api
+    full = client.post("/api/v1/systemd/observations/refresh").json()
+    context = client.app.state.context
+    context.database.execute("UPDATE observation_sweeps SET status = 'partial' WHERE sweep_id = ?", (full["sweep_id"],))
+    context.database.execute(
+        "UPDATE observations SET fidelity = 'partial', gaps = ?, observed_at = ? WHERE sweep_id = ?",
+        ('["relationship property unreadable"]', "2000-01-01T00:00:00+00:00", full["sweep_id"]),
+    )
+    units = client.get("/api/v1/systemd/units").json()["units"]
+    target = next(u for u in units if u["canonical_id"] == "alpha.service")
+    incoming = client.get(f"/api/v1/systemd/units/{target['object_id']}").json()["incoming_references"]
+    assert incoming["last_inventory_sweep"]["status"] == "partial"
+    assert incoming["references"]
+    for row in incoming["references"]:
+        assert row["source_observation"]["fidelity"] == "partial"
+        assert row["source_observation"]["freshness"] == "stale"
+        assert row["source_observation"]["gaps"] == ["relationship property unreadable"]
+
+
 def test_self_unit_gap_does_not_downgrade_a_complete_inventory(systemd_api):
     client, state = systemd_api
     state.self_path = None
