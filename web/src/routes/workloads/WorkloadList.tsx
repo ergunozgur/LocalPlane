@@ -4,8 +4,8 @@
  * Durable Application identity does not exist in this build. Compose labels support a useful
  * provider-derived project grouping, while an unlabelled container remains standalone.
  */
-import { useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { endpoints } from '@/api/endpoints';
 import { useResource } from '@/hooks/useResource';
 import { useEstateCounts, useHostName } from '@/hooks/useEstateCounts';
@@ -26,6 +26,11 @@ import {
 import { formatRelative } from '@/domain/format';
 import styles from './WorkloadList.module.css';
 
+function effectiveGroup(params: URLSearchParams): string | null {
+  const raw = params.get('group');
+  return raw ? raw : null;
+}
+
 export function WorkloadList(): JSX.Element {
   const { resource } = useResource(
     'containers',
@@ -33,19 +38,37 @@ export function WorkloadList(): JSX.Element {
   );
   const counts = useEstateCounts();
   const hostName = useHostName();
+  const [searchParams] = useSearchParams();
+  const groupFilter = effectiveGroup(searchParams);
+
+  const clearSearch = useMemo(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('group');
+    return { pathname: '/workloads', search: next.toString() };
+  }, [searchParams]);
 
   return (
     <ResourceView resource={resource} what="container list" loadingLabel="Reading containers…">
       {(list, meta) => {
         const groups = groupContainers(list.containers);
-        const running = list.containers.filter((c) => c.runtime.state === 'running').length;
+        const activeGroups = groupFilter
+          ? groups.filter((g) => g.origin === 'compose' && g.name === groupFilter)
+          : groups;
+        const activeContainers = activeGroups.flatMap((g) => g.containers);
+        const running = activeContainers.filter((c) => c.runtime.state === 'running').length;
 
         return (
           <>
             <ScopeBar
               crumbs={[{ label: hostName, to: '/' }, { label: 'workloads' }]}
               tabs={[
-                { to: '/workloads', label: 'Container groups', count: counts.containerGroups, end: true },
+                {
+                  to: '/workloads',
+                  label: 'Container groups',
+                  count: counts.containerGroups,
+                  end: true,
+                  ...(groupFilter ? ({ current: true } as const) : {}),
+                },
                 { to: '/workloads/runtime', label: 'Runtime' },
               ]}
               observedAt={meta.fetchedAt}
@@ -67,15 +90,42 @@ export function WorkloadList(): JSX.Element {
                   <>
                     <span className={styles.countChip}>
                       <b>{running}</b>
-                      <span>/{list.count} running</span>
+                      <span>/{activeContainers.length} running</span>
                     </span>
                     <span className={styles.countChip}>
-                      <b>{groups.length}</b>
-                      <span>&nbsp;group{groups.length === 1 ? '' : 's'}</span>
+                      <b>{activeGroups.length}</b>
+                      <span>&nbsp;group{activeGroups.length === 1 ? '' : 's'}</span>
                     </span>
                   </>
                 }
               />
+
+              {groupFilter ? (
+                <PlateBody tight>
+                  <div className={styles.filterContext}>
+                    <span className={styles.filterLabel}>
+                      {activeGroups.length > 0 ? (
+                        <>
+                          Showing Compose project <strong className="mono">{groupFilter}</strong>
+                        </>
+                      ) : (
+                        <>
+                          No Compose project named <strong className="mono">{groupFilter}</strong>
+                        </>
+                      )}
+                    </span>
+                    <span className={styles.resultCount}>
+                      {activeGroups.length} of {groups.length} group{groups.length === 1 ? '' : 's'}
+                      {' · '}
+                      {activeContainers.length} of {list.count} container
+                      {list.count === 1 ? '' : 's'}
+                    </span>
+                    <Link to={clearSearch} className={styles.clearFilter}>
+                      Show all groups
+                    </Link>
+                  </div>
+                </PlateBody>
+              ) : null}
 
               {SweepCaveat({ sweep: list.last_sweep }) ? (
                 <PlateBody tight>
@@ -83,18 +133,20 @@ export function WorkloadList(): JSX.Element {
                 </PlateBody>
               ) : null}
 
-              {groups.length === 0 ? (
+              {activeGroups.length === 0 ? (
                 <Empty
-                  title="No workloads"
+                  title={groupFilter ? 'No group matches' : 'No workloads'}
                   explanation={
-                    list.last_sweep
-                      ? 'The Docker daemon answered and reported no containers.'
-                      : 'No sweep has recorded containers, so this is not evidence that there are none.'
+                    groupFilter
+                      ? 'No observed Compose project matches this filter.'
+                      : list.last_sweep
+                        ? 'The Docker daemon answered and reported no containers.'
+                        : 'No sweep has recorded containers, so this is not evidence that there are none.'
                   }
                 />
               ) : (
                 <div className={styles.applications}>
-                  {groups.map((group) => (
+                  {activeGroups.map((group) => (
                     <ContainerGroupRows key={group.id} group={group} />
                   ))}
                 </div>
