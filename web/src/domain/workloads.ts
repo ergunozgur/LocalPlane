@@ -201,8 +201,8 @@ export function imagesInUse(containers: readonly DockerContainer[]): readonly Im
 
 export interface RuntimeRow {
   readonly name: string;
-  /** `observed` and `absent` are answers; `unsupported` means this build cannot tell. */
-  readonly detection: 'observed' | 'absent' | 'unsupported';
+  /** Positive label evidence survives partial reads; empty reads need complete inventory. */
+  readonly detection: 'observed' | 'absent' | 'unknown' | 'unsupported';
   readonly observedGroups: number | null;
   readonly note: string;
 }
@@ -215,29 +215,48 @@ export interface RuntimeRow {
  * Docker is only what is present today — but this build has no detector for them, so they
  * are `unsupported`: not "absent", which would be a claim that they are not installed.
  */
-export function runtimeRows(groups: readonly ContainerGroup[] | null): readonly RuntimeRow[] {
+export function runtimeRows(
+  groups: readonly ContainerGroup[] | null,
+  sweep: Sweep | null,
+): readonly RuntimeRow[] {
   const compose = groups?.filter((group) => group.origin === 'compose') ?? null;
   const standalone = groups?.filter((group) => group.origin === 'standalone') ?? null;
+  const completeInventory =
+    sweep?.scope === 'inventory' && sweep.status === 'ok' && sweep.issues.length === 0;
+
+  function detectionFor(observed: readonly ContainerGroup[] | null): RuntimeRow['detection'] {
+    if (observed === null) return 'unknown';
+    if (observed.length > 0) return 'observed';
+    return completeInventory ? 'absent' : 'unknown';
+  }
+
+  function noteFor(
+    observed: readonly ContainerGroup[] | null,
+    kind: 'compose' | 'standalone',
+  ): string {
+    if (observed === null) return 'container inventory is unavailable; group status is unknown';
+    if (observed.length > 0) {
+      return kind === 'compose'
+        ? `${observed.length} project${observed.length === 1 ? '' : 's'}, from compose labels on the containers`
+        : 'standalone containers, observed only';
+    }
+    return completeInventory
+      ? `no ${kind === 'compose' ? 'Compose groups' : 'standalone containers'} were observed in the complete inventory`
+      : `no ${kind === 'compose' ? 'Compose groups' : 'standalone containers'} were returned; inventory completeness is unknown`;
+  }
 
   return [
     {
       name: 'docker compose',
-      detection: compose === null ? 'unsupported' : compose.length > 0 ? 'observed' : 'absent',
+      detection: detectionFor(compose),
       observedGroups: compose?.length ?? null,
-      note:
-        compose && compose.length > 0
-          ? `${compose.length} project${compose.length === 1 ? '' : 's'}, from compose labels on the containers`
-          : 'no container carries a compose project label',
+      note: noteFor(compose, 'compose'),
     },
     {
       name: 'docker',
-      detection:
-        standalone === null ? 'unsupported' : standalone.length > 0 ? 'observed' : 'absent',
+      detection: detectionFor(standalone),
       observedGroups: standalone?.length ?? null,
-      note:
-        standalone && standalone.length > 0
-          ? 'standalone containers, observed only'
-          : 'every container belongs to a compose project',
+      note: noteFor(standalone, 'standalone'),
     },
     {
       name: 'podman',

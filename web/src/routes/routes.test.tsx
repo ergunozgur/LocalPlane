@@ -62,7 +62,7 @@ describe('Run detail, from a real backend response', () => {
     for (const label of [/^apply$/i, /^confirm$/i, /^execute$/i, /^run$/i, /^restart$/i]) {
       expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
     }
-    expect(screen.getByText(/produces nothing across it/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply approved preview' })).toBeDisabled();
   });
 
   it('shows the capability as declared while execution stays unavailable', async () => {

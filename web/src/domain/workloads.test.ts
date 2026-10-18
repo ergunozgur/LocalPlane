@@ -149,18 +149,21 @@ describe('images in use', () => {
 });
 
 describe('runtimes', () => {
+  const inventory = (status: string, issues: Sweep['issues'] = []) =>
+    ({ scope: 'inventory', status, issues } as Sweep);
+
   it('reports compose and standalone docker from real evidence', () => {
     const groups = groupContainers([
       container('a', { [LABEL_PROJECT]: 'p' }),
       container('b'),
     ]);
-    const rows = runtimeRows(groups);
+    const rows = runtimeRows(groups, inventory('partial'));
     expect(rows.find((r) => r.name === 'docker compose')?.detection).toBe('observed');
     expect(rows.find((r) => r.name === 'docker')?.detection).toBe('observed');
   });
 
   it('never claims an undetectable runtime is absent', () => {
-    const rows = runtimeRows(groupContainers([container('a')]));
+    const rows = runtimeRows(groupContainers([container('a')]), inventory('ok'));
     for (const name of ['podman', 'systemd-supervised', 'kubelet']) {
       const row = rows.find((r) => r.name === name);
       expect(row?.detection).toBe('unsupported');
@@ -170,8 +173,50 @@ describe('runtimes', () => {
     }
   });
 
-  it('reports every runtime as undetectable when nothing was read', () => {
-    const rows = runtimeRows(null);
-    expect(rows.every((r) => r.detection === 'unsupported')).toBe(true);
+  it.each([
+    ['no sweep', null],
+    ['failed sweep', inventory('failed')],
+    ['partial sweep', inventory('partial')],
+  ] as const)('keeps empty Docker groups unknown with %s', (_label, sweep) => {
+    const rows = runtimeRows([], sweep);
+    for (const name of ['docker compose', 'docker']) {
+      const row = rows.find((candidate) => candidate.name === name);
+      expect(row?.detection).toBe('unknown');
+      expect(row?.observedGroups).toBe(0);
+      expect(row?.note).toMatch(/completeness is unknown/i);
+    }
+    for (const name of ['podman', 'systemd-supervised', 'kubelet']) {
+      expect(rows.find((candidate) => candidate.name === name)?.detection).toBe('unsupported');
+    }
+  });
+
+  it('only describes empty Docker groups as none observed for a complete inventory', () => {
+    const rows = runtimeRows([], inventory('ok'));
+    for (const name of ['docker compose', 'docker']) {
+      const row = rows.find((candidate) => candidate.name === name);
+      expect(row?.detection).toBe('absent');
+      expect(row?.note).toMatch(/complete inventory/i);
+      expect(row?.note).not.toMatch(/installed|installation/i);
+    }
+  });
+
+  it('preserves positive label evidence even when the inventory is partial', () => {
+    const rows = runtimeRows(
+      groupContainers([container('observed-compose', { [LABEL_PROJECT]: 'project' })]),
+      inventory('partial'),
+    );
+    expect(rows.find((row) => row.name === 'docker compose')?.detection).toBe('observed');
+    expect(rows.find((row) => row.name === 'docker compose')?.observedGroups).toBe(1);
+    expect(rows.find((row) => row.name === 'docker')?.detection).toBe('unknown');
+  });
+
+  it('keeps Docker detector status unknown when group data is unavailable', () => {
+    const rows = runtimeRows(null, null);
+    for (const name of ['docker compose', 'docker']) {
+      expect(rows.find((row) => row.name === name)?.detection).toBe('unknown');
+    }
+    for (const name of ['podman', 'systemd-supervised', 'kubelet']) {
+      expect(rows.find((row) => row.name === name)?.detection).toBe('unsupported');
+    }
   });
 });

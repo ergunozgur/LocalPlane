@@ -1,34 +1,9 @@
-/**
- * Lifecycle, presented without implying a capability this surface does not offer.
- *
- * This is the surface the whole execution-gate design exists for. The agent on the host this
- * was written against reports `systemd.service.lifecycle` as `available` and `mutating: true`
- * — truthfully, because systemd does expose the job contract — and the backend now has an
- * executor behind it: an eligible systemd plan can be applied through the API. What this
- * console does not have is authentication, so it renders none of that capability as a
- * control.
- *
- * So this panel does three things and refuses a fourth:
- *
- *  1. It shows what systemd itself says about whether the unit *can* be started or stopped
- *     (`can_start`, `refuse_manual_start`, …). Those are read facts and belong to the unit.
- *  2. It shows the agent capability as what it is — a probed mechanism — with the caveat
- *     attached, so a reader cannot mistake it for permission.
- *  3. It states plainly that this console offers no control, and why.
- *
- *  4. It never renders a Start, Stop or Restart control — not enabled, and not disabled
- *     either. A greyed-out button is still a claim that this surface has the feature and is
- *     withholding it, and this surface deliberately does not.
- *
- * The write path exists on the backend and is gated on `executionGate(preview.how)`; this
- * console stays read-only until authentication exists, without any of the above changing.
- */
 import type { Capability, SystemdUnit } from '@/api/types';
 import { Plate, PlateBody, PlateHead } from '@/components/primitives/Plate';
 import { KeyValue, KeyValueList } from '@/components/primitives/KeyValue';
 import { StatusPill } from './StatusPill';
 import { Value } from './UnknownValue';
-import { NotAssessed } from '@/components/states/SurfaceState';
+import { ServicePlan } from '@/components/composer/ServicePlan';
 import { capabilityStatus } from '@/domain/vocabulary';
 import { executionGate } from '@/domain/execution';
 import styles from './LifecyclePanel.module.css';
@@ -48,14 +23,7 @@ export function LifecyclePanel({
     <Plate>
       <PlateHead title="Lifecycle" level={3} meta="starting, stopping and restarting" />
       <PlateBody>
-        <NotAssessed title="This console offers no lifecycle control for systemd units">
-          The backend can start, stop and restart units — <span className="mono">systemd.service.start</span>,{' '}
-          <span className="mono">.stop</span> and <span className="mono">.restart</span> have an
-          executor, and an eligible plan is applied through the API. This console does not expose
-          that path — it stays read-only until authentication exists — and no control is shown
-          here, not even a disabled one, because a control an operator can see is a claim about
-          what this surface does.
-        </NotAssessed>
+        <ServicePlan key={unit.object_id} unit={unit} />
 
         <div className={styles.gate}>
           <span className="label">Execution</span>
@@ -133,8 +101,7 @@ export function LifecyclePanel({
             <p className={styles.caveat}>
               A capability records that the agent <em>probed a mechanism and found it</em>. It is
               not permission to act, and it is not what an execution decision rests on: that is
-              the published plan, read through the execution gate. This console renders no control
-              from either, and offers no way to write from this page.
+              the published plan, read through the execution gate. Only the published preview can enable an ordinary apply in Composer.
             </p>
           </div>
         ) : null}

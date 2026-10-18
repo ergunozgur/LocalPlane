@@ -75,8 +75,12 @@ export function AddressingSummary({
         rowKey={(row) => row.key}
         emptyState={
           <Empty
-            title="No addresses"
-            explanation="No observed interface reports an address."
+            title={unread > 0 ? 'No address records reported' : 'No addresses'}
+            explanation={
+              unread > 0
+                ? 'Address sources were unavailable for some interfaces; their addresses are unknown, not absent.'
+                : 'No observed interface reports an address.'
+            }
           />
         }
         columns={[

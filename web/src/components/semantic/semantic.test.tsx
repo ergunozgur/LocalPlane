@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom';
 /**
  * What actually reaches the screen.
  *
@@ -131,28 +132,28 @@ const LIFECYCLE_CAPABILITY: Capability = {
 
 describe('systemd lifecycle presentation', () => {
   it('offers no start, stop or restart control even when the capability reads available', () => {
-    render(<LifecyclePanel unit={unit()} capability={LIFECYCLE_CAPABILITY} />);
+    render(<MemoryRouter><LifecyclePanel unit={unit()} capability={LIFECYCLE_CAPABILITY} /></MemoryRouter>);
 
     // Not enabled, and not disabled either: a disabled button still claims the feature.
     for (const verb of [/^start$/i, /^stop$/i, /^restart$/i]) {
       expect(screen.queryByRole('button', { name: verb })).not.toBeInTheDocument();
     }
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /apply/i })).not.toBeInTheDocument();
   });
 
-  it('states plainly that no lifecycle control is offered here', () => {
-    render(<LifecyclePanel unit={unit()} capability={LIFECYCLE_CAPABILITY} />);
-    expect(screen.getByText(/no lifecycle control/i)).toBeInTheDocument();
+  it('states plainly that planning does not write to the host', () => {
+    render(<MemoryRouter><LifecyclePanel unit={unit()} capability={LIFECYCLE_CAPABILITY} /></MemoryRouter>);
+    expect(screen.getByText(/Planning does not write to the host/i)).toBeInTheDocument();
   });
 
   it('shows the capability without letting it read as permission', () => {
-    render(<LifecyclePanel unit={unit()} capability={LIFECYCLE_CAPABILITY} />);
+    render(<MemoryRouter><LifecyclePanel unit={unit()} capability={LIFECYCLE_CAPABILITY} /></MemoryRouter>);
     expect(screen.getByText('systemd.service.lifecycle')).toBeInTheDocument();
     expect(screen.getByText(/not permission to act/i)).toBeInTheDocument();
   });
 
   it("reports systemd's own can_start as a property of the unit, not of LocalPlane", () => {
-    render(<LifecyclePanel unit={unit({ can_start: true })} capability={LIFECYCLE_CAPABILITY} />);
+    render(<MemoryRouter><LifecyclePanel unit={unit({ can_start: true })} capability={LIFECYCLE_CAPABILITY} /></MemoryRouter>);
     const row = screen.getByText('Can start').closest('div');
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText('yes')).toBeInTheDocument();
@@ -160,7 +161,7 @@ describe('systemd lifecycle presentation', () => {
   });
 
   it('renders an unreported systemd property as unknown rather than as no', () => {
-    render(<LifecyclePanel unit={unit({ can_start: null })} capability={LIFECYCLE_CAPABILITY} />);
+    render(<MemoryRouter><LifecyclePanel unit={unit({ can_start: null })} capability={LIFECYCLE_CAPABILITY} /></MemoryRouter>);
     const row = screen.getByText('Can start').closest('div') as HTMLElement;
     expect(within(row).queryByText('no')).not.toBeInTheDocument();
     expect(
@@ -169,7 +170,7 @@ describe('systemd lifecycle presentation', () => {
   });
 
   it('reports execution as not assessed when no plan has been published', () => {
-    render(<LifecyclePanel unit={unit()} capability={LIFECYCLE_CAPABILITY} />);
+    render(<MemoryRouter><LifecyclePanel unit={unit()} capability={LIFECYCLE_CAPABILITY} /></MemoryRouter>);
     expect(screen.getByText(/not assessed/i)).toBeInTheDocument();
   });
 });

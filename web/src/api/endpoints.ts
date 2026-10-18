@@ -6,11 +6,8 @@
  * knowing. Nothing here interprets a response — that is the domain layer's job — and nothing
  * here invents a value when a request fails.
  *
- * Only read endpoints are bound. The host-writing surfaces (`runs/{id}/apply`,
- * `changes/{id}/recovery/retry`) and the record-writing surfaces (`POST /runs`, `confirm`,
- * `adopt`, `release`, intent revision) are deliberately absent from this build: see the
- * implementation plan's deferral list. Adding one is a function here plus a control, not a
- * restructuring.
+ * Run controls bind only systemd service planning, confirmation, apply and pre-write cancel.
+ * All other managed mutation surfaces remain unbound.
  */
 import { request, type RequestOptions } from './client';
 import type * as T from './types';
@@ -85,6 +82,14 @@ export const endpoints = {
   /* ---------------------------------------------------------------- runs, changes, findings */
   runs: (params?: { state?: string; object_id?: string; limit?: number }, o?: Opts) =>
     request<T.RunList>('/runs', { ...o, ...(params ? { query: params } : {}) }),
+  createServiceRun: (operation: T.SystemdServiceOperation) =>
+    request<T.Run>('/runs', { method: 'POST', body: { operation } }),
+  confirmRun: (id: string, body: T.ConfirmRunRequest) =>
+    request<T.Run>(`/runs/${encodeURIComponent(id)}/confirm`, { method: 'POST', body }),
+  applyRun: (id: string) =>
+    request<T.Run>(`/runs/${encodeURIComponent(id)}/apply`, { method: 'POST' }),
+  cancelRun: (id: string) =>
+    request<T.Run>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   run: (id: string, o?: Opts) => request<T.Run>(`/runs/${encodeURIComponent(id)}`, o),
   runPreview: (id: string, o?: Opts) =>
     request<T.RunPreview>(`/runs/${encodeURIComponent(id)}/preview`, o),

@@ -25,13 +25,13 @@ and questions that remain unresolved.
 | Docker | **CURRENT** | Container observation, bounded logs/current stats, and start/stop/restart through the Engine API |
 | systemd | **CURRENT** | Bounded loaded-unit observation and eligible service start/stop/restart through D-Bus |
 | Runs and Changes | **CURRENT** | Immutable previews, confirmation, typed apply, fresh verification, and durable recovery holds |
-| Operator Console | **CURRENT** | Substantial read-only interface, including cross-domain search and evidence-backed Relationships tabs for observed interfaces and Docker containers; no record-writing or host-writing controls |
+| Operator Console | **CURRENT** | Observation, cross-domain search, evidence-backed Relationships tabs, and a limited authenticated systemd service Composer |
 | OpenAPI integration | **CURRENT** | The committed snapshot and generated TypeScript types reflect this integrated backend tree |
 | Relationship model | **CURRENT** | Object-scoped Relationships tabs on network interfaces and Docker containers show only identifier-backed Docker network, container, master-interface and guarded management-path joins; unread streams and unresolved targets stay explicit |
 | Host explorer breadth | **FOUNDATION** | Object workspaces and provider seams exist; files, storage, packages, users, processes, and general logs are not implemented |
 | Authentication and browser sessions | **CURRENT** | One local master Bearer credential, derived 12-hour non-sliding in-memory browser sessions, logout, and router-level enforcement |
 | Cookie Origin/CSRF boundary | **CURRENT** | Cookie-authenticated unsafe requests require exact accepted Origin; Bearer requests are exempt |
-| Frontend write workflow | **ACCEPTED-NOT-IMPLEMENTED** | Authentication exists, but no current console control calls record-writing or host-writing routes |
+| Frontend write workflow | **CURRENT** | Loaded systemd services: plan start/stop/restart, inspect immutable preview, confirm, apply, inspect outcome and cancel before write; other operation controls remain absent |
 | Production console delivery and TLS | **UNRESOLVED** | No accepted asset-serving topology; non-loopback TLS is not configured |
 | Docker management-path protection | **UNRESOLVED** | Container lifecycle cannot prove whether a particular container carries the operator route |
 | Database request concurrency | **UNRESOLVED** | The shared SQLite connection needs a bounded concurrency proof; production readiness is not established |
@@ -44,8 +44,7 @@ and questions that remain unresolved.
 The authenticated shell includes a read-only Search objects palette. It reads the existing typed
 list endpoints for network interfaces, loaded systemd units and Docker containers only when
 opened, filters the returned observations by name or stable object ID, and links to the existing
-object detail routes. It does not create Applications or issue operations. The typed Run/composer
-workflow remains deferred and is not represented by this search control.
+object detail routes. It does not create Applications or issue operations. Service actions enter Composer from the service Lifecycle tab; typed action search remains deferred.
 
 ## What the screenshot means
 
@@ -59,7 +58,7 @@ surface will ship. Source and generated contract decide what is **CURRENT**.
 - Browser sessions are process-local, expire absolutely after 12 hours, and disappear on restart.
 - Plain-HTTP browser use remains loopback-only; TLS and production remote exposure are not implemented.
 - Rootful Docker socket access is effectively root-equivalent.
-- The Operator Console is read-only and has no accepted production serving topology.
+- Console writes are limited to systemd service Composer; production serving topology remains unresolved.
 - Container lifecycle lacks authoritative operator-route protection.
 - systemd lifecycle fails closed when containment, effect, authorization, or verification
   evidence cannot be established.

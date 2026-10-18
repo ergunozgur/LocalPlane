@@ -111,9 +111,9 @@ describe('gate states', () => {
   });
 });
 
-describe('this build offers no write controls', () => {
-  it('declares an empty control set', () => {
-    expect(OPERATIONS_WITH_UI_CONTROLS).toHaveLength(0);
+describe('this build offers only systemd service controls', () => {
+  it('declares exactly three service controls', () => {
+    expect(OPERATIONS_WITH_UI_CONTROLS).toEqual(['systemd.service.start', 'systemd.service.stop', 'systemd.service.restart']);
   });
 
   it('offers no control for any operation in the closed vocabulary', () => {
@@ -122,9 +122,9 @@ describe('this build offers no write controls', () => {
       'docker.container.start',
       'docker.container.stop',
       'docker.container.restart',
-      'systemd.service.start',
-      'systemd.service.stop',
-      'systemd.service.restart',
+      'systemd.service.self-impact-override',
+      'shell.session',
+      'command',
     ]) {
       expect(buildOffersControl(operation)).toBe(false);
     }

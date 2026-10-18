@@ -43,8 +43,8 @@ Linux is the first deeply supported platform, not the permanent conceptual bound
 ![LocalPlane V4.2 UI direction: host overview, topology, drift, and findings](docs/images/localplane-v4.2-ui-direction-overview.png)
 
 *V4.2 is product and interface direction, not a screenshot of the current application and
-not a feature matrix. The implemented Operator Console is read-only and covers a subset of
-these surfaces.*
+not a feature matrix. The implemented Operator Console includes limited systemd service
+Composer controls and covers a subset of these surfaces.*
 
 ## Current capabilities
 

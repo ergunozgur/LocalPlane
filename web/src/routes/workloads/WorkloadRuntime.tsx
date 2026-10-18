@@ -26,9 +26,10 @@ import { KeyValue, KeyValueList } from '@/components/primitives/KeyValue';
 import { DataTable } from '@/components/primitives/DataTable';
 import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
-import { Empty } from '@/components/states/SurfaceState';
+import { Degraded, Empty } from '@/components/states/SurfaceState';
 import { PageHeader } from '../PageHeader';
 import { ScopeBar } from '@/components/layout/ScopeBar';
+import { SweepCaveat } from '@/dashboard/widgets/shared';
 import {
   engineFacts,
   groupContainers,
@@ -62,7 +63,14 @@ export function WorkloadRuntime(): JSX.Element {
         const groups = groupContainers(list.containers);
         const engine = engineFacts(list.last_sweep, list.containers);
         const images = imagesInUse(list.containers);
-        const rows = runtimeRows(groups);
+        const rows = runtimeRows(groups, list.last_sweep);
+        const runtimeCaveat = list.last_sweep ? (
+          SweepCaveat({ sweep: list.last_sweep })
+        ) : (
+          <Degraded tone="unknown" title="No completed container inventory is recorded">
+            Runtime-group assessment is limited to the containers returned in this read.
+          </Degraded>
+        );
 
         return (
           <>
@@ -144,6 +152,7 @@ export function WorkloadRuntime(): JSX.Element {
                     meta="what the current provider evidence can establish"
                     asOf={meta.fetchedAt.toLocaleTimeString()}
                   />
+                  {runtimeCaveat ? <PlateBody tight>{runtimeCaveat}</PlateBody> : null}
                   <DataTable
                     caption="Runtimes"
                     rows={rows}
@@ -165,7 +174,14 @@ export function WorkloadRuntime(): JSX.Element {
                         align: 'right',
                         render: (row) =>
                           row.observedGroups === null ? (
-                            <Value value={null} reason="this build has no detector for it" />
+                            <Value
+                              value={null}
+                              reason={
+                                row.detection === 'unsupported'
+                                  ? 'this build has no detector for it'
+                                  : 'the container inventory is unavailable'
+                              }
+                            />
                           ) : (
                             <span className="mono">{row.observedGroups}</span>
                           ),
@@ -246,7 +262,17 @@ function Detection({ row }: { row: RuntimeRow }): JSX.Element {
     return <span className={styles.observed}>yes</span>;
   }
   if (row.detection === 'absent') {
-    return <span className={styles.absent}>no</span>;
+    return <span className={styles.absent}>none observed</span>;
+  }
+  if (row.detection === 'unknown') {
+    return (
+      <span
+        className={styles.undetectable}
+        title="The inventory was unavailable or incomplete, so zero returned groups do not establish absence."
+      >
+        unknown
+      </span>
+    );
   }
   return (
     <span

@@ -19,7 +19,7 @@ export const API_BASE = '/api/v1';
 export type ApiErrorKind =
   /** The backend answered with a structured `{error:{code,message,detail}}` envelope. */
   | 'backend'
-  /** The request never reached a backend: DNS, connection refused, offline. */
+  /** No response was received. Delivery may have occurred. */
   | 'unreachable'
   /** The request exceeded its deadline and was aborted. */
   | 'timeout'
@@ -53,7 +53,7 @@ export class ApiError extends Error {
     this.path = init.path;
   }
 
-  /** True when retrying the identical request could plausibly succeed later. */
+  /** Read-request retry hint only. Never authorizes repeating a mutation. */
   get retryable(): boolean {
     if (this.kind === 'unreachable' || this.kind === 'timeout') return true;
     if (this.kind !== 'backend' || this.status === null) return false;
@@ -154,7 +154,11 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     });
   }
 
-  const text = await response.text();
+  let text: string;
+  try { text = await response.text(); }
+  catch {
+    throw new ApiError({ kind: 'unreachable', message: 'the response body was lost; request delivery is unknown', path, status: response.status });
+  }
   let parsed: unknown = undefined;
   if (text.length > 0) {
     try {
