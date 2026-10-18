@@ -34,17 +34,26 @@ and questions that remain unresolved.
 | Frontend write workflow | **CURRENT** | Loaded systemd services: plan start/stop/restart, inspect immutable preview, confirm, apply, inspect outcome and cancel before write; other operation controls remain absent |
 | Production console delivery and TLS | **UNRESOLVED** | No accepted asset-serving topology; non-loopback TLS is not configured |
 | Docker management-path protection | **UNRESOLVED** | Container lifecycle cannot prove whether a particular container carries the operator route |
-| Database request concurrency | **UNRESOLVED** | The shared SQLite connection needs a bounded concurrency proof; production readiness is not established |
+| Database request concurrency | **CURRENT** | A process-local reentrant lock serializes runtime use of the shared SQLite connection, holding transactions through commit or rollback and reads through row retrieval; forced-contention request regressions cover overlapping refreshes and reads during rollback. Multi-process deployment is not validated |
 | Broader infrastructure control plane | **FUTURE** | More systems, networks, workloads, applications, and providers are direction, not current capability |
 | Unified metrics, logs, and historical replay | **FUTURE** | Bounded container samples and operational records exist; general series, log aggregation, and replay do not |
 | Fleet and automation | **FUTURE** | Not implemented and not a near-term commitment stated by this document |
 
-## Object search
+## Object and operational-record search
 
-The authenticated shell includes a read-only Search objects palette. It reads the existing typed
-list endpoints for network interfaces, loaded systemd units and Docker containers only when
-opened, filters the returned observations by name or stable object ID, and links to the existing
-object detail routes. It does not create Applications or issue operations. Service actions enter Composer from the service Lifecycle tab; typed action search remains deferred.
+The authenticated shell includes a read-only palette for objects and operational records. On
+opening, it reads existing typed lists for network interfaces, loaded systemd units, Docker
+containers, and recent Runs, Changes and Findings, including resolved Findings. Results open
+the existing detail views using their stable object or record IDs. Search does not create
+Applications, plan operations or execute them. Service actions enter Composer from the service
+Lifecycle tab; typed action search remains deferred.
+
+Record search covers the latest 50 Runs by creation time, 100 Changes by creation time and
+100 Findings by episode opening time, not exhaustive history. It matches only the returned
+records by record or target identity/name, operation or Finding description, and recorded
+state/outcome. At most 40 matches are displayed; refining the query searches the loaded lists,
+not older history. Loading and failed sources remain explicit, and query misses do not prove
+that no older record exists. Reopening reads the lists again.
 
 ## What the screenshot means
 
@@ -62,7 +71,8 @@ surface will ship. Source and generated contract decide what is **CURRENT**.
 - Container lifecycle lacks authoritative operator-route protection.
 - systemd lifecycle fails closed when containment, effect, authorization, or verification
   evidence cannot be established.
-- The current database concurrency boundary is not production-proven.
+- Shared-connection request concurrency is covered for the supported single-process shape;
+  this does not establish production readiness or validate multi-process deployment.
 
 ## Direction without commitments
 

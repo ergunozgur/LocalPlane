@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { endpoints } from '@/api/endpoints';
 import styles from './GlobalSearch.module.css';
 
-type SearchDomain = 'Network' | 'System' | 'Workloads';
+type SearchDomain = 'Network' | 'System' | 'Workloads' | 'Runs' | 'Changes' | 'Findings';
 
 type SearchItem = {
   id: string;
@@ -12,6 +12,8 @@ type SearchItem = {
   domain: SearchDomain;
   kind: string;
   to: string;
+  fields?: string[];
+  state?: string;
 };
 
 type Source = {
@@ -21,7 +23,7 @@ type Source = {
 };
 
 const MAX_RESULTS = 40;
-const SOURCE_LABELS: readonly SearchDomain[] = ['Network', 'System', 'Workloads'];
+const SOURCE_LABELS: readonly SearchDomain[] = ['Network', 'System', 'Workloads', 'Runs', 'Changes', 'Findings'];
 
 function loadingSources(): Source[] {
   return SOURCE_LABELS.map((label) => ({ label, status: 'loading', items: [] }));
@@ -122,6 +124,39 @@ export function GlobalSearch(): JSX.Element {
           to: `/workloads/${encodeURIComponent(item.object_id)}`,
         })),
       ),
+      endpoints.runs({ state: 'all', limit: 50 }, { signal: controller.signal }).then((list) =>
+        list.runs.map((item) => ({
+          id: item.run_id,
+          name: `${item.object_name} · ${item.operation}`,
+          domain: 'Runs',
+          kind: 'run',
+          state: item.state,
+          fields: [item.object_id, item.object_name, item.operation, item.state],
+          to: `/operations/runs/${encodeURIComponent(item.run_id)}`,
+        })),
+      ),
+      endpoints.changes({ limit: 100 }, { signal: controller.signal }).then((list) =>
+        list.changes.map((item) => ({
+          id: item.change_id,
+          name: `${item.object_name} · ${item.operation}`,
+          domain: 'Changes',
+          kind: 'change',
+          state: item.result,
+          fields: [item.object_id, item.object_name, item.operation, item.result],
+          to: `/operations/changes/${encodeURIComponent(item.change_id)}`,
+        })),
+      ),
+      endpoints.findings({ status: 'all', limit: 100 }, { signal: controller.signal }).then((list) =>
+        list.findings.map((item) => ({
+          id: item.finding_id,
+          name: `${item.object_name} · ${item.summary}`,
+          domain: 'Findings',
+          kind: 'finding',
+          state: item.status,
+          fields: [item.object_id, item.object_name, item.summary, item.finding_type, item.subject, item.status],
+          to: `/operations/findings/${encodeURIComponent(item.finding_id)}`,
+        })),
+      ),
     ];
 
     requests.forEach((request, index) => {
@@ -143,7 +178,7 @@ export function GlobalSearch(): JSX.Element {
   const needle = query.trim().toLowerCase();
   const matches = needle
     ? allItems.filter(
-        (item) => item.name.toLowerCase().includes(needle) || item.id.toLowerCase().includes(needle),
+        (item) => [item.name, item.id, ...(item.fields ?? [])].some((field) => field.toLowerCase().includes(needle)),
       )
     : allItems;
   const visibleMatches = matches.slice(0, MAX_RESULTS);
@@ -224,7 +259,7 @@ export function GlobalSearch(): JSX.Element {
         onClick={openSearch}
       >
         <span aria-hidden="true">⌕</span>
-        <span>Search objects</span>
+        <span>Search objects & records</span>
         <kbd>Ctrl / ⌘ K</kbd>
       </button>
 
@@ -233,7 +268,7 @@ export function GlobalSearch(): JSX.Element {
           <button
             type="button"
             className={styles.backdrop}
-            aria-label="Close object search"
+            aria-label="Close object and record search"
             tabIndex={-1}
             onClick={() => dismiss()}
           />
@@ -243,18 +278,18 @@ export function GlobalSearch(): JSX.Element {
             className={styles.dialog}
             role="dialog"
             aria-modal="true"
-            aria-label="Search objects"
+            aria-label="Search objects and records"
             onKeyDown={onPanelKeyDown}
           >
             <label className={styles.queryLabel}>
               <span className={styles.queryGlyph} aria-hidden="true">⌕</span>
-              <span className="visually-hidden">Search by object name or ID</span>
+              <span className="visually-hidden">Search objects and records by name, ID, operation, summary or state</span>
               <input
                 ref={inputRef}
                 className={styles.query}
                 type="search"
                 value={query}
-                placeholder="Search objects by name or stable ID"
+                placeholder="Search objects and records"
                 autoComplete="off"
                 role="combobox"
                 aria-autocomplete="list"
@@ -269,7 +304,7 @@ export function GlobalSearch(): JSX.Element {
               <button
                 type="button"
                 className={styles.close}
-                aria-label="Close object search"
+                aria-label="Close object and record search"
                 onClick={() => dismiss()}
               >
                 Esc
@@ -277,9 +312,10 @@ export function GlobalSearch(): JSX.Element {
             </label>
 
             <div className={styles.status} aria-live="polite">
-              {loading ? <p>Reading observed interfaces, units and containers…</p> : null}
+              <p>Recent records only: up to 50 Runs, 100 Changes and 100 Findings (open and resolved). Older records may be excluded; returned counts are not history totals.</p>
+              {loading ? <p>Reading objects and recent records…</p> : null}
               {!loading && fullFailure ? (
-                <p role="alert">Object search is unavailable. None of the observed domains could be read.</p>
+                <p role="alert">Search is unavailable. None of the sources could be read.</p>
               ) : null}
               {!fullFailure && failed.length > 0 ? (
                 <p className={styles.partial} role="status">
@@ -289,12 +325,12 @@ export function GlobalSearch(): JSX.Element {
             </div>
 
             <div className={styles.results}>
-              {loading ? <p className={styles.state}>Loading observed objects…</p> : null}
+              {loading ? <p className={styles.state}>Loading objects and recent records…</p> : null}
               {!loading && !fullFailure && !needle && allItems.length === 0 ? (
-                <p className={styles.state}>No objects were returned by the available domains.</p>
+                <p className={styles.state}>No objects or recent records were returned by the available sources.</p>
               ) : null}
               {!loading && !fullFailure && needle && visibleMatches.length === 0 ? (
-                <p className={styles.state}>No observed objects match “{query.trim()}”.</p>
+                <p className={styles.state}>No loaded objects or records match “{query.trim()}”.</p>
               ) : null}
               <div id={`${instanceId}-results`} role="listbox" aria-label="Search results">
               {!fullFailure
@@ -306,14 +342,14 @@ export function GlobalSearch(): JSX.Element {
                       role="option"
                       tabIndex={-1}
                       aria-selected={index === selectedIndex}
-                      aria-label={`Open ${item.domain} ${item.kind} ${item.name}, ${item.id}`}
+                      aria-label={`Open ${item.domain} ${item.kind} ${item.name}, ${item.id}${item.state ? `, ${item.state}` : ''}`}
                       className={`${styles.result} ${index === selectedIndex ? styles.active : ''}`}
                       onClick={() => selectItem(item)}
                     >
                       <span className={styles.resultKind} title={item.kind}>{item.kind}</span>
                       <span className={styles.resultName} title={item.name}>{item.name}</span>
-                      <span className={styles.resultMeta} title={`${item.domain} · ${item.id}`}>
-                        {item.domain} · {item.id}
+                      <span className={styles.resultMeta} title={`${item.state ?? item.domain} · ${item.id}`}>
+                        {item.state ?? item.domain} · {item.id}
                       </span>
                     </button>
                   ))
@@ -321,7 +357,7 @@ export function GlobalSearch(): JSX.Element {
               </div>
               {!loading && !fullFailure && matches.length > MAX_RESULTS ? (
                 <p className={styles.truncated}>
-                  Showing the first {MAX_RESULTS} matches. Refine the query to see a specific object.
+                  Showing the first {MAX_RESULTS} loaded matches. Refine the query to see a specific object or record.
                 </p>
               ) : null}
             </div>
