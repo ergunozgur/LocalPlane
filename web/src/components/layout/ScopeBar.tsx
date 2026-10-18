@@ -28,7 +28,7 @@
  * that leads nowhere is worse than an absent one.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import styles from './ScopeBar.module.css';
 
 export interface ScopeTab {
@@ -38,6 +38,10 @@ export interface ScopeTab {
   /** The oxide dot on a tab whose surface holds a drifted object. */
   drift?: boolean;
   end?: boolean;
+  /** Optional explicit active state. Ordinary callers should leave this unset so NavLink
+   *  matches by pathname; the only caller that needs it is the System list, where the same
+   *  pathname carries two mutually-exclusive section filters. */
+  current?: boolean;
 }
 
 export interface Crumb {
@@ -129,26 +133,47 @@ export function ScopeBar({
             ‹
           </button>
           <div className={styles.tabs} ref={stripRef} onScroll={measure}>
-            {tabs.map((tab) => (
-              <NavLink
-                key={tab.to}
-                to={tab.to}
-                end={tab.end ?? false}
-                className={({ isActive }) =>
-                  [styles.tab, isActive ? styles.tabActive : ''].filter(Boolean).join(' ')
-                }
-              >
-                {tab.label}
-                {tab.count === undefined ? null : (
-                  <span className={styles.tabCount}>
-                    {tab.count === null ? '—' : tab.count.toLocaleString()}
-                  </span>
-                )}
-                {tab.drift ? (
-                  <span className={styles.driftDot} title="something on this surface has drifted" />
-                ) : null}
-              </NavLink>
-            ))}
+            {tabs.map((tab) => {
+              const body = (
+                <>
+                  {tab.label}
+                  {tab.count === undefined ? null : (
+                    <span className={styles.tabCount}>
+                      {tab.count === null ? '—' : tab.count.toLocaleString()}
+                    </span>
+                  )}
+                  {tab.drift ? (
+                    <span className={styles.driftDot} title="something on this surface has drifted" />
+                  ) : null}
+                </>
+              );
+              if (tab.current !== undefined) {
+                return (
+                  <Link
+                    key={tab.to}
+                    to={tab.to}
+                    className={[styles.tab, tab.current ? styles.tabActive : '']
+                      .filter(Boolean)
+                      .join(' ')}
+                    aria-current={tab.current ? 'page' : undefined}
+                  >
+                    {body}
+                  </Link>
+                );
+              }
+              return (
+                <NavLink
+                  key={tab.to}
+                  to={tab.to}
+                  end={tab.end ?? false}
+                  className={({ isActive }) =>
+                    [styles.tab, isActive ? styles.tabActive : ''].filter(Boolean).join(' ')
+                  }
+                >
+                  {body}
+                </NavLink>
+              );
+            })}
           </div>
           <button
             type="button"

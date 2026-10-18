@@ -7,7 +7,7 @@
  * ever outgrows that, the seam is this component and a `q`/`limit` parameter on the endpoint.
  */
 import { useCallback, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { endpoints } from '@/api/endpoints';
 import { useResource } from '@/hooks/useResource';
 import { Plate, PlateBody, PlateHead } from '@/components/primitives/Plate';
@@ -31,7 +31,14 @@ import {
 import styles from './SystemList.module.css';
 
 const UNIT_TYPES = ['service', 'socket', 'timer', 'target', 'mount', 'path'] as const;
+const RECOGNIZED_TYPES: Set<string> = new Set(UNIT_TYPES);
 const ACTIVE_STATES = ['active', 'inactive', 'failed', 'activating', 'deactivating'] as const;
+
+function effectiveType(params: URLSearchParams): string {
+  const raw = params.get('type');
+  if (!raw) return '';
+  return RECOGNIZED_TYPES.has(raw) ? raw : '';
+}
 
 export function SystemList(): JSX.Element {
   const { resource } = useResource(
@@ -39,9 +46,20 @@ export function SystemList(): JSX.Element {
     useCallback((signal) => endpoints.systemdUnits({ signal }), []),
   );
   const hostName = useHostName();
+  const [params, setParams] = useSearchParams();
+  const type = effectiveType(params);
   const [query, setQuery] = useState('');
-  const [type, setType] = useState<string>('');
   const [active, setActive] = useState<string>('');
+
+  const setType = useCallback(
+    (value: string) => {
+      const next = new URLSearchParams(params);
+      if (value) next.set('type', value);
+      else next.delete('type');
+      setParams(next, { replace: false });
+    },
+    [params, setParams],
+  );
 
   return (
     <ResourceView resource={resource} what="unit list" loadingLabel="Reading units…">
@@ -64,11 +82,18 @@ export function SystemList(): JSX.Element {
             <ScopeBar
               crumbs={[{ label: hostName, to: '/' }, { label: 'system' }]}
               tabs={[
-                { to: '/system', label: 'Units', count: list.count, end: true },
+                {
+                  to: '/system',
+                  label: 'Units',
+                  count: list.count,
+                  end: true,
+                  current: type !== 'service',
+                },
                 {
                   to: '/system?type=service',
                   label: 'Services',
                   count: list.units.filter((u) => u.unit_type === 'service').length,
+                  current: type === 'service',
                 },
               ]}
               observedAt={meta.fetchedAt}

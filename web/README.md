@@ -46,7 +46,8 @@ not make a console control exist.
 - **Workloads** — Docker container list/detail, provider-derived Compose-project grouping, bounded
   logs, and on-demand current statistics.
 - **System** — bounded loaded systemd units with state, enablement, relationships, and typed
-  service/socket/timer detail.
+  service/socket/timer detail; the unit-type dropdown and `/system?type=<unit-type>` filter the
+  list together, and the Units/Services section links mark the current scope.
 - **Operations** — Runs, Changes, and findings with detail views and backend-backed filters.
 - **Topology** — evidence-backed network and container relationships inside the overview.
 - **Settings** — appearance preferences, authenticated-session truth, and no invented user identity.
