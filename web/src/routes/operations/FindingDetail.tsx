@@ -10,9 +10,9 @@
  * *not comparable* — one side could not be read — and never as agreement.
  */
 import { useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { endpoints } from '@/api/endpoints';
-import { useResource } from '@/hooks/useResource';
+import type { DockerContainer, NetworkInterface, SystemdUnit } from '@/api/types';
 import { Plate, PlateBody, PlateFoot, PlateHead } from '@/components/primitives/Plate';
 import { KeyValue, KeyValueList } from '@/components/primitives/KeyValue';
 import { Tag } from '@/components/primitives/Chip';
@@ -23,6 +23,7 @@ import { ResourceView } from '@/components/states/ResourceView';
 import { PageHeader } from '../PageHeader';
 import { ScopeBar } from '@/components/layout/ScopeBar';
 import { findingComparison, findingStatus, humanise } from '@/domain/vocabulary';
+import { useResource } from '@/hooks/useResource';
 import { formatTimestamp, formatTypedValue } from '@/domain/format';
 import styles from './FindingDetail.module.css';
 
@@ -60,6 +61,18 @@ export function FindingDetail(): JSX.Element {
     `finding:${findingId}`,
     useCallback((signal) => endpoints.finding(findingId, { signal }), [findingId]),
   );
+  const { resource: interfaces } = useResource(
+    'interfaces',
+    useCallback((signal) => endpoints.interfaces({ signal }), []),
+  );
+  const { resource: containers } = useResource(
+    'containers',
+    useCallback((signal) => endpoints.containers({ signal }), []),
+  );
+  const { resource: units } = useResource(
+    'systemd-units',
+    useCallback((signal) => endpoints.systemdUnits({ signal }), []),
+  );
 
   return (
     <ResourceView resource={resource} what="finding" loadingLabel="Reading finding…">
@@ -68,6 +81,22 @@ export function FindingDetail(): JSX.Element {
         const isDrift = 'field' in evidence;
         const intended = typed(evidence['intended']);
         const observed = typed(evidence['observed']);
+        const target = (() => {
+          const matches: string[] = [];
+          if (interfaces.status === 'success' && interfaces.data.host_id === finding.host_id &&
+              interfaces.data.interfaces.some((item: NetworkInterface) => item.object_id === finding.object_id && item.kind === 'network.interface')) {
+            matches.push(`/network/${encodeURIComponent(finding.object_id)}`);
+          }
+          if (containers.status === 'success' && containers.data.host_id === finding.host_id &&
+              containers.data.containers.some((item: DockerContainer) => item.object_id === finding.object_id && item.kind === 'docker.container')) {
+            matches.push(`/workloads/${encodeURIComponent(finding.object_id)}`);
+          }
+          if (units.status === 'success' && units.data.host_id === finding.host_id &&
+              units.data.units.some((item: SystemdUnit) => item.object_id === finding.object_id && item.kind === 'systemd.unit')) {
+            matches.push(`/system/${encodeURIComponent(finding.object_id)}`);
+          }
+          return matches.length === 1 ? matches[0] : null;
+        })();
 
         return (
           <>
@@ -100,7 +129,11 @@ export function FindingDetail(): JSX.Element {
                     />
                     <KeyValueList columns="auto">
                       <KeyValue label="Object">
-                        <Value value={finding.object_name} mono />
+                        {target ? (
+                          <Link to={target} className="mono">{finding.object_name}</Link>
+                        ) : (
+                          <Value value={finding.object_name} mono />
+                        )}
                       </KeyValue>
                       <KeyValue label="Subject" hint="what within the object">
                         <Value value={finding.subject} mono />
