@@ -11714,6 +11714,53 @@
         ],
         "title": "SystemdAgentContainment"
       },
+      "SystemdIncomingReference": {
+        "properties": {
+          "source_object_id": {
+            "type": "string",
+            "title": "Source Object Id"
+          },
+          "source_canonical_id": {
+            "type": "string",
+            "title": "Source Canonical Id"
+          },
+          "source_observation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Observation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_observed_in_latest_sweep": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Observed In Latest Sweep"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/SystemdRelationship",
+            "description": "Original source-to-target relation, not an invented inverse kind."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_object_id",
+          "source_canonical_id",
+          "source_observation",
+          "source_observed_in_latest_sweep",
+          "relationship"
+        ],
+        "title": "SystemdIncomingReference"
+      },
       "SystemdJob": {
         "properties": {
           "id": {
@@ -12066,6 +12113,53 @@
           "result"
         ],
         "title": "SystemdPathFacts"
+      },
+      "SystemdReferenceContext": {
+        "properties": {
+          "host_id": {
+            "type": "string",
+            "title": "Host Id"
+          },
+          "last_inventory_sweep": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sweep"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inventory_freshness": {
+            "type": "string",
+            "title": "Inventory Freshness",
+            "description": "current | stale | unknown"
+          },
+          "excluded_ambiguous_count": {
+            "type": "integer",
+            "title": "Excluded Ambiguous Count",
+            "description": "Candidate edges excluded because the snapshot proves conflicting alias ownership."
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/SystemdIncomingReference"
+            },
+            "type": "array",
+            "title": "References",
+            "description": "Resolved/current edges from the latest inventory snapshot, joined by exact host and target object identity. Includes stale/partial source evidence; empty does not prove no dependents. Only loaded units are inventoried; unresolved targets are not joined."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "host_id",
+          "last_inventory_sweep",
+          "inventory_freshness",
+          "excluded_ambiguous_count",
+          "references"
+        ],
+        "title": "SystemdReferenceContext",
+        "description": "Stored evidence only; neither a complete live graph nor an action effect graph."
       },
       "SystemdRelationship": {
         "properties": {
@@ -12950,6 +13044,17 @@
             },
             "type": "array",
             "title": "Relationships"
+          },
+          "incoming_references": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SystemdReferenceContext"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Detail-only investigation context; null means not projected."
           },
           "service": {
             "anyOf": [

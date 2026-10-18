@@ -773,6 +773,34 @@ class SystemdRelationship(Model):
     source: str
 
 
+class SystemdIncomingReference(Model):
+    source_object_id: str
+    source_canonical_id: str
+    source_observation: Observation | None
+    source_observed_in_latest_sweep: bool | None
+    relationship: SystemdRelationship = Field(
+        description="Original source-to-target relation, not an invented inverse kind."
+    )
+
+
+class SystemdReferenceContext(Model):
+    """Stored evidence only; neither a complete live graph nor an action effect graph."""
+
+    host_id: str
+    last_inventory_sweep: Sweep | None
+    inventory_freshness: str = Field(description="current | stale | unknown")
+    excluded_ambiguous_count: int = Field(
+        description="Candidate edges excluded because the snapshot proves conflicting alias ownership."
+    )
+    references: list[SystemdIncomingReference] = Field(
+        description=(
+            "Resolved/current edges from the latest inventory snapshot, joined by exact host and target object identity. "
+            "Includes stale/partial source evidence; empty does not prove no dependents. "
+            "Only loaded units are inventoried; unresolved targets are not joined."
+        )
+    )
+
+
 class SystemdJob(Model):
     id: int
 
@@ -906,6 +934,9 @@ class SystemdUnit(Model):
     )
     timestamps: dict[str, int | None]
     relationships: list[SystemdRelationship]
+    incoming_references: SystemdReferenceContext | None = Field(
+        default=None, description="Detail-only investigation context; null means not projected."
+    )
     service: SystemdServiceFacts | None = None
     socket: SystemdSocketFacts | None = None
     timer: SystemdTimerFacts | None = None

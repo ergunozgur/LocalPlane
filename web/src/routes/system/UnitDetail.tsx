@@ -1,10 +1,8 @@
 /**
  * One systemd unit, in the shared object workspace.
  *
- * The relationship list is the reason this page is worth having. `Requires`, `After`,
- * `BoundBy` and the rest are what turn "restart this" from a button into a question about
- * what else moves, and a unit on this host carries up to 187 of them. It gets its own tab
- * rather than a scroll position.
+ * Relationships retain the manager's declared direction and source evidence. They are
+ * investigation links, not a prediction of what an operation would affect.
  *
  * This is where the assembly rule earns its keep: a `.service` has no Socket tab and a
  * `.socket` has no Timer tab, because those are properties of one unit rather than sections
@@ -41,6 +39,10 @@ import styles from './UnitDetail.module.css';
 
 export function UnitDetail(): JSX.Element {
   const { objectId = '' } = useParams();
+  return <UnitDetailContent key={objectId} objectId={objectId} />;
+}
+
+function UnitDetailContent({ objectId }: { objectId: string }): JSX.Element {
   const [relationFilter, setRelationFilter] = useState('');
 
   const { resource: unit } = useResource(
@@ -119,15 +121,16 @@ export function UnitDetail(): JSX.Element {
           {
             id: 'relationships',
             label: 'Relationships',
-            count: data.relationships.length,
+            count: data.relationships.length + (data.incoming_references?.references.length ?? 0),
             render: () => (
               <ObjectColumns
                 main={
+                  <>
                   <Plate>
                     <PlateHead
-                      title="Relationships"
+                      title="References from this unit"
                       level={3}
-                      meta="what else moves when this one does"
+                      meta="declared source → target relations"
                     />
                     <PlateBody>
                       <label className={styles.filterRow}>
@@ -137,13 +140,22 @@ export function UnitDetail(): JSX.Element {
                           className={styles.input}
                           value={relationFilter}
                           onChange={(event) => setRelationFilter(event.target.value)}
-                          placeholder="Filter by kind or unit…"
+                          placeholder="Filter both directions by kind or unit…"
                         />
                       </label>
                       <RelationshipTable relationships={data.relationships} filter={relationFilter} />
+                      <p className={styles.agentNote}>Stored observations, not an action effect graph or proof of safety.</p>
                     </PlateBody>
                   </Plate>
+                  <Plate>
+                    <PlateHead title="Referenced by" level={3} meta="source unit → this unit · original relation kind" />
+                    <PlateBody>
+                      <IncomingReferences context={data.incoming_references} filter={relationFilter} />
+                    </PlateBody>
+                  </Plate>
+                  </>
                 }
+                side={<ObservationPlate data={data} />}
               />
             ),
           },
@@ -391,9 +403,10 @@ export function UnitDetail(): JSX.Element {
 function ObservationPlate({ data }: { data: import('@/api/types').SystemdUnit }): JSX.Element {
   return (
     <Plate>
-      <PlateHead title="Observation" level={3} meta="who read this, and when" />
+      <PlateHead title="Observation" level={3} meta="latest unit detail · outgoing reference evidence" />
       <PlateBody>
         {data.observation ? (
+          <>
           <KeyValueList>
             <KeyValue label="Freshness">
               <StatusPill semantic={freshnessOf(data.observation.freshness)} size="sm" />
@@ -402,6 +415,7 @@ function ObservationPlate({ data }: { data: import('@/api/types').SystemdUnit })
               <Value value={data.observation.provider} mono />
             </KeyValue>
             <KeyValue label="Method"><Value value={data.observation.method} mono /></KeyValue>
+            <KeyValue label="Fidelity"><Value value={data.observation.fidelity} mono /></KeyValue>
             <KeyValue label="Observed at">
               <Value value={formatTimestamp(data.observation.observed_at)} />
             </KeyValue>
@@ -415,12 +429,68 @@ function ObservationPlate({ data }: { data: import('@/api/types').SystemdUnit })
               />
             </KeyValue>
           </KeyValueList>
+          <Gaps items={data.observation.gaps} label="Observation gaps" />
+          </>
         ) : (
           <Empty title="Never observed" explanation="Nothing has read this unit." />
         )}
       </PlateBody>
     </Plate>
   );
+}
+
+function IncomingReferences({ context, filter }: {
+  context: import('@/api/types').SystemdUnit['incoming_references'];
+  filter: string;
+}): JSX.Element {
+  if (!context) return <Empty title="Incoming references unavailable" explanation="No inventory projection was supplied; dependents are unknown." />;
+  const sweep = context.last_inventory_sweep;
+  const needle = filter.trim().toLowerCase();
+  const rows = context.references.filter((row) =>
+    [row.source_canonical_id, row.relationship.kind, row.relationship.group].some((value) => value.toLowerCase().includes(needle)),
+  );
+  return <>
+    <p className={styles.agentNote}>
+      Latest loaded-unit inventory snapshot only; outgoing detail may be newer. Unloaded units,
+      unresolved targets and unreported relationship properties are not covered. Even an ok
+      inventory is not a complete dependency graph. No matches does not prove no dependents.
+    </p>
+    <KeyValueList columns="auto">
+      <KeyValue label="Inventory status"><Value value={sweep?.status} reason="no inventory sweep recorded" mono /></KeyValue>
+      <KeyValue label="Inventory freshness"><StatusPill semantic={freshnessOf(context.inventory_freshness)} size="sm" /></KeyValue>
+      <KeyValue label="Inventory completed"><Value value={formatTimestamp(sweep?.completed_at)} /></KeyValue>
+      <KeyValue label="Observed units"><Value value={sweep?.object_count} /></KeyValue>
+    </KeyValueList>
+    <Gaps items={sweep?.issues.map((issue) => `${issue.source}: ${issue.code} — ${issue.message}`) ?? []} label="Inventory issues" />
+    {context.excluded_ambiguous_count > 0 ? <p role="note">{context.excluded_ambiguous_count} candidate references excluded: conflicting alias ownership in this snapshot.</p> : null}
+    <div className={styles.relationScroll}>
+      <DataTable
+        caption="Incoming unit references"
+        rows={rows}
+        rowKey={(row) => `${row.source_object_id}:${row.relationship.kind}:${row.relationship.target_unit}`}
+        emptyState={<Empty title={needle ? 'No incoming reference matches' : 'No stored incoming references'} explanation="Only resolved references in this inventory snapshot can be shown. Dependents outside this evidence remain unknown." />}
+        columns={[
+          { key: 'source', header: 'Source unit', render: (row) => <Link className="mono" to={`/system/${encodeURIComponent(row.source_object_id)}?tab=relationships`}>{row.source_canonical_id}</Link> },
+          { key: 'kind', header: 'Relation to this unit', render: (row) => <span className="mono">{row.relationship.kind}</span> },
+          { key: 'group', header: 'Group', render: (row) => <Value value={row.relationship.group} mono /> },
+          { key: 'evidence', header: 'Source observation', render: (row) => <>
+            <StatusPill semantic={freshnessOf(row.source_observation?.freshness)} size="sm" />
+            <div><Value value={formatTimestamp(row.source_observation?.observed_at)} /></div>
+            <div><Value value={row.source_observation?.fidelity} mono /></div>
+            <Gaps items={row.source_observation?.gaps ?? []} label="Source gaps" />
+            <details><summary>Evidence</summary><KeyValueList>
+              <KeyValue label="Provider"><Value value={row.source_observation?.provider} mono /></KeyValue>
+              <KeyValue label="Method"><Value value={row.source_observation?.method} mono /></KeyValue>
+              <KeyValue label="Observation"><Value value={row.source_observation?.observation_id} mono /></KeyValue>
+              <KeyValue label="Sweep"><Value value={row.source_observation?.sweep_id} mono /></KeyValue>
+              <KeyValue label="Declared target"><Value value={row.relationship.target_unit} mono /></KeyValue>
+              <KeyValue label="Relation source"><Value value={row.relationship.source} mono /></KeyValue>
+            </KeyValueList></details>
+          </> },
+        ]}
+      />
+    </div>
+  </>;
 }
 
 function RelationshipTable({
@@ -451,11 +521,11 @@ function RelationshipTable({
         rowKey={(row) => `${row.kind}:${row.target_unit}`}
         emptyState={
           <Empty
-            title={needle ? 'No relationship matches' : 'No relationships'}
+            title={needle ? 'No relationship matches' : 'No stored outgoing references'}
             explanation={
               needle
                 ? 'No declared relationship matches this filter.'
-                : 'The manager reported no dependency relationships for this unit.'
+                : 'No outgoing references in this stored observation. Missing or partial evidence does not prove absence.'
             }
           />
         }
@@ -475,7 +545,7 @@ function RelationshipTable({
             header: 'Target unit',
             render: (row) =>
               row.target_object_id ? (
-                <Link to={`/system/${row.target_object_id}`} className="mono">
+                <Link to={`/system/${encodeURIComponent(row.target_object_id)}`} className="mono">
                   {row.canonical_target ?? row.target_unit}
                 </Link>
               ) : (

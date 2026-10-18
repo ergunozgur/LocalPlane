@@ -60,6 +60,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from localplane import __version__
 from localplane.backend.agent_client import AgentError
 from localplane.backend.api import schemas, views
+from localplane.backend.api.systemd_references import inventory_sources
 from localplane.backend.api.transport import request_connection_of, transport_of
 from localplane.backend.auth import (
     SESSION_COOKIE,
@@ -653,12 +654,18 @@ def get_systemd_unit(object_id: str, request: Request) -> schemas.SystemdUnit:
         record.host_id, OBJECT_KIND_SYSTEMD_UNIT
     )
     triggers = views.systemd_trigger_context(estate, current_members)
-    return views.systemd_unit_view(
+    unit = views.systemd_unit_view(
         record,
         context.settings.freshness_ttl_s,
         current_members if sweep is not None else None,
         active_socket_triggers=triggers.get(record.object_id, ()),
     )
+    references = views.systemd_reference_context(
+        record, inventory_sources(context.database, estate, sweep), sweep,
+        current_members if sweep is not None else None,
+        context.settings.freshness_ttl_s,
+    )
+    return unit.model_copy(update={"incoming_references": references})
 
 
 @router.post(

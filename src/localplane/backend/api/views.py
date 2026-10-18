@@ -426,6 +426,67 @@ def systemd_trigger_context(
     return {object_id: tuple(sorted(names)) for object_id, names in triggered.items()}
 
 
+def systemd_reference_context(
+    target: ObjectRecord,
+    estate: Sequence[ObjectRecord],
+    sweep: SweepRecord | None,
+    members: AbstractSet[str] | None,
+    ttl_s: float,
+) -> schemas.SystemdReferenceContext:
+    references = []
+    owners: dict[str, set[str]] = {}
+    for source in estate:
+        if source.host_id != target.host_id or source.kind != target.kind:
+            continue
+        facts = source.observation.facts if source.observation else {}
+        for name in [facts.get("canonical_id"), *(facts.get("names") or [])]:
+            if isinstance(name, str):
+                owners.setdefault(name, set()).add(source.object_id)
+    ambiguous = {name for name, ids in owners.items() if len(ids) > 1}
+    excluded_ambiguous = 0
+    for source in estate:
+        if source.host_id != target.host_id or source.kind != target.kind:
+            continue
+        facts = source.observation.facts if source.observation else {}
+        matching = [
+            relation for relation in facts.get("relationships") or []
+            if relation.get("resolution") == "resolved"
+            and relation.get("estate_state") == "current"
+            and relation.get("target_object_id") == target.object_id
+        ]
+        excluded_ambiguous += sum(
+            relation.get("target_unit") in ambiguous for relation in matching
+        )
+        matching = [r for r in matching if r.get("target_unit") not in ambiguous]
+        if not matching:
+            continue
+        source_view = systemd_unit_view(source, ttl_s, members)
+        references.extend(
+            schemas.SystemdIncomingReference(
+                source_object_id=source.object_id,
+                source_canonical_id=source_view.canonical_id,
+                source_observation=source_view.observation,
+                source_observed_in_latest_sweep=source_view.observed_in_latest_sweep,
+                relationship=schemas.SystemdRelationship(**relation),
+            )
+            for relation in matching
+        )
+    references.sort(key=lambda row: (
+        row.source_canonical_id, row.source_object_id,
+        row.relationship.kind, row.relationship.target_unit,
+    ))
+    inventory = sweep_view(sweep) if sweep else None
+    return schemas.SystemdReferenceContext(
+        host_id=target.host_id,
+        excluded_ambiguous_count=excluded_ambiguous,
+        last_inventory_sweep=inventory,
+        inventory_freshness=(
+            derive_freshness(inventory.completed_at, ttl_s)[0] if inventory else "unknown"
+        ),
+        references=references,
+    )
+
+
 def systemd_unit_view(
     record: ObjectRecord,
     ttl_s: float,
