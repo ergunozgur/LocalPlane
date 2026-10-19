@@ -154,6 +154,83 @@
         }
       }
     },
+    "/api/v1/storage/filesystems/observe": {
+      "post": {
+        "tags": [
+          "storage"
+        ],
+        "summary": "Observe Filesystems",
+        "description": "Read-only host observation, on demand; no retention and no caller-selected paths.",
+        "operationId": "observe_filesystems_api_v1_storage_filesystems_observe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/StorageReadRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageObservation"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/status": {
       "get": {
         "tags": [
@@ -11492,6 +11569,258 @@
           "tx_dropped"
         ],
         "title": "Statistics"
+      },
+      "StorageCounters": {
+        "properties": {
+          "total": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,38})$",
+            "title": "Total"
+          },
+          "used": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,38})$",
+            "title": "Used"
+          },
+          "free": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,38})$",
+            "title": "Free"
+          },
+          "available": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,38})$",
+            "title": "Available"
+          },
+          "reserved": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,38})$",
+            "title": "Reserved"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "total",
+          "used",
+          "free",
+          "available",
+          "reserved"
+        ],
+        "title": "StorageCounters"
+      },
+      "StorageMount": {
+        "properties": {
+          "mount_id": {
+            "type": "integer",
+            "exclusiveMaximum": 9007199254740992,
+            "exclusiveMinimum": 0,
+            "title": "Mount Id"
+          },
+          "parent_id": {
+            "type": "integer",
+            "exclusiveMaximum": 9007199254740992,
+            "minimum": 0,
+            "title": "Parent Id"
+          },
+          "mountpoint": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Mountpoint"
+          },
+          "root": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Root"
+          },
+          "filesystem": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Filesystem"
+          },
+          "device": {
+            "type": "string",
+            "pattern": "^[0-9]{1,10}:[0-9]{1,10}$",
+            "title": "Device"
+          },
+          "read_only": {
+            "type": "boolean",
+            "title": "Read Only"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "unsupported",
+              "unavailable",
+              "changed"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Reason"
+          },
+          "bytes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorageCounters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inodes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorageCounters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inode_reason": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Inode Reason"
+          },
+          "backing_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backing Name"
+          },
+          "backing_reason": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Backing Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mount_id",
+          "parent_id",
+          "mountpoint",
+          "root",
+          "filesystem",
+          "device",
+          "read_only",
+          "status",
+          "reason",
+          "bytes",
+          "inodes",
+          "inode_reason",
+          "backing_name",
+          "backing_reason"
+        ],
+        "title": "StorageMount"
+      },
+      "StorageObservation": {
+        "properties": {
+          "observation_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$",
+            "title": "Observation Id"
+          },
+          "observed_at": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Observed At"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^mnt:\\[[0-9]+\\]$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unavailable",
+              "busy"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Reason"
+          },
+          "mounts": {
+            "items": {
+              "$ref": "#/components/schemas/StorageMount"
+            },
+            "type": "array",
+            "maxItems": 128,
+            "title": "Mounts"
+          },
+          "metadata_limit_bytes": {
+            "type": "integer",
+            "const": 1048576,
+            "title": "Metadata Limit Bytes"
+          },
+          "mount_limit": {
+            "type": "integer",
+            "const": 128,
+            "title": "Mount Limit"
+          },
+          "response_limit_bytes": {
+            "type": "integer",
+            "const": 524288,
+            "title": "Response Limit Bytes"
+          },
+          "collection_limit_ms": {
+            "type": "integer",
+            "const": 3000,
+            "title": "Collection Limit Ms"
+          },
+          "work_limit_ms": {
+            "type": "integer",
+            "const": 500,
+            "title": "Work Limit Ms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "observation_id",
+          "observed_at",
+          "namespace",
+          "status",
+          "reason",
+          "mounts",
+          "metadata_limit_bytes",
+          "mount_limit",
+          "response_limit_bytes",
+          "collection_limit_ms",
+          "work_limit_ms"
+        ],
+        "title": "StorageObservation"
+      },
+      "StorageReadRequest": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StorageReadRequest"
       },
       "Sweep": {
         "properties": {

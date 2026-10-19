@@ -1975,10 +1975,12 @@ def test_the_agent_names_everything_it_has_that_can_change_anything(drifted: Est
         "systemd.units.observe",
         "systemd.service.lifecycle",
         "systemd.service.lifecycle_context.observe",
+        "storage.filesystems.observe",
     }
     by_name = {c["capability"]: c for c in listed}
     assert by_name[CAPABILITY_SET_MTU]["status"] == "unavailable"
     assert set(hello["agent"]["methods"]) == {
+        "storage.observe_filesystems",
         "agent.hello",
         "capabilities.list",
         "host.identify",

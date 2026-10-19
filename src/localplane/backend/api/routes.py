@@ -53,12 +53,15 @@ privileged helper: an attempt to reach any of them fails the only way it can, wi
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, Security
+from pydantic import ValidationError
 
 from localplane import __version__
 from localplane.backend.agent_client import AgentError
+from localplane.backend.api.storage_schemas import StorageObservation, StorageReadRequest
 from localplane.backend.api import schemas, views
 from localplane.backend.api.systemd_references import inventory_sources
 from localplane.backend.api.transport import request_connection_of, transport_of
@@ -98,6 +101,7 @@ from localplane.protocol.wire import (
     DOCKER_LOG_LINES_MAX,
     ErrorCode,
 )
+from localplane.protocol.storage import OUTPUT_BYTES
 
 session_router = APIRouter(prefix="/api/v1")
 router = APIRouter(
@@ -135,6 +139,23 @@ def _status_for(error: AgentError) -> int:
 
 def _context(request: Request) -> AppContext:
     return request.app.state.context
+
+
+@router.post("/storage/filesystems/observe", response_model=StorageObservation, tags=["storage"])
+def observe_filesystems(request: Request, body: StorageReadRequest | None = None) -> StorageObservation:
+    """Read-only host observation, on demand; no retention and no caller-selected paths."""
+    if request.query_params:
+        raise HTTPException(status_code=400, detail={"code": "invalid_params", "message": "This observation accepts no query parameters.", "detail": {}})
+    try:
+        answer = _context(request).client.observe_filesystems()
+        if len(json.dumps(answer, ensure_ascii=True).encode("utf-8")) > OUTPUT_BYTES:
+            raise HTTPException(status_code=502, detail={"code": "storage_response_too_large", "message": "Filesystem evidence exceeded its response bound.", "detail": {}})
+        return StorageObservation.model_validate(answer)
+    except AgentError as exc:
+        status = 503 if exc.code == ErrorCode.UNSUPPORTED_METHOD else _status_for(exc)
+        raise HTTPException(status_code=status, detail=exc.as_dict()) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=502, detail={"code": "malformed_storage_evidence", "message": "The agent returned invalid filesystem evidence.", "detail": {}}) from exc
 
 
 def _now() -> datetime:

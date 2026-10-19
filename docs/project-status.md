@@ -24,11 +24,12 @@ and questions that remain unresolved.
 | Linux networking | **CURRENT** | Observation, provider evidence, management/intent, reconciliation, MTU plans and guarded execution |
 | Docker | **CURRENT** | Container observation, bounded logs/current stats, and start/stop/restart through the Engine API |
 | systemd | **CURRENT** | Bounded loaded-unit observation and eligible service start/stop/restart through D-Bus |
+| Storage pressure | **CURRENT** | Transient mounted filesystem byte/inode availability, exact mount evidence and immediate kernel block backing; ext4/xfs only in the agent mount namespace |
 | Runs and Changes | **CURRENT** | Immutable previews, confirmation, typed apply, fresh verification, and durable recovery holds |
 | Operator Console | **CURRENT** | Observation, cross-domain search, evidence-backed Relationships tabs, and a limited authenticated systemd service Composer |
 | OpenAPI integration | **CURRENT** | The committed snapshot and generated TypeScript types reflect this integrated backend tree |
 | Relationship model | **CURRENT** | Object-scoped Relationships tabs on network interfaces and Docker containers show only identifier-backed Docker network, container, master-interface and guarded management-path joins; unread streams and unresolved targets stay explicit |
-| Host explorer breadth | **FOUNDATION** | Object workspaces and provider seams exist; files, storage, packages, users, processes, and general logs are not implemented |
+| Host explorer breadth | **FOUNDATION** | Object workspaces and provider seams exist; files, broader storage management/topology, packages, users, processes, and general logs are not implemented |
 | Authentication and browser sessions | **CURRENT** | One local master Bearer credential, derived 12-hour non-sliding in-memory browser sessions, logout, and router-level enforcement |
 | Cookie Origin/CSRF boundary | **CURRENT** | Cookie-authenticated unsafe requests require exact accepted Origin; Bearer requests are exempt |
 | Frontend write workflow | **CURRENT** | Loaded systemd services: plan start/stop/restart, inspect immutable preview, confirm, apply, inspect outcome and cancel before write; other operation controls remain absent |
@@ -38,6 +39,44 @@ and questions that remain unresolved.
 | Broader infrastructure control plane | **FUTURE** | More systems, networks, workloads, applications, and providers are direction, not current capability |
 | Unified metrics, logs, and historical replay | **FUTURE** | Bounded container samples and operational records exist; general series, log aggregation, and replay do not |
 | Fleet and automation | **FUTURE** | Not implemented and not a near-term commitment stated by this document |
+
+## Mounted filesystem pressure
+
+Storage answers which listed mount has little or no usable byte or inode capacity, with
+independent available percentages, sorting/filtering, exact counters, reserved-space accounting
+and immediate backing-device evidence. It samples on entry and explicit refresh through the
+authenticated read-only `POST /api/v1/storage/filesystems/observe`; cookie Origin checks still
+apply. The agent method is `storage.observe_filesystems`. Neither accepts caller paths.
+
+Only ext4/xfs with supported ancestors are sampled. Other filesystems remain visible with
+unknown counters. Btrfs may span devices; its topology is not inferred. The namespace is the
+agent's, not necessarily the host's. Observation IDs scope mount IDs and selection resets on a
+new response; paths and reusable kernel IDs are not durable storage objects. There is no
+database retention, host total across bind mounts, directory scan, cleanup, SMART, backup,
+health, growth or root-cause claim. Device names come only from a kernel major:minor sysfs join;
+device-mapper/RAID lower topology is not enumerated and missing backing remains unknown.
+
+Collection reads at most 1 MiB per mount table, displays at most 128 rows, limits framed output
+to 512 KiB, allows 500 ms per sampled mount and a 3-second total parent collection wait. Paths
+have at most 64 components and 4096 characters. A disposable child pins components with O_PATH,
+rejects symlinks/unsupported ancestors, verifies fdinfo mount ID and device against the exact
+current mount table before/after statistics, and revalidates namespace/table evidence. This
+detects changes; it is not a namespace freeze or proof of zero possible path-resolution race.
+Timeout returns unavailable, not partial guessed counters. One process-wide slot remains held
+until actual child exit/reap; SIGKILL does not guarantee cancellation of blocked kernel I/O.
+Concurrent requests and retries while held return busy without replacement work.
+
+Capability discovery reports the mechanism as degraded with filesystem access unverified;
+startup does not probe mounted filesystems. Actual per-request coverage, denial, unsupported
+ancestors, malformed/truncated evidence and refresh failure remain explicit. Decimal strings
+preserve exact kernel counters across the API; zero/sentinel/inconsistent inode accounting is
+unknown, not zero available inodes.
+
+Synthetic validation uses `tests/storage_fixture.py` and an injected storage provider. Its
+`FixtureStorageService` can also serve a disposable agent socket for rendered development
+checks, with backend startup observation disabled and normal authentication retained. It
+performs no startup host probes and refuses other methods. There is no production fixture
+switch or authentication bypass.
 
 ## Object and operational-record search
 

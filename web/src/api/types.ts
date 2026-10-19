@@ -18,6 +18,9 @@ export type Capabilities = S['Capabilities'];
 export type Capability = S['Capability'];
 export type ErrorBody = S['ErrorBody'];
 export type SessionStatus = S['SessionStatus'];
+export type StorageObservation = S['StorageObservation'];
+export type StorageMount = S['StorageMount'];
+export type StorageCounters = S['StorageCounters'];
 
 /* -------------------------------------------------------------------------- observation */
 export type Sweep = S['Sweep'];

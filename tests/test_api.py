@@ -260,6 +260,7 @@ def test_capabilities_are_live_and_carry_their_status(client: TestClient):
     assert body["source"] == "live"
     capabilities = {c["capability"]: c for c in body["capabilities"]}
     assert set(capabilities) == {
+        "storage.filesystems.observe",
         "host.observe",
         "network.observe",
         "network.providers.observe",
@@ -312,6 +313,7 @@ def test_capabilities_fall_back_to_what_was_recorded_and_say_so(
         assert body["source"] == "recorded"
         assert body["error"]["code"] == "agent_unavailable"
         assert {c["capability"] for c in body["capabilities"]} == {
+            "storage.filesystems.observe",
             "host.observe",
             "network.observe",
             "network.providers.observe",
@@ -487,6 +489,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
     assert "Exactly one endpoint" not in description
     paths = document["paths"]
     assert set(paths) == {
+        "/api/v1/storage/filesystems/observe",
         "/api/v1/session",
         "/api/v1/status",
         "/api/v1/host",
@@ -535,7 +538,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
 
 
 def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
-    """Twenty endpoints are not exclusively a `GET`, and exactly two can change the host.
+    """Twenty-one endpoints are not exclusively a `GET`, and exactly two can change the host.
 
     Most of them change nothing at all. **Four read the host and record or return what
     they saw** — the interface sweep, container sweep, systemd sweep, and management-path
@@ -580,7 +583,8 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
     exchanges the master Bearer credential for a derived browser session; its `DELETE`
     revokes only that browser session. Neither operation grants host-write authority.
 
-    The document lists exactly these twenty so a twenty-first cannot appear unnoticed, and
+    Storage observation is the twenty-first: a bounded filesystem read with no retention.
+    The document lists exactly these twenty-one so another cannot appear unnoticed, and
     the assertion is an equality rather than a containment for that reason.
 
     There is still deliberately no `/execute`, no `/operations/{name}/execute`, no generic
@@ -595,6 +599,7 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
         if set(methods) - {"get"}
     }
     assert non_get == {
+        "/api/v1/storage/filesystems/observe": ["post"],
         "/api/v1/session": ["delete", "get", "post"],
         "/api/v1/network/observations/refresh": ["post"],
         "/api/v1/docker/containers/observations/refresh": ["post"],

@@ -63,6 +63,7 @@ class CapabilityDefinition(NamedTuple):
 
 
 CAPABILITY_HOST_OBSERVE: Final = "host.observe"
+CAPABILITY_STORAGE_OBSERVE: Final = "storage.filesystems.observe"
 CAPABILITY_NETWORK_OBSERVE: Final = "network.observe"
 CAPABILITY_NETWORK_PROVIDERS_OBSERVE: Final = "network.providers.observe"
 CAPABILITY_NETWORK_ROUTE_OBSERVE: Final = "network.route.observe"
@@ -77,6 +78,12 @@ CAPABILITY_SYSTEMD_SERVICE_LIFECYCLE_CONTEXT_OBSERVE: Final = (
 )
 
 CAPABILITIES: Final[dict[str, CapabilityDefinition]] = {
+    CAPABILITY_STORAGE_OBSERVE: CapabilityDefinition(
+        capability=CAPABILITY_STORAGE_OBSERVE,
+        version=1,
+        summary="Bounded on-demand mounted filesystem bytes/inodes in the agent namespace. Read-only; ext4/xfs only.",
+        mutating=False,
+    ),
     CAPABILITY_HOST_OBSERVE: CapabilityDefinition(
         capability=CAPABILITY_HOST_OBSERVE,
         version=1,

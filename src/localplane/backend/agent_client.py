@@ -93,6 +93,9 @@ class AgentClient:
     def observe_providers(self) -> dict[str, Any]:
         return self.call(Method.NETWORK_OBSERVE_PROVIDERS)
 
+    def observe_filesystems(self) -> dict[str, Any]:
+        return self.call(Method.STORAGE_OBSERVE_FILESYSTEMS)
+
     def observe_route(self, destination: str) -> dict[str, Any]:
         """Ask the kernel which route it would use to reach one address.
 

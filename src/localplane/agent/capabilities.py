@@ -6,6 +6,9 @@ in earnest, so ``available`` means "this was tried and it answered", ``degraded`
 "it answered with less than the full evidence, and here is what is missing", and
 ``unavailable`` means "do not ask".
 
+Filesystem discovery is deliberately mechanism-only and degraded: its potentially blocking
+access is tested only by the bounded explicit observation, never during startup/handshake.
+
 The backend is expected to treat an absent capability and an unavailable one identically,
 and to treat a degraded one as usable but incomplete.
 
@@ -20,6 +23,8 @@ it is not capability degradation.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -62,6 +67,7 @@ from localplane.protocol.capabilities import (
     CAPABILITY_DOCKER_CONTAINER_LIFECYCLE,
     CAPABILITY_DOCKER_CONTAINERS_OBSERVE,
     CAPABILITY_HOST_OBSERVE,
+    CAPABILITY_STORAGE_OBSERVE,
     CAPABILITY_NETWORK_INTERFACE_MTU_GUARD,
     CAPABILITY_NETWORK_INTERFACE_SET_MTU,
     CAPABILITY_NETWORK_OBSERVE,
@@ -131,6 +137,7 @@ def discover_capabilities(
     # the closed reader seam directly.
     runtime_attestation = runtime_attestation_reader or DockerDirectAttestationReader()
     return (
+        _probe_storage(),
         _probe_host_observe(Path(root)),
         _probe_network_observe(Path(sysfs_net), runner),
         _probe_network_providers_observe(runner, docker_socket),
@@ -140,6 +147,18 @@ def discover_capabilities(
         *_probe_docker(docker_socket, docker_provider),
         _probe_systemd(systemd),
         *_probe_systemd_lifecycle(systemd, socket_diag, runtime_attestation),
+    )
+
+
+def _probe_storage() -> DiscoveredCapability:
+    # This checks the mechanism only. Never stat mounted filesystems during startup
+    # or a capabilities handshake. Access and coverage are established on explicit read.
+    supported = sys.platform == "linux" and hasattr(os, "O_PATH") and hasattr(os, "fstatvfs")
+    return _capability(
+        CAPABILITIES[CAPABILITY_STORAGE_OBSERVE],
+        CapabilityStatus.DEGRADED if supported else CapabilityStatus.UNAVAILABLE,
+        reason="filesystem_access_unverified" if supported else "mechanism_unsupported",
+        detail={"scope": "agent mount namespace", "sampling": "on demand; ext4/xfs only"},
     )
 
 

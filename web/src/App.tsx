@@ -1,8 +1,8 @@
 /**
  * Routes.
  *
- * Five surfaces plus settings, each with a deep-linkable detail route so an operator can send
- * somebody a link to a unit, an interface, a run or a change.
+ * Operational surfaces plus settings. Durable objects have deep-linkable detail routes;
+ * transient filesystem selection stays scoped to its observation.
  */
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
@@ -20,6 +20,7 @@ import { WorkloadRuntime } from '@/routes/workloads/WorkloadRuntime';
 import { RunDetail } from '@/routes/operations/RunDetail';
 import { ChangeDetail } from '@/routes/operations/ChangeDetail';
 import { Settings } from '@/routes/Settings';
+import { Storage } from '@/routes/storage/Storage';
 import { NotFound } from '@/routes/NotFound';
 
 export function App(): JSX.Element {
@@ -36,6 +37,7 @@ export function App(): JSX.Element {
         <Route path="workloads/:objectId" element={<WorkloadDetail />} />
 
         <Route path="system" element={<SystemList />} />
+        <Route path="storage" element={<Storage />} />
         <Route path="system/:objectId" element={<UnitDetail />} />
 
         <Route path="operations" element={<Operations />} />

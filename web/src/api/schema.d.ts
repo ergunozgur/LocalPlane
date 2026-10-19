@@ -23,6 +23,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/storage/filesystems/observe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Observe Filesystems
+         * @description Read-only host observation, on demand; no retention and no caller-selected paths.
+         */
+        post: operations["observe_filesystems_api_v1_storage_filesystems_observe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/status": {
         parameters: {
             query?: never;
@@ -4916,6 +4936,96 @@ export interface components {
             /** Tx Dropped */
             tx_dropped: number | null;
         };
+        /** StorageCounters */
+        StorageCounters: {
+            /** Total */
+            total: string;
+            /** Used */
+            used: string;
+            /** Free */
+            free: string;
+            /** Available */
+            available: string;
+            /** Reserved */
+            reserved: string;
+        };
+        /** StorageMount */
+        StorageMount: {
+            /** Mount Id */
+            mount_id: number;
+            /** Parent Id */
+            parent_id: number;
+            /** Mountpoint */
+            mountpoint: string;
+            /** Root */
+            root: string;
+            /** Filesystem */
+            filesystem: string;
+            /** Device */
+            device: string;
+            /** Read Only */
+            read_only: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "observed" | "unsupported" | "unavailable" | "changed";
+            /** Reason */
+            reason: string;
+            bytes: components["schemas"]["StorageCounters"] | null;
+            inodes: components["schemas"]["StorageCounters"] | null;
+            /** Inode Reason */
+            inode_reason: string;
+            /** Backing Name */
+            backing_name: string | null;
+            /** Backing Reason */
+            backing_reason: string;
+        };
+        /** StorageObservation */
+        StorageObservation: {
+            /** Observation Id */
+            observation_id: string;
+            /** Observed At */
+            observed_at: string;
+            /** Namespace */
+            namespace: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "complete" | "partial" | "unavailable" | "busy";
+            /** Reason */
+            reason: string;
+            /** Mounts */
+            mounts: components["schemas"]["StorageMount"][];
+            /**
+             * Metadata Limit Bytes
+             * @constant
+             */
+            metadata_limit_bytes: 1048576;
+            /**
+             * Mount Limit
+             * @constant
+             */
+            mount_limit: 128;
+            /**
+             * Response Limit Bytes
+             * @constant
+             */
+            response_limit_bytes: 524288;
+            /**
+             * Collection Limit Ms
+             * @constant
+             */
+            collection_limit_ms: 3000;
+            /**
+             * Work Limit Ms
+             * @constant
+             */
+            work_limit_ms: 500;
+        };
+        /** StorageReadRequest */
+        StorageReadRequest: Record<string, never>;
         /** Sweep */
         Sweep: {
             /** Sweep Id */
@@ -5572,6 +5682,57 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observe_filesystems_api_v1_storage_filesystems_observe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StorageReadRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageObservation"];
+                };
             };
             /** @description Unauthorized */
             401: {

@@ -61,6 +61,7 @@ class Method(StrEnum):
     AGENT_HELLO = "agent.hello"
     HOST_IDENTIFY = "host.identify"
     CAPABILITIES_LIST = "capabilities.list"
+    STORAGE_OBSERVE_FILESYSTEMS = "storage.observe_filesystems"
     NETWORK_OBSERVE_INTERFACES = "network.observe_interfaces"
     NETWORK_OBSERVE_PROVIDERS = "network.observe_providers"
     NETWORK_OBSERVE_ROUTE = "network.observe_route"
