@@ -25,7 +25,7 @@ import { GlobalSearch } from './GlobalSearch';
 import styles from './AppShell.module.css';
 
 /**
- * The five surfaces.
+ * The implemented surfaces.
  *
  * Ordered as the workflow reads: see the whole, then the two things a host is made of, then
  * what it is running, then what has been done to it.
@@ -140,6 +140,14 @@ function DOMAINS(counts: ReturnType<typeof useEstateCounts>): readonly Domain[] 
             'Durable claims LocalPlane is making about this host — drift and ownership conflicts',
         },
       ],
+    },
+    {
+      id: 'storage',
+      label: 'Storage',
+      to: '/storage',
+      priority: 6,
+      entries: [{ to: '/storage', label: 'Filesystems', root: true,
+        description: 'Mounted filesystem bytes, inodes and kernel backing evidence' }],
     },
   ];
 }

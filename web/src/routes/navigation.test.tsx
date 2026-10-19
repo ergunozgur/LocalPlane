@@ -76,7 +76,7 @@ describe('every route renders', () => {
 });
 
 describe('the shell', () => {
-  it('offers the five domains and marks the active one', async () => {
+  it('offers the implemented domains and marks the active one', async () => {
     stubBackend();
     renderAt('/network');
 
@@ -85,7 +85,7 @@ describe('the shell', () => {
     // A domain that is one surface is a link; a domain with sub-surfaces is a menu trigger,
     // and the chevron on the second kind is the only warning an operator gets that pressing
     // it opens something rather than going somewhere.
-    for (const label of ['Overview', 'Network']) {
+    for (const label of ['Overview', 'Network', 'Storage']) {
       expect(within(nav).getByRole('link', { name: new RegExp(label) })).toBeInTheDocument();
     }
     for (const label of ['Workloads', 'System', 'Operations']) {

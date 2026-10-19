@@ -53,6 +53,7 @@ Composer controls and covers a subset of these surfaces.*
 | Linux networking | Interfaces, addresses, link state, provider evidence, ownership, intent, reconciliation, provenance, and request-scoped route evidence | Adopt/release an eligible interface, revise retained intent, and reconcile the MTU of a managed interface |
 | Docker | Containers, runtime state, configuration, ports, mounts, networks, health, bounded logs, and current statistics | Start, stop, or restart one validated container through the Docker Engine API |
 | systemd | A bounded loaded-unit estate, unit state, enablement, typed relationships, service/socket/timer detail, lifecycle evidence, and LocalPlane containment | Start, stop, or restart one eligible loaded service through systemd's D-Bus API |
+| Storage | On-demand mounted filesystem byte/inode availability and immediate kernel block backing; ext4/xfs sampling in the agent namespace, explicit partial/unsupported coverage | None; read-only investigation |
 | Operational records | Observations, evidence, findings, Runs, Changes, verification, recovery, and history | Execute only a published and confirmed typed plan through the shared write path |
 
 The backend has seven host-mutation operation types:
@@ -65,7 +66,7 @@ There is no generic command, shell, arbitrary Docker request, general D-Bus exec
 terminal, or provider passthrough surface.
 
 The React/Vite Operator Console shows host overview, networking, workloads, systemd,
-topology, Runs, Changes, and findings. Its read-only global palette searches observed objects
+storage pressure, topology, Runs, Changes, and findings. Its read-only global palette searches observed objects
 and bounded recent operational records, then opens their detail views. Authenticated systemd
 service start/stop/restart uses the guarded Composer; Docker, MTU, Adopt and intent-revision
 controls remain absent. See [project status](docs/project-status.md) for scope and limits.
@@ -177,7 +178,7 @@ provider-specific semantics while unifying evidence, relationships, operations,
 verification, recovery, and history.
 
 That direction is non-promissory. Host exploration beyond the implemented domains, unified
-logs and metrics, storage, packages, first-class applications, fleet operation, automation,
+logs and metrics, storage management, packages, first-class applications, fleet operation, automation,
 and terminal access are not current capabilities. See [Project status](docs/project-status.md)
 for the authoritative classification.
 

@@ -50,6 +50,7 @@ from localplane.agent.identity import HostIdentity, HostIdentityUnavailable, ide
 from localplane.agent.docker_direct_attestation import DockerDirectAttestationReader
 from localplane.agent.docker_runtime_owner import DockerRuntimeOwnerCorrelator
 from localplane.agent.providers.base import CommandRunner
+from localplane.agent.providers.storage import COLLECTOR
 from localplane.agent.providers.collector import NetworkProviderEvidenceCollector
 from localplane.agent.providers.docker import (
     DEFAULT_DOCKER_SOCKET,
@@ -82,6 +83,7 @@ from localplane.protocol.capabilities import (
     CAPABILITY_DOCKER_CONTAINER_LIFECYCLE,
     CAPABILITY_DOCKER_CONTAINERS_OBSERVE,
     CAPABILITY_HOST_OBSERVE,
+    CAPABILITY_STORAGE_OBSERVE,
     CAPABILITY_NETWORK_INTERFACE_MTU_GUARD,
     CAPABILITY_NETWORK_INTERFACE_SET_MTU,
     CAPABILITY_NETWORK_OBSERVE,
@@ -125,10 +127,12 @@ class AgentService:
         socket_diag_provider: Any | None = None,
         runtime_attestation_reader: Any | None = None,
         runtime_owner_correlator: Any | None = None,
+        storage_provider: Any | None = None,
         guard_timer: Callable[[float, Callable[[], None]], Any] | None = None,
         guard_clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._root = Path(root)
+        self._storage = storage_provider if storage_provider is not None else COLLECTOR
         self._sysfs_net = Path(sysfs_net)
         self._runner = runner
         self._transport = transport
@@ -211,6 +215,7 @@ class AgentService:
             Method.AGENT_HELLO: self._agent_hello,
             Method.HOST_IDENTIFY: self._host_identify,
             Method.CAPABILITIES_LIST: self._capabilities_list,
+            Method.STORAGE_OBSERVE_FILESYSTEMS: self._storage_observe_filesystems,
             Method.NETWORK_OBSERVE_INTERFACES: self._network_observe_interfaces,
             Method.NETWORK_OBSERVE_PROVIDERS: self._network_observe_providers,
             Method.NETWORK_OBSERVE_ROUTE: self._network_observe_route,
@@ -874,6 +879,11 @@ class AgentService:
             return None
 
     # ------------------------------------------------------------------------- helpers
+
+    def _storage_observe_filesystems(self, params: dict[str, Any]) -> dict[str, Any]:
+        _require_no_params(params, Method.STORAGE_OBSERVE_FILESYSTEMS)
+        self._require_capability(CAPABILITY_STORAGE_OBSERVE)
+        return self._storage.observe()
 
     def _discover(self) -> tuple[DiscoveredCapability, ...]:
         return discover_capabilities(

@@ -149,6 +149,7 @@ def test_hello_reports_identity_capabilities_and_privilege(client: AgentClient):
     ]
     assert hello["host"]["host_id"].startswith("host_")
     assert {c["capability"] for c in hello["capabilities"]} == {
+        "storage.filesystems.observe",
         "host.observe",
         "network.observe",
         "network.providers.observe",

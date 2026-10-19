@@ -11,10 +11,12 @@
  */
 import { request, type RequestOptions } from './client';
 import type * as T from './types';
+import { storageResponse } from './storage';
 
 type Opts = Pick<RequestOptions, 'signal'>;
 
 export const endpoints = {
+  filesystems: (o?: Opts) => request<T.StorageObservation>('/storage/filesystems/observe', { ...o, method: 'POST' }).then(storageResponse),
   /* ------------------------------------------------------------ authentication & session */
   session: (o?: Opts) => request<T.SessionStatus>('/session', o),
   login: (masterCredential: string) =>

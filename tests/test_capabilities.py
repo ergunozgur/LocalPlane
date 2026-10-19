@@ -14,6 +14,7 @@ from localplane.protocol.capabilities import (
     CAPABILITY_DOCKER_CONTAINER_LIFECYCLE,
     CAPABILITY_DOCKER_CONTAINERS_OBSERVE,
     CAPABILITY_HOST_OBSERVE,
+    CAPABILITY_STORAGE_OBSERVE,
     CAPABILITY_NETWORK_INTERFACE_MTU_GUARD,
     CAPABILITY_NETWORK_INTERFACE_SET_MTU,
     CAPABILITY_NETWORK_OBSERVE,
@@ -35,6 +36,7 @@ def by_name(capabilities):
 def test_only_capabilities_this_agent_implements_are_declared():
     """No fictional future catalogue: the vocabulary is what the code supports today."""
     assert set(CAPABILITIES) == {
+        CAPABILITY_STORAGE_OBSERVE,
         CAPABILITY_HOST_OBSERVE,
         CAPABILITY_NETWORK_OBSERVE,
         CAPABILITY_NETWORK_PROVIDERS_OBSERVE,
