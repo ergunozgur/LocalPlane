@@ -94,6 +94,37 @@ def test_unsupported_never_sampled(fs):
     assert "multi_device" not in json.dumps(result.as_dict())
 
 
+@pytest.mark.parametrize("root", [
+    "net:[4026532282]", "net:[4294967295]", "mnt:[1]", "pid:[42]", "pid_for_children:[43]",
+    "time:[44]", "time_for_children:[45]", "user:[46]", "cgroup:[47]",
+    "ipc:[48]", "uts:[49]",
+])
+def test_nsfs_namespace_handle_roots_are_accepted(root):
+    assert parse_mountinfo(line(fs="nsfs", root=root))[0].root == root
+
+
+@pytest.mark.parametrize("root", [
+    "net:[]", "net:[-1]", "net:[1]extra", "net:1", "NET:[1]", "net-x:[1]",
+    "unknown:[1]", "net:[0001]", "net:[4294967296]", "net:[9999999999]",
+])
+def test_nsfs_root_remains_strict(root):
+    with pytest.raises(EvidenceError):
+        parse_mountinfo(line(fs="nsfs", root=root))
+
+
+def test_only_nsfs_accepts_a_namespace_handle_root():
+    with pytest.raises(EvidenceError):
+        parse_mountinfo(line(fs="ext4", root="net:[4026532282]"))
+
+
+def test_mixed_ext4_and_nsfs_rows_sample_only_ext4():
+    kernel = Kernel(line(1, "/", "ext4") + line(2, "/run/docker/netns/example", "nsfs", "net:[4026532282]", "0:4"))
+    result = collect(kernel, lambda: None)
+    assert [mount.mount_id for mount in kernel.samples] == [1]
+    assert [mount.status for mount in result.mounts] == ["observed", "unsupported"]
+    assert result.mounts[1].bytes is None
+
+
 @pytest.mark.parametrize("data", [b"bad\n", line()[:-1], line() + line(), line(path="/bad\\999"), b"x" * (METADATA_BYTES + 1), line(fs="bad/type")])
 def test_malformed_bounded_metadata(data):
     with pytest.raises((EvidenceError, UnicodeError)):
