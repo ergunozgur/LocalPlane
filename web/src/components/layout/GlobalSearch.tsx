@@ -2,6 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as 
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { endpoints } from '@/api/endpoints';
+import { OPERATIONS_WITH_UI_CONTROLS } from '@/domain/execution';
+import { serviceIntentUrl, type ServiceOperation } from '@/domain/serviceIntent';
 import styles from './GlobalSearch.module.css';
 
 type SearchDomain = 'Network' | 'System' | 'Workloads' | 'Runs' | 'Changes' | 'Findings';
@@ -14,6 +16,8 @@ type SearchItem = {
   to: string;
   fields?: string[];
   state?: string;
+  service?: boolean;
+  operation?: ServiceOperation;
 };
 
 type Source = {
@@ -40,7 +44,7 @@ export function GlobalSearch(): JSX.Element {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [sources, setSources] = useState<Source[]>(loadingSources);
-  const [activeIdentity, setActiveIdentity] = useState<Pick<SearchItem, 'domain' | 'id'> | null>(null);
+  const [activeIdentity, setActiveIdentity] = useState<Pick<SearchItem, 'domain' | 'id' | 'operation'> | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -112,6 +116,7 @@ export function GlobalSearch(): JSX.Element {
           name: item.canonical_id,
           domain: 'System',
           kind: 'systemd unit',
+          service: item.unit_type === 'service' && item.load_state === 'loaded',
           to: `/system/${encodeURIComponent(item.object_id)}`,
         })),
       ),
@@ -174,22 +179,36 @@ export function GlobalSearch(): JSX.Element {
     };
   }, [open]);
 
-  const allItems = sources.flatMap((source) => source.items);
-  const needle = query.trim().toLowerCase();
+  const runMode = query.trim().startsWith('>');
+  const relevantSources = runMode ? sources.filter((source) => source.label === 'System') : sources;
+  const allItems = relevantSources.flatMap((source) => source.items).flatMap((item): SearchItem[] =>
+    !runMode ? [item] : item.service ? OPERATIONS_WITH_UI_CONTROLS.map((operation) => ({
+      ...item, operation, kind: operation.split('.').at(-1)!,
+      name: `${operation.split('.').at(-1)} ${item.name}`,
+      to: serviceIntentUrl(item.id, operation),
+    })) : []);
+  const needle = (runMode ? query.trim().slice(1) : query).trim().toLowerCase();
   const matches = needle
     ? allItems.filter(
-        (item) => [item.name, item.id, ...(item.fields ?? [])].some((field) => field.toLowerCase().includes(needle)),
+        (item) => {
+          if (runMode) {
+            const [action = '', ...target] = needle.split(/\s+/);
+            return item.kind.startsWith(action) && target.every((part) =>
+              `${item.name} ${item.id}`.toLowerCase().includes(part));
+          }
+          return [item.name, item.id, ...(item.fields ?? [])].some((field) => field.toLowerCase().includes(needle));
+        },
       )
     : allItems;
   const visibleMatches = matches.slice(0, MAX_RESULTS);
-  const loading = sources.some((source) => source.status === 'loading');
-  const failed = sources.filter((source) => source.status === 'failed');
-  const successful = sources.filter((source) => source.status === 'success');
+  const loading = relevantSources.some((source) => source.status === 'loading');
+  const failed = relevantSources.filter((source) => source.status === 'failed');
+  const successful = relevantSources.filter((source) => source.status === 'success');
   const fullFailure = !loading && successful.length === 0;
   // Until explicit keyboard intent, follow the first result. A displaced explicit
   // identity selects nothing rather than silently opening a replacement or hidden item.
   const selectedIndex = activeIdentity
-    ? visibleMatches.findIndex((item) => item.domain === activeIdentity.domain && item.id === activeIdentity.id)
+    ? visibleMatches.findIndex((item) => item.domain === activeIdentity.domain && item.id === activeIdentity.id && item.operation === activeIdentity.operation)
     : visibleMatches.length > 0 ? 0 : -1;
 
   useEffect(() => {
@@ -217,7 +236,7 @@ export function GlobalSearch(): JSX.Element {
         ? (selectedIndex + 1) % visibleMatches.length
         : (selectedIndex < 0 ? visibleMatches.length - 1 : (selectedIndex - 1 + visibleMatches.length) % visibleMatches.length);
       const next = visibleMatches[nextIndex]!;
-      setActiveIdentity({ domain: next.domain, id: next.id });
+      setActiveIdentity(next);
       inputRef.current?.focus();
       return;
     }
@@ -289,7 +308,7 @@ export function GlobalSearch(): JSX.Element {
                 className={styles.query}
                 type="search"
                 value={query}
-                placeholder="Search objects and records"
+                placeholder="Search — or type > for a service action"
                 autoComplete="off"
                 role="combobox"
                 aria-autocomplete="list"
@@ -301,6 +320,7 @@ export function GlobalSearch(): JSX.Element {
                   setActiveIdentity(null);
                 }}
               />
+              {runMode ? <span className={styles.resultKind}>run</span> : null}
               <button
                 type="button"
                 className={styles.close}
@@ -312,10 +332,12 @@ export function GlobalSearch(): JSX.Element {
             </label>
 
             <div className={styles.status} aria-live="polite">
-              <p>Recent records only: up to 50 Runs, 100 Changes and 100 Findings (open and resolved). Older records may be excluded; returned counts are not history totals.</p>
-              {loading ? <p>Reading objects and recent records…</p> : null}
+              {runMode
+                ? <p>Start, stop or restart a loaded service. Selection stages an action; explicit Plan creates a Run. Protection and execution are assessed by the backend.</p>
+                : <p>Recent records only: up to 50 Runs, 100 Changes and 100 Findings (open and resolved). Older records may be excluded; returned counts are not history totals.</p>}
+              {loading ? <p>{runMode ? 'Reading service targets…' : 'Reading objects and recent records…'}</p> : null}
               {!loading && fullFailure ? (
-                <p role="alert">Search is unavailable. None of the sources could be read.</p>
+                <p role="alert">{runMode ? 'Service actions are unavailable. System units could not be read.' : 'Search is unavailable. None of the sources could be read.'}</p>
               ) : null}
               {!fullFailure && failed.length > 0 ? (
                 <p className={styles.partial} role="status">
@@ -325,24 +347,24 @@ export function GlobalSearch(): JSX.Element {
             </div>
 
             <div className={styles.results}>
-              {loading ? <p className={styles.state}>Loading objects and recent records…</p> : null}
+              {loading ? <p className={styles.state}>{runMode ? 'Loading service targets…' : 'Loading objects and recent records…'}</p> : null}
               {!loading && !fullFailure && !needle && allItems.length === 0 ? (
-                <p className={styles.state}>No objects or recent records were returned by the available sources.</p>
+                <p className={styles.state}>{runMode ? 'No loaded services were returned. Other unit types and unloaded services are not action targets.' : 'No objects or recent records were returned by the available sources.'}</p>
               ) : null}
               {!loading && !fullFailure && needle && visibleMatches.length === 0 ? (
-                <p className={styles.state}>No loaded objects or records match “{query.trim()}”.</p>
+                <p className={styles.state}>{runMode ? `No loaded service actions match “${needle}”. Try > start, > stop or > restart followed by a service name or ID.` : `No loaded objects or records match “${query.trim()}”.`}</p>
               ) : null}
               <div id={`${instanceId}-results`} role="listbox" aria-label="Search results">
               {!fullFailure
                 ? visibleMatches.map((item, index) => (
                     <button
-                      key={`${item.domain}:${item.id}`}
+                      key={JSON.stringify([item.domain, item.id, item.operation])}
                       id={resultId(index)}
                       type="button"
                       role="option"
                       tabIndex={-1}
                       aria-selected={index === selectedIndex}
-                      aria-label={`Open ${item.domain} ${item.kind} ${item.name}, ${item.id}${item.state ? `, ${item.state}` : ''}`}
+                      aria-label={item.operation ? `Stage ${item.name}, ${item.id}` : `Open ${item.domain} ${item.kind} ${item.name}, ${item.id}${item.state ? `, ${item.state}` : ''}`}
                       className={`${styles.result} ${index === selectedIndex ? styles.active : ''}`}
                       onClick={() => selectItem(item)}
                     >
@@ -357,15 +379,15 @@ export function GlobalSearch(): JSX.Element {
               </div>
               {!loading && !fullFailure && matches.length > MAX_RESULTS ? (
                 <p className={styles.truncated}>
-                  Showing the first {MAX_RESULTS} loaded matches. Refine the query to see a specific object or record.
+                  Showing the first {MAX_RESULTS} loaded matches. Refine the query to see a specific {runMode ? 'service action' : 'object or record'}.
                 </p>
               ) : null}
             </div>
             <div className={styles.footer}>
               <span><kbd>↑</kbd><kbd>↓</kbd> select</span>
-              <span><kbd>Enter</kbd> open</span>
+              <span><kbd>Enter</kbd> {runMode ? 'stage' : 'open'}</span>
               <span><kbd>Esc</kbd> close</span>
-              <span>Read-only</span>
+              <span>{runMode ? 'Plan before running' : <><kbd>&gt;</kbd> service action · Read-only</>}</span>
             </div>
           </div>
         </div>, document.body,

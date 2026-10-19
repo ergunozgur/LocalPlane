@@ -189,6 +189,7 @@
 }
 .footer {
   display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   padding: 7px 14px;
   border-top: 1px solid var(--rule2);
