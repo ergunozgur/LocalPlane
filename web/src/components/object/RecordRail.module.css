@@ -3,6 +3,20 @@
 .rail { position: sticky; top: calc(var(--appbar-h, 48px) + 14px); }
 
 .body { padding: 11px 0 4px; }
+.filters { padding: 0 13px; }
+.coverage { margin: 7px 13px 10px; font-size: 11px; line-height: 1.45; color: var(--dim); }
+.body a { overflow-wrap: anywhere; }
+.retry {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  padding: 4px 7px;
+  font: inherit;
+  cursor: pointer;
+}
 
 .pending { margin: 0; padding: 0 13px; font-size: 11.5px; color: var(--faint); }
 

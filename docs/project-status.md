@@ -55,6 +55,20 @@ state/outcome. At most 40 matches are displayed; refining the query searches the
 not older history. Loading and failed sources remain explicit, and query misses do not prove
 that no older record exists. Reopening reads the lists again.
 
+## Object-scoped operational records
+
+Network interfaces, systemd units and containers share a Machine record view. It reads up to
+12 Runs and 12 Changes by creation time and 12 Findings by episode opening time for the object's
+stable ID, including resolved Findings. The combined view shows at most 12 entries; kind
+filters expose each source's loaded records. These are bounded reads, not exhaustive history.
+Loading, refresh and failed streams remain explicit; failed streams can be retried independently.
+
+Each record links to its existing detail view. Runs remain visible even when they produced a
+Change, including when the Changes stream is unavailable. Runs and Changes can describe the
+same attempt, not two separate mutations. Recorded run state and host effect remain distinct;
+a resolved Finding does not by itself prove repair. This view observes records and does not
+plan, confirm, apply or cancel an operation.
+
 ## What the screenshot means
 
 The V4.2 image is an approved product and interface direction built from illustrative data.

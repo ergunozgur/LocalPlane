@@ -5,8 +5,8 @@
  * an italic serif note underneath explaining what the entry means. The marker *shape and
  * colour carry the kind*: a round oxide dot for drift, a square accent dot for a change, a
  * grey dot for a boot, a green dot for a verification, and a hollow ring for an ordinary
- * observation. The footer line is the point of the whole component — *every entry here was
- * written by an observation, not by a person*.
+ * observation. Callers supply evidence-backed kinds; a resolved Finding is not by itself
+ * a verification and must not be assigned that marker.
  *
  * Nothing here interprets. A tick renders what the record says happened; it never derives a
  * "probably" from two entries that sit next to each other.

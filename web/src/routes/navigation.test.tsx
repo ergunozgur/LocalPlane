@@ -243,7 +243,7 @@ describe('the machine record rail', () => {
     await openTab('Provenance');
     expect(screen.getByText('Machine record')).toBeInTheDocument();
     expect(
-      screen.getByText('every entry here was written by an observation, not by a person'),
+      screen.getByText(/Recorded evidence, not current host state/),
     ).toBeInTheDocument();
   });
 
