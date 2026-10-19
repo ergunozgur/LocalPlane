@@ -53,7 +53,7 @@ Composer controls and covers a subset of these surfaces.*
 | Linux networking | Interfaces, addresses, link state, provider evidence, ownership, intent, reconciliation, provenance, and request-scoped route evidence | Adopt/release an eligible interface, revise retained intent, and reconcile the MTU of a managed interface |
 | Docker | Containers, runtime state, configuration, ports, mounts, networks, health, bounded logs, and current statistics | Start, stop, or restart one validated container through the Docker Engine API |
 | systemd | A bounded loaded-unit estate, unit state, enablement, typed relationships, service/socket/timer detail, lifecycle evidence, and LocalPlane containment | Start, stop, or restart one eligible loaded service through systemd's D-Bus API |
-| Storage | On-demand mounted filesystem byte/inode availability and immediate kernel block backing; ext4/xfs sampling in the agent namespace, explicit partial/unsupported coverage | None; read-only investigation |
+| Storage | On-demand mounted filesystem byte/inode availability and immediate kernel block backing; ext4/xfs sampling in the agent namespace (with namespace-handle mounts retained as unsupported), explicit partial/unsupported coverage | None; read-only investigation |
 | Operational records | Observations, evidence, findings, Runs, Changes, verification, recovery, and history | Execute only a published and confirmed typed plan through the shared write path |
 
 The backend has seven host-mutation operation types:
@@ -157,6 +157,10 @@ Start the agent and backend in separate terminals:
 ```sh
 .venv/bin/localplane-backend
 ```
+
+The agent handles `SIGTERM` and `SIGINT` by stopping its accept loop and removing its
+Unix socket, allowing a clean restart. Existing daemon request handlers are not drained;
+an interrupted in-flight operation must not be assumed to have completed or been undone.
 
 The backend listens on `127.0.0.1:8080` by default. API and automation callers send
 `Authorization: Bearer <master-secret>`. The Operator Console exchanges the master credential

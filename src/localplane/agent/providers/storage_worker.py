@@ -19,6 +19,14 @@ from localplane.protocol.storage import (
 
 SUPPORTED = frozenset({"ext4", "xfs"})
 _ESCAPES = {"040": " ", "011": "\t", "012": "\n", "134": "\\"}
+# nsfs_show_path emits one of Linux's namespace operation names and its unsigned
+# 32-bit kernel inode as ``name:[inode]``. Keep this narrow rather than treating
+# an arbitrary non-path root as namespace data.
+_NSFS_ROOT = re.compile(
+    r"(?:cgroup|ipc|mnt|net|pid|pid_for_children|time|time_for_children|user|uts):"
+    r"\[(?P<inode>0|[1-9][0-9]{0,9})\]"
+)
+_MAX_NSFS_INODE = 2**32 - 1
 
 
 class EvidenceError(Exception):
@@ -68,11 +76,17 @@ def parse_mountinfo(data: bytes) -> list[Mount]:
             mid, parent = int(fields[0]), int(fields[1])
             if not 0 < mid < 2**53 or not 0 <= parent < 2**53 or mid in ids or not re.fullmatch(r"[0-9]{1,10}:[0-9]{1,10}", fields[2]):
                 raise EvidenceError()
-            path, root = unescape(fields[4]), unescape(fields[3])
-            if not path.startswith("/") or not root.startswith("/"):
-                raise EvidenceError()
             fs = fields[sep + 1]
             if not re.fullmatch(r"[a-zA-Z0-9_.-]{1,64}", fs):
+                raise EvidenceError()
+            path, root = unescape(fields[4]), unescape(fields[3])
+            if not path.startswith("/"):
+                raise EvidenceError()
+            if fs == "nsfs":
+                namespace_root = _NSFS_ROOT.fullmatch(root)
+                if namespace_root is None or int(namespace_root["inode"]) > _MAX_NSFS_INODE:
+                    raise EvidenceError()
+            elif not root.startswith("/"):
                 raise EvidenceError()
             options = fields[5].split(",")
             if ("ro" in options) == ("rw" in options):

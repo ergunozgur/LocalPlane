@@ -32,6 +32,19 @@ LOG = logging.getLogger("localplane.agent")
 def main(argv: list[str] | None = None) -> int:
     configure_logging(os.environ.get("LOCALPLANE_LOG_LEVEL", "INFO"))
     socket_path = os.environ.get("LOCALPLANE_AGENT_SOCKET") or str(default_socket_path())
+    stop_requested = False
+
+    def _stop(signum: int, _frame: FrameType | None) -> None:
+        nonlocal stop_requested
+        if stop_requested:
+            return
+        LOG.info("agent stopping", extra={"signal": signum})
+        stop_requested = True
+
+    # Install these before creating the listening socket, so a startup signal
+    # is recorded and the socket is still cleaned up if initialization finishes.
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGINT, _stop)
     service = AgentService(
         root=os.environ.get("LOCALPLANE_ROOT", "/"),
         sysfs_net=os.environ.get("LOCALPLANE_SYSFS_NET", DEFAULT_SYSFS_NET),
@@ -43,14 +56,14 @@ def main(argv: list[str] | None = None) -> int:
         LOG.error("agent could not start", extra={"socket": socket_path, "error": str(exc)})
         return 1
 
-    def _stop(signum: int, _frame: FrameType | None) -> None:
-        LOG.info("agent stopping", extra={"signal": signum})
-        server.shutdown()
-
-    signal.signal(signal.SIGTERM, _stop)
-    signal.signal(signal.SIGINT, _stop)
     try:
-        server.serve_forever()
+        # Do not call BaseServer.shutdown from the same thread as
+        # serve_forever: it waits for that loop and deadlocks. A short accept
+        # poll is only lifecycle coordination; request-handler timeouts remain
+        # unchanged in LineServer.
+        server.timeout = 0.1
+        while not stop_requested:
+            server.handle_request()
     finally:
         server.server_close()
         LOG.info("agent stopped")
