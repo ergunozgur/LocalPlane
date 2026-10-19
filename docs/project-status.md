@@ -45,8 +45,13 @@ The authenticated shell includes a read-only palette for objects and operational
 opening, it reads existing typed lists for network interfaces, loaded systemd units, Docker
 containers, and recent Runs, Changes and Findings, including resolved Findings. Results open
 the existing detail views using their stable object or record IDs. Search does not create
-Applications, plan operations or execute them. Service actions enter Composer from the service
-Lifecycle tab; typed action search remains deferred.
+Applications, plan operations or execute them. Type `>` for loaded-service actions, limited to
+`start`, `stop` and `restart`; follow the action with a service name or stable ID to narrow targets.
+Selection opens Lifecycle with that exact action and target staged, not a new Run. Detail is
+re-read and invalid, inapplicable, stale or unknown target evidence cannot enable the staged
+action. Only an explicit **Plan** creates a Run, whose immutable preview and confirmation are
+handled by the existing Composer. Navigation, Back and reload do not plan or execute anything.
+Loaded-service discovery is not proof of protection clearance or execution eligibility.
 
 Record search covers the latest 50 Runs by creation time, 100 Changes by creation time and
 100 Findings by episode opening time, not exhaustive history. It matches only the returned

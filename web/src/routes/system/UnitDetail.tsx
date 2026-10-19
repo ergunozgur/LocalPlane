@@ -11,7 +11,8 @@
  * reads the execution gate.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { serviceIntent } from '@/domain/serviceIntent';
 import { endpoints } from '@/api/endpoints';
 import { useResource } from '@/hooks/useResource';
 import { Plate, PlateBody, PlateHead } from '@/components/primitives/Plate';
@@ -39,10 +40,15 @@ import styles from './UnitDetail.module.css';
 
 export function UnitDetail(): JSX.Element {
   const { objectId = '' } = useParams();
-  return <UnitDetailContent key={objectId} objectId={objectId} />;
+  const [params] = useSearchParams();
+  // A new proposal must re-read detail, even when it names the same object. Tab
+  // changes are not new proposals and retain the existing resource lifecycle.
+  const identity = JSON.stringify([objectId, params.getAll('operation'), params.getAll('target')]);
+  return <UnitDetailContent key={identity} objectId={objectId} />;
 }
 
 function UnitDetailContent({ objectId }: { objectId: string }): JSX.Element {
+  const [params] = useSearchParams();
   const [relationFilter, setRelationFilter] = useState('');
 
   const { resource: unit } = useResource(
@@ -59,6 +65,8 @@ function UnitDetailContent({ objectId }: { objectId: string }): JSX.Element {
   return (
     <ResourceView resource={unit} what="unit" loadingLabel="Reading unit…">
       {(data, meta) => {
+        if (data.object_id !== objectId) return <p role="alert">Unit detail does not match the requested target. No service action can be planned.</p>;
+        const intent = serviceIntent(params, objectId, data, meta.refreshing);
         const tabs: ObjectTab[] = [
           {
             id: 'overview',
@@ -115,7 +123,7 @@ function UnitDetailContent({ objectId }: { objectId: string }): JSX.Element {
             id: 'lifecycle',
             label: 'Lifecycle',
             render: () => (
-              <ObjectColumns main={<LifecyclePanel unit={data} capability={capability} />} />
+              <ObjectColumns main={<LifecyclePanel unit={data} capability={capability} intent={intent} />} />
             ),
           },
           {

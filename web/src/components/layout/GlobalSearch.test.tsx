@@ -154,6 +154,72 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
+describe('service action search reads', () => {
+  async function openActions(query = '>') {
+    renderSearch();
+    await userEvent.click(screen.getByRole('button', { name: /Search objects/ }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: query } });
+  }
+
+  it('keeps action identity when unrelated sources arrive or fail', async () => {
+    const network = deferred<NetworkInterfaceList>();
+    const records = deferred<RunList>();
+    mocks.interfaces.mockReturnValue(network.promise);
+    mocks.runs.mockReturnValue(records.promise);
+    mocks.systemdUnits.mockResolvedValue(systemList());
+    await openActions();
+    await screen.findByRole('option', { name: 'Stage start system-0.service, system/a' });
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'ArrowDown' });
+    expectSelection('Stage stop system-0.service, system/a');
+    network.resolve(networkList(45)); records.reject(new Error('unavailable'));
+    await waitFor(() => expectSelection('Stage stop system-0.service, system/a'));
+    expect(screen.queryByText(/Partial coverage/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Loading service/)).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
+    expect(screen.getByTestId('location')).toHaveTextContent('/system/system%2Fa');
+  });
+
+  it('reports the service source failure even when object/record sources succeeded', async () => {
+    const pending = deferred<SystemdUnitList>();
+    mocks.systemdUnits.mockReturnValue(pending.promise);
+    await openActions('> restart');
+    expect(screen.getByText('Loading service targets…')).toBeInTheDocument();
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    pending.reject(new Error('unavailable'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('System units could not be read');
+    expect(screen.queryByText(/No loaded service actions match/)).not.toBeInTheDocument();
+  });
+
+  it('distinguishes no loaded services from query misses', async () => {
+    mocks.systemdUnits.mockResolvedValue({ ...unitTemplate, count: 0, units: [] } satisfies SystemdUnitList);
+    await openActions();
+    expect(await screen.findByText(/No loaded services were returned/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('ignores an aborted old inventory after reopen, bounds action results and refines by ID', async () => {
+    const old = deferred<SystemdUnitList>();
+    const many: SystemdUnitList = { ...unitTemplate, count: 15, units: Array.from({ length: 15 }, (_, index) => ({
+      ...unitTemplate.units[0]!, object_id: `target-${index}`, canonical_id: 'duplicate.service',
+    })) };
+    mocks.systemdUnits.mockReturnValueOnce(old.promise).mockResolvedValue(many);
+    await openActions();
+    const signal = mocks.systemdUnits.mock.calls[0]?.[0].signal as AbortSignal;
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
+    expect(signal.aborted).toBe(true);
+    expect(screen.getByRole('button', { name: /Search objects/ })).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: /Search objects/ }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '>' } });
+    await screen.findByText(/Showing the first 40 loaded matches/);
+    expect(screen.getAllByRole('option')).toHaveLength(40);
+    old.resolve(systemList());
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '> restart target-14' } });
+    await screen.findByRole('option', { name: 'Stage restart duplicate.service, target-14' });
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(mocks.systemdUnits).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('global object search', () => {
   it.each([
     ['runs', runs, ['record/id?#', 'obj_run', 'worker.service', 'systemd.service.restart', 'preview']],

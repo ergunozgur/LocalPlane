@@ -6,14 +6,17 @@ import { Value } from './UnknownValue';
 import { ServicePlan } from '@/components/composer/ServicePlan';
 import { capabilityStatus } from '@/domain/vocabulary';
 import { executionGate } from '@/domain/execution';
+import type { ServiceIntent } from '@/domain/serviceIntent';
 import styles from './LifecyclePanel.module.css';
 
 export function LifecyclePanel({
   unit,
   capability,
+  intent,
 }: {
   unit: SystemdUnit;
   capability: Capability | null;
+  intent?: ServiceIntent;
 }): JSX.Element {
   // No plan has been published for this unit from here, so there is no `PlanExecution` to
   // read — and the gate says `not_assessed` rather than guessing from the capability.
@@ -23,7 +26,7 @@ export function LifecyclePanel({
     <Plate>
       <PlateHead title="Lifecycle" level={3} meta="starting, stopping and restarting" />
       <PlateBody>
-        <ServicePlan key={unit.object_id} unit={unit} />
+        <ServicePlan key={unit.object_id} unit={unit} intent={intent} />
 
         <div className={styles.gate}>
           <span className="label">Execution</span>
