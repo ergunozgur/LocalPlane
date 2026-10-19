@@ -30,15 +30,8 @@ class StorageCounters(BaseModel):
 
 class StorageMount(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    # Keep JSON bound literals stable whether OpenAPI generation preserves the schema
-    # or coerces numeric bounds to floats. Both 0 and 2**53 are exactly representable;
-    # runtime validation still uses the strict integer constraints, not these extras.
-    mount_id: int = Field(gt=0, lt=2**53, json_schema_extra={
-        "exclusiveMinimum": 0.0, "exclusiveMaximum": float(2**53),
-    })
-    parent_id: int = Field(ge=0, lt=2**53, json_schema_extra={
-        "minimum": 0.0, "exclusiveMaximum": float(2**53),
-    })
+    mount_id: int = Field(gt=0, lt=2**53)
+    parent_id: int = Field(ge=0, lt=2**53)
     mountpoint: str = Field(max_length=4096)
     root: str = Field(max_length=4096)
     filesystem: str = Field(max_length=64)

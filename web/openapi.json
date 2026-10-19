@@ -11613,14 +11613,14 @@
         "properties": {
           "mount_id": {
             "type": "integer",
-            "exclusiveMaximum": 9007199254740992.0,
-            "exclusiveMinimum": 0.0,
+            "exclusiveMaximum": 9007199254740992,
+            "exclusiveMinimum": 0,
             "title": "Mount Id"
           },
           "parent_id": {
             "type": "integer",
-            "exclusiveMaximum": 9007199254740992.0,
-            "minimum": 0.0,
+            "exclusiveMaximum": 9007199254740992,
+            "minimum": 0,
             "title": "Parent Id"
           },
           "mountpoint": {

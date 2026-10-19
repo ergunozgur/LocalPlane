@@ -1,8 +1,5 @@
-import json
-
 import pytest
 from fastapi.testclient import TestClient
-from fastapi.openapi.models import Schema
 from pydantic import ValidationError
 
 from localplane.agent.server import AgentServer
@@ -107,23 +104,8 @@ def test_typed_client_has_no_caller_path(monkeypatch):
     assert calls == [(Method.STORAGE_OBSERVE_FILESYSTEMS,)]
 
 
-@pytest.mark.parametrize("mode", ["validation", "serialization"])
-def test_mount_id_schema_bound_literals_are_stable(mode):
-    properties = StorageMount.model_json_schema(mode=mode)["properties"]
-    for field, lower in [("mount_id", "exclusiveMinimum"), ("parent_id", "minimum")]:
-        schema = properties[field]
-        assert schema["type"] == "integer"
-        bounds = {lower: 0.0, "exclusiveMaximum": 9007199254740992.0}
-        for key, value in bounds.items():
-            assert type(schema[key]) is float
-            assert schema[key] == value
-        # Compare serialized text: Python numeric equality hides 0 versus 0.0 drift.
-        converted = Schema.model_validate(schema).model_dump(exclude_none=True)
-        assert json.dumps(schema, sort_keys=True) == json.dumps(converted, sort_keys=True)
-
-
 @pytest.mark.parametrize("field,valid", [("mount_id", [1, 2**53 - 1]), ("parent_id", [0, 2**53 - 1])])
-def test_mount_id_schema_override_preserves_strict_runtime_bounds(field, valid):
+def test_mount_ids_preserve_strict_runtime_bounds(field, valid):
     row = FixtureStorageProvider().observe()["mounts"][0]
     for value in valid:
         assert getattr(StorageMount.model_validate(row | {field: value}), field) == value
