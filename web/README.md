@@ -52,6 +52,9 @@ not make a console control exist.
 - **Operations** — Runs, Changes, and findings with detail views and backend-backed filters.
 - **Topology** — evidence-backed network and container relationships inside the overview.
 - **Settings** — appearance preferences, authenticated-session truth, and no invented user identity.
+- **Storage** — per-mount capacity and inode pressure first, with immediate kernel backing only
+  where supplied. System/virtual and unsupported/unresolved mounts remain separately reachable;
+  the console does not infer disk topology, health, SMART, reclaimable space, or backups.
 - **Search objects** — a read-only palette available from every authenticated route with the
   app-bar button or Ctrl/Cmd+K. Filters observed interfaces, systemd units, and containers by
   name or stable object ID; selection opens the existing detail. Lists are fetched on open,

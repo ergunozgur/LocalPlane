@@ -53,9 +53,7 @@
  * treatment that had crept back in; it makes the mark read as a link and puts the product's
  * one identity device on the same channel the interface uses for interactive state.
  *
- * It is an identity device, so it does not change with the theme. Below the narrow
- * breakpoint the display face loses its footing before the layout does, so it steps back
- * to the interface face there. */
+ * It is an identity device, so it does not change with the theme or responsive layout. */
 .brand {
   display: inline-flex;
   align-items: baseline;
@@ -74,19 +72,6 @@
 }
 .brand i { font-style: italic; font-weight: 400; color: inherit; }
 .brand:hover { color: var(--strong); text-decoration: none; }
-
-@media (max-width: 520px) {
-  .brand {
-    font-family: var(--sans);
-    font-size: 14px;
-    font-weight: 650;
-    letter-spacing: 0.005em;
-  }
-  .brand i { font-style: normal; font-weight: 400; }
-}
-
-
-
 
 .main {
   flex: 1;

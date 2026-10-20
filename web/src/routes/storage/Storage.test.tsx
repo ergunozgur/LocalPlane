@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { StorageMount, StorageObservation } from '@/api/types';
@@ -6,6 +7,9 @@ import { storageResponse } from '@/api/storage';
 import { refreshAll } from '@/hooks/useResource';
 import { Storage } from './Storage';
 import { availablePercent, displayPath, size } from '@/domain/storage';
+
+const appShellStyles = readFileSync('src/components/layout/AppShell.module.css', 'utf8');
+const storageStyles = readFileSync('src/routes/storage/Storage.module.css', 'utf8');
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -57,6 +61,62 @@ it('sorts by available percentage, filters locally and supports keyboard selecti
   await user.type(screen.getByRole('textbox', { name: 'Filter mounts' }), 'remote');
   expect(screen.queryByRole('button', { name: '/byte-pressure' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '/remote' })).toBeInTheDocument();
+});
+
+it('keeps capacity first, separates unresolved ext4 from virtual mounts, and reveals virtual search matches', async () => {
+  const data = fixture();
+  data.mounts.push(
+    { ...data.mounts[0]!, mount_id: 4, mountpoint: '/run', filesystem: 'tmpfs', status: 'unsupported', bytes: null, inodes: null, backing_name: null, reason: 'Virtual filesystem.' },
+    { ...data.mounts[0]!, mount_id: 5, mountpoint: '/data', filesystem: 'ext4', status: 'unavailable', bytes: null, inodes: null, backing_name: null, reason: 'Counter read failed.' },
+    { ...data.mounts[0]!, mount_id: 6, mountpoint: '/bind', root: '/byte-pressure', backing_name: 'example1', reason: 'Bind mount evidence.' },
+  );
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(data)));
+  const user = userEvent.setup();
+  render(<Storage />);
+  expect(await screen.findByText('capacity and inode pressure first')).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Total' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Used' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Available' })).toBeInTheDocument();
+  expect(screen.getByText('Other unsupported or unresolved mounts')).toBeInTheDocument();
+  expect(screen.getByText('Counter read failed.')).toBeInTheDocument();
+  expect(screen.getByText(/Immediate backing is supplied per observed mount/)).toBeInTheDocument();
+  const tables = document.querySelectorAll('table');
+  expect(tables).toHaveLength(3);
+  tables.forEach((table) => expect(table.className).toContain('mountTable'));
+  const virtual = screen.getByText(/System and virtual mounts/).closest('details')!;
+  expect(virtual).not.toHaveAttribute('open');
+  await user.type(screen.getByRole('textbox', { name: 'Filter mounts' }), 'tmpfs');
+  expect(virtual).toHaveAttribute('open');
+  expect(screen.getByRole('button', { name: '/run' })).toBeInTheDocument();
+  await user.clear(screen.getByRole('textbox', { name: 'Filter mounts' }));
+  await user.click(screen.getByText(/System and virtual mounts/));
+  await user.click(screen.getByRole('button', { name: '/run' }));
+  expect(screen.getByRole('region', { name: 'Selected mount evidence' })).toHaveTextContent('/run');
+  await user.click(screen.getByRole('button', { name: '/bind' }));
+  expect(screen.getByRole('region', { name: 'Selected mount evidence' })).toHaveTextContent('example1');
+});
+
+it('keeps every mount group horizontally scrollable with a usable mount column at narrow widths', () => {
+  expect(storageStyles).toContain('.tableWrap { overflow-x: auto; }');
+  expect(storageStyles).toContain('.mountTable { min-width: 760px; }');
+  expect(storageStyles).toContain('.mountTable .mountCell { width: 13rem; min-width: 13rem; }');
+});
+
+it('keeps zero totals and unsupported evidence explicit in their respective groups', async () => {
+  const data = fixture();
+  data.mounts[0]!.bytes = { total: '0', used: '0', free: '0', available: '0', reserved: '0' };
+  data.mounts[2] = { ...data.mounts[2]!, filesystem: 'ext4', status: 'unsupported', reason: 'Unsupported ext4 sample.' };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(data)));
+  render(<Storage />);
+  expect(await screen.findByText('Total is zero; ratio unknown')).toBeInTheDocument();
+  expect(screen.getByText('Unsupported ext4 sample.')).toBeInTheDocument();
+  expect(screen.getByText('Other unsupported or unresolved mounts')).toBeInTheDocument();
+});
+
+it('keeps the serif upright/italic wordmark at narrow widths', () => {
+  expect(appShellStyles).toContain('font-family: var(--wordmark)');
+  expect(appShellStyles).toContain('.brand i { font-style: italic');
+  expect(appShellStyles).not.toContain('@media (max-width: 520px)');
 });
 
 it('hides stale details during refresh and resets selection when mount ID is reused', async () => {
