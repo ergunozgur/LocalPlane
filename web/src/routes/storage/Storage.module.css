@@ -6,6 +6,8 @@
 .controls input, .controls select { max-width: 100%; }
 .tableWrap { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mountTable { min-width: 760px; }
+.mountTable .mountCell { width: 13rem; min-width: 13rem; }
 .table th { text-align: left; color: var(--dim); font-size: 10px; font-weight: 500; }
 .table td, .table th { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
 .table button { max-width: 230px; overflow-wrap: anywhere; white-space: pre-wrap; text-align: left; }
@@ -18,4 +20,9 @@
 .facts dd { margin: 0; overflow-wrap: anywhere; }
 .bounds { font-size: 12px; color: var(--dim); margin-top: 16px; overflow-wrap: anywhere; }
 .bounds summary { cursor: pointer; color: var(--ink); }
+.mountGroup { border-top: 1px solid var(--rule); }
+.mountGroup > summary, .mountGroup > h3 { margin: 0; padding: 10px 12px; font-family: var(--serif); font-size: 14px; font-weight: 400; cursor: pointer; }
+.mountGroup > summary span, .mountGroup > h3 span { font-family: var(--sans); font-size: 10px; color: var(--dim); }
+.mountGroup > p { margin: 0; padding: 0 12px 10px; color: var(--dim); font-size: 11px; }
+.mountGroup .table td, .mountGroup .table th { padding-top: 8px; padding-bottom: 8px; }
 @media (max-width: 1000px) { .grid { grid-template-columns: minmax(0, 1fr); } }
