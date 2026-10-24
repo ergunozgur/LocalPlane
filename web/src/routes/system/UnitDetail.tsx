@@ -27,7 +27,13 @@ import { ResourceView } from '@/components/states/ResourceView';
 import { Empty } from '@/components/states/SurfaceState';
 import { ObjectWorkspace, ObjectColumns, type ObjectTab } from '@/components/object/ObjectWorkspace';
 import { ScopeBar } from '@/components/layout/ScopeBar';
-import { systemdTime, unitNote } from '@/domain/systemd';
+import {
+  automaticRestartCount,
+  executionOutcome,
+  formatSystemdDuration,
+  systemdTime,
+  unitNote,
+} from '@/domain/systemd';
 import {
   freshness as freshnessOf,
   health as healthOf,
@@ -115,7 +121,10 @@ function UnitDetailContent({ objectId }: { objectId: string }): JSX.Element {
                     </PlateBody>
                   </Plate>
                 }
-                side={<ObservationPlate data={data} />}
+                side={<>
+                  <ObservationPlate data={data} />
+                  {data.service ? <ServiceDiagnosis service={data.service} /> : null}
+                </>}
               />
             ),
           },
@@ -267,27 +276,7 @@ function UnitDetailContent({ objectId }: { objectId: string }): JSX.Element {
               <ObjectColumns
                 main={
                   data.service ? (
-                    <Plate>
-                      <PlateHead title="Service" level={3} meta="every service property the manager returned" />
-                      <PlateBody>
-                        <KeyValueList columns="auto">
-                          {Object.entries(data.service).map(([key, value]) => (
-                            <KeyValue key={key} label={<span className="mono">{key}</span>}>
-                              <Value
-                                value={
-                                  value === null || value === undefined
-                                    ? null
-                                    : typeof value === 'object'
-                                      ? JSON.stringify(value)
-                                      : String(value)
-                                }
-                                mono
-                              />
-                            </KeyValue>
-                          ))}
-                        </KeyValueList>
-                      </PlateBody>
-                    </Plate>
+                    <ServiceFacts service={data.service} />
                   ) : null
                 }
               />
@@ -404,6 +393,59 @@ function UnitDetailContent({ objectId }: { objectId: string }): JSX.Element {
         );
       }}
     </ResourceView>
+  );
+}
+
+/** Service execution evidence is context, not a replacement for state, health, or freshness. */
+function ServiceDiagnosis({ service }: { service: import('@/api/types').SystemdServiceFacts }): JSX.Element {
+  const outcome = executionOutcome(service);
+  const restarts = automaticRestartCount(service.n_restarts);
+  return (
+    <Plate>
+      <PlateHead title="Execution diagnosis" level={3} meta="manager-reported service evidence" />
+      <PlateBody>
+        <KeyValueList columns="auto">
+          <KeyValue label="Manager result"><Value value={service.result} mono reason="the manager did not report a service result" /></KeyValue>
+          <KeyValue label="Main execution"><Value value={outcome} reason="the manager did not report a main execution outcome" /></KeyValue>
+          <KeyValue label="Automatic restarts"><Value value={restarts} reason="the manager did not report its automatic-restart counter" /></KeyValue>
+          <KeyValue label="Restart policy"><Value value={service.restart} mono reason="the manager did not report a restart policy" /></KeyValue>
+          <KeyValue label="Restart delay"><Value value={formatSystemdDuration(service.restart_usec)} reason="the manager did not report a restart delay" /></KeyValue>
+        </KeyValueList>
+        <p className={styles.agentNote}>
+          Active state, health, and observation freshness remain separate above and alongside this evidence.
+          Restart count is the manager&apos;s reported counter, not a rate or time-window history.
+        </p>
+      </PlateBody>
+    </Plate>
+  );
+}
+
+function ServiceFacts({ service }: { service: import('@/api/types').SystemdServiceFacts }): JSX.Element {
+  return (
+    <Plate>
+      <PlateHead title="Service facts" level={3} meta="readable context and raw manager values" />
+      <PlateBody>
+        <KeyValueList columns="auto">
+          <KeyValue label="Service type"><Value value={service.type} mono /></KeyValue>
+          <KeyValue label="Main process ID"><Value value={service.main_pid} mono /></KeyValue>
+          <KeyValue label="Control process ID"><Value value={service.control_pid} mono /></KeyValue>
+          <KeyValue label="Main execution process ID"><Value value={service.exec_main_pid} mono /></KeyValue>
+          <KeyValue label="Main execution started (monotonic µs)">
+            <Value value={service.exec_main_start_timestamp_monotonic} mono reason="the manager did not report a main execution start" />
+          </KeyValue>
+        </KeyValueList>
+        <details className={styles.rawFacts}>
+          <summary>Raw manager facts</summary>
+          <KeyValueList columns="auto">
+            {Object.entries(service).map(([key, value]) => (
+              <KeyValue key={key} label={<span className="mono">{key}</span>}>
+                <Value value={value === null || value === undefined ? null : String(value)} mono />
+              </KeyValue>
+            ))}
+          </KeyValueList>
+        </details>
+      </PlateBody>
+    </Plate>
   );
 }
 

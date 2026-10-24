@@ -9,7 +9,7 @@
  * `MemoryCurrent` and `TasksCurrent` are not in this build's unit contract, so they are
  * absent from this module entirely rather than present and always unknown.
  */
-import type { SystemdUnit } from '@/api/types';
+import type { SystemdServiceFacts, SystemdUnit } from '@/api/types';
 import { formatRelative } from './format';
 
 /** systemd stores `0` for a timestamp that never happened. */
@@ -50,4 +50,46 @@ export function unitNote(unit: SystemdUnit): string | null {
     notes.push(`${unit.socket.refused} refused`);
   }
   return notes.length > 0 ? notes.join(' · ') : null;
+}
+
+/**
+ * Translate the small, documented part of systemd's ExecMainCode vocabulary without
+ * guessing a platform signal name or a cause. Numeric manager values remain available in
+ * the raw Service facts.
+ */
+export function executionOutcome(service: SystemdServiceFacts): string | null {
+  const { exec_main_code: code, exec_main_status: status } = service;
+  if (code === null || code === undefined) {
+    return status === null || status === undefined
+      ? null
+      : `execution code unavailable; manager status ${status}`;
+  }
+
+  const statusText = status === null || status === undefined ? 'manager status unavailable' : `status ${status}`;
+  switch (code) {
+    // systemd did not record a main-process termination. This is not evidence that the
+    // service never ran, and a concurrent non-zero status is retained rather than judged.
+    case 0: return `no recorded main-process termination (${statusText})`;
+    case 1: return `exited (${statusText})`;
+    case 2: return `terminated by a signal (${statusText})`;
+    case 3: return `core-dumped (${statusText})`;
+    default: return `unrecognised execution code ${code} (${statusText})`;
+  }
+}
+
+/** A manager-reported delay is in microseconds, including a meaningful zero. */
+export function formatSystemdDuration(micros: number | null | undefined): string | null {
+  if (micros === null || micros === undefined) return null;
+  if (micros === 0) return '0 µs';
+  if (micros < 1_000) return `${micros} µs`;
+  if (micros < 1_000_000) return `${micros / 1_000} ms`;
+  return `${micros / 1_000_000} s`;
+}
+
+/** NRestarts is a manager counter, not a rate or a complete history. */
+export function automaticRestartCount(restarts: number | null | undefined): string | null {
+  if (restarts === null || restarts === undefined) return null;
+  return restarts === 0
+    ? 'no automatic restarts reported'
+    : `${restarts} automatic restart${restarts === 1 ? '' : 's'} reported`;
 }
