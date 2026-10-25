@@ -59,6 +59,7 @@ import {
   networkModeContext,
   portTarget,
 } from '@/domain/container-networking';
+import { emptyMountsContext, reportedMountAccess } from '@/domain/container-mounts';
 import styles from './WorkloadDetail.module.css';
 
 export function WorkloadDetail(): JSX.Element {
@@ -339,29 +340,8 @@ export function WorkloadDetail(): JSX.Element {
             count: data.mounts.length,
             render: () => (
               <ObjectColumns
-                main={
-                  <Plate>
-                    <PlateHead title="Mounts" level={3} meta="what this container can see of the host" />
-                    <DataTable
-                      caption="Mounts"
-                      rows={data.mounts}
-                      rowKey={(row) => `${row.type}-${row.destination}`}
-                      emptyState={<Empty title="No mounts" explanation="This container mounts nothing." />}
-                      columns={[
-                        { key: 'type', header: 'Type', render: (row) => <Value value={row.type} mono /> },
-                        { key: 'source', header: 'Source', render: (row) => <Value value={row.source ?? row.name} mono /> },
-                        { key: 'destination', header: 'Destination', render: (row) => <Value value={row.destination} mono /> },
-                        {
-                          key: 'rw',
-                          header: 'Mode',
-                          render: (row) => (
-                            <Value value={row.read_write === null ? null : row.read_write ? 'rw' : 'ro'} mono />
-                          ),
-                        },
-                      ]}
-                    />
-                  </Plate>
-                }
+                main={<MountsPanel mounts={data.mounts} />}
+                side={<ObservationPlate data={data} />}
               />
             ),
           },
@@ -472,6 +452,51 @@ export function WorkloadDetail(): JSX.Element {
         );
       }}
     </ResourceView>
+  );
+}
+
+function MountsPanel({ mounts }: { mounts: import('@/api/types').ContainerMount[] }): JSX.Element {
+  // Docker may report records that agree on every display field. Their order is local to this
+  // observation, which makes it a safe key only for this rendered snapshot.
+  const rows = mounts.map((mount, index) => ({ mount, index }));
+
+  return (
+    <Plate>
+      <PlateHead title="Mounts" level={3} meta="Docker-reported mount records; not a storage or path join" />
+      <DataTable
+        caption="Docker-reported mounts"
+        rows={rows}
+        rowKey={(row) => `mount-${row.index}`}
+        emptyState={<Empty title="No mount records" explanation={emptyMountsContext()} />}
+        columns={[
+          { key: 'destination', header: 'Destination', render: ({ mount }) => <Value value={mount.destination} mono reason="not reported" /> },
+          { key: 'type', header: 'Type', render: ({ mount }) => <Value value={mount.type} mono reason="not reported" /> },
+          {
+            key: 'access',
+            header: 'Reported access',
+            render: ({ mount }) => <Value value={reportedMountAccess(mount)} mono reason="not reported" />,
+          },
+          { key: 'name', header: 'Volume name', render: ({ mount }) => <Value value={mount.name} mono reason="not reported" /> },
+          { key: 'source', header: 'Daemon source', render: ({ mount }) => <Value value={mount.source} mono reason="not reported" /> },
+        ]}
+      />
+      {mounts.length > 0 ? (
+        <Disclosure summary="Exact mount facts" count={mounts.length}>
+          {mounts.map((mount, index) => (
+            <KeyValueList key={`${mount.type ?? 'missing'}-${mount.destination ?? 'missing'}-${index}`}>
+              <KeyValue label="Destination"><Value value={mount.destination} mono reason="not reported" /></KeyValue>
+              <KeyValue label="Type"><Value value={mount.type} mono reason="not reported" /></KeyValue>
+              <KeyValue label="Volume name"><Value value={mount.name} mono reason="not reported" /></KeyValue>
+              <KeyValue label="Daemon source"><Value value={mount.source} mono reason="not reported" /></KeyValue>
+              <KeyValue label="Driver"><Value value={mount.driver} mono reason="not reported" /></KeyValue>
+              <KeyValue label="Raw mode"><Value value={mount.mode} mono reason="not reported" /></KeyValue>
+              <KeyValue label="Read/write"><Value value={mount.read_write === null ? null : String(mount.read_write)} mono reason="not reported" /></KeyValue>
+              <KeyValue label="Propagation"><Value value={mount.propagation} mono reason="not reported" /></KeyValue>
+            </KeyValueList>
+          ))}
+        </Disclosure>
+      ) : null}
+    </Plate>
   );
 }
 
