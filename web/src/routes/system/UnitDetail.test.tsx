@@ -115,3 +115,64 @@ describe('incoming systemd references', () => {
     await waitFor(() => expect(screen.queryByRole('link', { name: 'source.service' })).not.toBeInTheDocument());
   });
 });
+
+describe('service execution diagnosis', () => {
+  it('keeps a prior failure distinct from current active, health, and freshness evidence', async () => {
+    stubBackend({ '/api/v1/systemd/units/obj_unit': {
+      ...detail,
+      service: {
+        type: 'simple', main_pid: 123456789012345, control_pid: null, exec_main_pid: 123456789012345,
+        result: 'exit-code', exec_main_code: 1, exec_main_status: 23, restart: 'on-failure',
+        restart_usec: 0, n_restarts: 2, remain_after_exit: null, guess_main_pid: null,
+        exec_main_start_timestamp_monotonic: 123456789, watchdog_usec: null,
+        watchdog_timestamp_monotonic: null, watchdog_signal: null, watchdog_pid: null,
+      },
+    } });
+    mount('/system/obj_unit');
+    expect(await screen.findByRole('heading', { name: 'Execution diagnosis' })).toBeInTheDocument();
+    expect(screen.getByText('exit-code')).toBeInTheDocument();
+    expect(screen.getByText('exited (status 23)')).toBeInTheDocument();
+    expect(screen.getByText('2 automatic restarts reported')).toBeInTheDocument();
+    expect(screen.getByText('0 µs')).toBeInTheDocument();
+    expect(screen.getAllByText('active').length).toBeGreaterThan(0);
+    expect(screen.getByText('healthy')).toBeInTheDocument();
+    expect(screen.getByText('current')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Service facts' }));
+    expect(screen.getAllByText('123456789012345').length).toBeGreaterThan(0);
+    const rawFacts = screen.getByText('Raw manager facts');
+    rawFacts.focus();
+    const keydown = vi.fn();
+    rawFacts.addEventListener('keydown', keydown);
+    await userEvent.keyboard('{Enter}');
+    expect(rawFacts).toHaveFocus();
+    expect(keydown).toHaveBeenCalledWith(expect.objectContaining({ key: 'Enter' }));
+    // jsdom dispatches Enter on summary but does not implement its native disclosure default.
+    await userEvent.click(rawFacts);
+    expect(rawFacts.closest('details')).toHaveAttribute('open');
+    expect(screen.getByText('exec_main_code')).toBeInTheDocument();
+    expect(screen.getByText('23')).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true);
+  });
+
+  it('keeps the service route readable when the manager omits optional facts', async () => {
+    stubBackend({ '/api/v1/systemd/units/obj_unit': {
+      ...detail,
+      service: { type: null } as NonNullable<SystemdUnit['service']>,
+    } });
+    mount('/system/obj_unit');
+    expect(await screen.findByRole('heading', { name: 'Execution diagnosis' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'the manager did not report a service result' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Service facts' }));
+    expect(screen.getByRole('tab', { name: 'Service facts' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('button', { name: /^Plan / })).not.toBeInTheDocument();
+  });
+
+  it('does not add diagnosis to non-service units', async () => {
+    stubBackend({ '/api/v1/systemd/units/obj_unit': { ...detail, unit_type: 'socket', service: null } });
+    mount('/system/obj_unit');
+    await screen.findByText('State');
+    expect(screen.queryByRole('heading', { name: 'Execution diagnosis' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Service facts' })).not.toBeInTheDocument();
+  });
+});

@@ -53,3 +53,7 @@
   line-height: 1.5;
   max-width: 76ch;
 }
+
+.rawFacts { margin-top: 14px; }
+.rawFacts > summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+.rawFacts > :last-child { margin-top: 10px; }
