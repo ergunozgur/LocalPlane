@@ -18,6 +18,9 @@
   max-width: 72ch;
 }
 
+.networkContext { color: var(--dim); line-height: 1.45; }
+.addressPair { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; }
+
 .resample {
   margin-top: 9px;
   display: inline-flex;

@@ -52,6 +52,13 @@ import {
   ownershipState,
 } from '@/domain/vocabulary';
 import { formatTimestamp } from '@/domain/format';
+import {
+  bindScope,
+  bindingFact,
+  emptyAttachmentsContext,
+  networkModeContext,
+  portTarget,
+} from '@/domain/container-networking';
 import styles from './WorkloadDetail.module.css';
 
 export function WorkloadDetail(): JSX.Element {
@@ -252,59 +259,77 @@ export function WorkloadDetail(): JSX.Element {
                 main={
                   <>
                     <Plate>
-                      <PlateHead title="Networks" level={3} meta="what this container is attached to" />
+                      <PlateHead title="Network context" level={3} meta="Docker-reported mode and attachments" />
                       <PlateBody>
                         <KeyValueList>
                           <KeyValue label="Network mode">
-                            <Value value={data.network_mode} mono />
+                            <Value value={data.network_mode} mono reason="Docker did not report a network mode" />
                           </KeyValue>
+                          <KeyValue label="Meaning"><span className={styles.networkContext}>{networkModeContext(data.network_mode)}</span></KeyValue>
                         </KeyValueList>
                         {data.networks.length === 0 ? (
-                          <Empty title="No networks" explanation="This container is attached to none." />
+                          <Empty title="No attachment records" explanation={emptyAttachmentsContext(data.network_mode)} />
                         ) : (
-                          <KeyValueList>
-                            {data.networks.map((network) => (
-                              <KeyValue key={network.name} label={<span className="mono">{network.name}</span>}>
-                                <Value value={network.ip_address} mono reason="no address was reported" />
-                              </KeyValue>
-                            ))}
-                          </KeyValueList>
+                          <>
+                            <KeyValueList>
+                              {data.networks.map((network, index) => (
+                                <KeyValue key={`${network.name}-${network.network_id ?? index}`} label={<span className="mono">{network.name}</span>}>
+                                  <span className={styles.addressPair}>
+                                    <Value value={network.ip_address} mono reason="no IPv4 address was reported" />
+                                    <Value value={network.ipv6_address} mono reason="no IPv6 address was reported" />
+                                  </span>
+                                </KeyValue>
+                              ))}
+                            </KeyValueList>
+                            <Disclosure summary="Attachment facts" count={data.networks.length}>
+                              {data.networks.map((network, index) => (
+                                <KeyValueList key={`${network.name}-${network.network_id ?? index}`}>
+                                  <KeyValue label="Name"><span className="mono">{network.name}</span></KeyValue>
+                                  <KeyValue label="Network id"><Value value={network.network_id} mono reason="not reported" /></KeyValue>
+                                  <KeyValue label="IPv4"><Value value={network.ip_address} mono reason="not reported" /></KeyValue>
+                                  <KeyValue label="IPv6"><Value value={network.ipv6_address} mono reason="not reported" /></KeyValue>
+                                  <KeyValue label="Gateway"><Value value={network.gateway} mono reason="not reported" /></KeyValue>
+                                  <KeyValue label="MAC"><Value value={network.mac_address} mono reason="not reported" /></KeyValue>
+                                  <KeyValue label="Aliases">
+                                    {network.aliases.length > 0 ? <span className="mono">{network.aliases.join(', ')}</span> : <Value value={null} reason="no aliases reported" />}
+                                  </KeyValue>
+                                </KeyValueList>
+                              ))}
+                            </Disclosure>
+                          </>
                         )}
                       </PlateBody>
                     </Plate>
 
                     <Plate>
-                      <PlateHead title="Ports" level={3} />
+                      <PlateHead title="Port records" level={3} meta="reported publication, not a reachability test" />
                       <DataTable
-                        caption="Published and exposed ports"
+                        caption="Docker-reported container targets and host bindings"
                         rows={data.ports}
-                        rowKey={(row) => `${row.container_port}-${row.protocol}-${row.host_port ?? 'x'}`}
-                        emptyState={<Empty title="No ports" explanation="This container exposes none." />}
+                        rowKey={(row) => `${row.container_port ?? 'missing'}-${row.protocol}-${row.host_ip ?? 'missing'}-${row.host_port ?? 'missing'}-${row.published}`}
+                        emptyState={<Empty title="No port records" explanation="This does not establish no listeners or connectivity." />}
                         columns={[
                           {
-                            key: 'container',
-                            header: 'Container',
-                            render: (row) => (
-                              <span className="mono">{row.container_port}/{row.protocol}</span>
-                            ),
+                            key: 'target',
+                            header: 'Container target',
+                            render: (row) => <span className="mono">{portTarget(row)}</span>,
                           },
                           {
-                            key: 'host',
-                            header: 'Host',
-                            render: (row) =>
-                              row.published ? (
-                                <span className="mono">
-                                  {row.host_ip ?? '*'}:{row.host_port}
-                                </span>
-                              ) : (
-                                <Value value={null} reason="exposed but not published" />
-                              ),
+                            key: 'publication',
+                            header: 'Reported binding',
+                            render: (row) => <span className="mono">{bindingFact(row)}</span>,
+                          },
+                          {
+                            key: 'scope',
+                            header: 'Bind-address scope',
+                            render: (row) => row.published ? bindScope(row.host_ip) : 'No host binding reported',
                           },
                         ]}
                       />
                     </Plate>
                   </>
                 }
+                side={<ObservationPlate data={data} />}
               />
             ),
           },

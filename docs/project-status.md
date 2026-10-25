@@ -22,7 +22,7 @@ and questions that remain unresolved.
 | --- | --- | --- |
 | Release maturity | **CURRENT** | Pre-release, local development software; APIs and packaging may change |
 | Linux networking | **CURRENT** | Observation, provider evidence, management/intent, reconciliation, MTU plans and guarded execution |
-| Docker | **CURRENT** | Container observation, bounded logs/current stats, and start/stop/restart through the Engine API |
+| Docker | **CURRENT** | Container observation, bounded logs/current stats, Docker-reported networking facts, and start/stop/restart through the Engine API |
 | systemd | **CURRENT** | Bounded loaded-unit observation, readable service execution/restart context with raw manager facts, and eligible service start/stop/restart through D-Bus |
 | Storage pressure | **CURRENT** | Transient mounted filesystem byte/inode availability, exact mount evidence and immediate kernel block backing; ext4/xfs only in the agent mount namespace |
 | Runs and Changes | **CURRENT** | Immutable previews, confirmation, typed apply, fresh verification, and durable recovery holds |
