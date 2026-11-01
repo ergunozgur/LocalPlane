@@ -395,10 +395,11 @@ describe('Overview', () => {
     expect(screen.getByText(/unknown, not absent/i)).toBeInTheDocument();
   });
 
-  it('explains an empty container list by its sweep', async () => {
+  it('explains a complete stored empty container sweep without claiming a live daemon read', async () => {
     stubBackend();
     renderOverview();
-    expect(await screen.findByText(/daemon answered and reported none/i)).toBeInTheDocument();
+    expect(await screen.findByText(/complete stored Docker inventory recorded no containers/i)).toBeInTheDocument();
+    expect(screen.queryByText(/daemon answered and reported none/i)).not.toBeInTheDocument();
   });
 
   it('shows a failed read as an error on that widget alone', async () => {

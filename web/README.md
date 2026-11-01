@@ -43,9 +43,11 @@ not make a console control exist.
   records.
 - **Network** — interface list and detail with addresses, state, ownership, provenance,
   intent, reconciliation, protection, and route evidence.
-- **Workloads** — Docker container list/detail, provider-derived Compose-project grouping, bounded
-  logs, and on-demand current statistics; the project breadcrumb and `/workloads?group=<project>`
-  filter the list to that exact provider label.
+- **Workloads** — retained Docker container list/detail, provider-derived Compose-project grouping,
+  explicit read-only Docker inventory refresh with complete/partial/uncertain outcome and stored-list
+  re-read recovery, bounded logs, and on-demand current statistics. Latest-inventory membership,
+  observation freshness, runtime and health remain separate; the project breadcrumb and
+  `/workloads?group=<project>` filter the list to that exact provider label.
 - **System** — bounded loaded systemd units with state, enablement, relationships, and typed
   service/socket/timer detail; the unit-type dropdown and `/system?type=<unit-type>` filter the
   list together, and the Units/Services section links mark the current scope.

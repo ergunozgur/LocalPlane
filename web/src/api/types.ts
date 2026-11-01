@@ -74,6 +74,7 @@ export type ContainerNetwork = S['ContainerNetwork'];
 export type ContainerStats = S['ContainerStats'];
 export type ContainerLogs = S['ContainerLogs'];
 export type ContainerLogLine = S['ContainerLogLine'];
+export type ContainerObservationResult = S['ContainerObservationResult'];
 
 /* --------------------------------------------------------------------- runs and changes */
 export type Run = S['Run'];
