@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { RunDetail } from '@/routes/operations/RunDetail';
+import { RunComposer } from './RunComposer';
 import { ServicePlan } from './ServicePlan';
 import { AuthenticationProvider } from '@/auth/AuthProvider';
 import { refreshAll } from '@/hooks/useResource';
@@ -32,6 +33,12 @@ function show(run: Run) {
     <Route path="/operations/runs/:runId" element={<RunDetail />} />
     <Route path="/operations" element={<p>Operations list</p>} />
   </Routes></MemoryRouter>);
+}
+function showComposer(run: Run) {
+  return render(<MemoryRouter><RunComposer run={run} controller={{
+    pending: null, reading: false, readError: null, actionError: null, applyAttempted: false,
+    act: vi.fn(), refresh: vi.fn(),
+  } as never} /></MemoryRouter>);
 }
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 afterEach(() => { vi.unstubAllGlobals(); sessionStorage.clear(); });
@@ -94,6 +101,61 @@ describe('ordinary apply refuses unsafe or unsupported previews', () => {
     const fetch = vi.fn().mockResolvedValue(response(run)); vi.stubGlobal('fetch', fetch); show(run);
     const apply = await screen.findByRole('button', { name: 'Apply approved preview' });
     expect(apply).toBeDisabled(); fireEvent.click(apply); expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains the exact loopback transport gap without clearing the published apply gate', async () => {
+    const run = confirmed(planned());
+    run.preview.how.eligibility = 'blocked';
+    run.preview.protection.status = 'unknown';
+    run.preview.systemd_lifecycle_context = {
+      status: 'partial', target_unit: run.object_name, action: 'restart', effect_units: [], effect_edges: [], effect_complete: false,
+      active_activation_sources: [], active_upholding_sources: [], management_units: [], management_complete: false,
+      connection_unit: null, connection_unit_type: null, agent_unit: null, agent_complete: false, agent_unit_type: null,
+      gaps: ['management_path.loopback_transport'], restart_baseline_invocation_id: null, runtime_owner: null,
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(run))); show(run);
+    expect(await screen.findByText(/This connection cannot establish management-path protection/)).toBeInTheDocument();
+    expect(screen.getByText(/other protection, containment, effect, or OS-authorization blockers may remain/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply approved preview' })).toBeDisabled();
+  });
+
+  it.each([
+    null,
+    ['management_path.other_transport'],
+  ])('does not infer connection guidance or eligibility from non-loopback lifecycle context %j', async (gaps) => {
+    const run = confirmed(planned());
+    run.preview.how.eligibility = 'blocked';
+    run.preview.protection.status = 'unknown';
+    if (gaps) {
+      run.preview.systemd_lifecycle_context = {
+        status: 'partial', target_unit: run.object_name, action: 'restart', effect_units: [], effect_edges: [], effect_complete: false,
+        active_activation_sources: [], active_upholding_sources: [], management_units: [], management_complete: false,
+        connection_unit: null, connection_unit_type: null, agent_unit: null, agent_complete: false, agent_unit_type: null,
+        gaps, restart_baseline_invocation_id: null, runtime_owner: null,
+      };
+    } else run.preview.systemd_lifecycle_context = null;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(run))); show(run);
+    expect(await screen.findByRole('button', { name: 'Apply approved preview' })).toBeDisabled();
+    expect(screen.queryByText(/This connection cannot establish management-path protection/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    undefined,
+    'management_path.loopback_transport',
+  ])('treats malformed lifecycle gaps %j as no connection guidance and leaves the published block intact', async (gaps) => {
+    const run = confirmed(planned());
+    run.preview.how.eligibility = 'blocked';
+    run.preview.protection.status = 'unknown';
+    const context = {
+      status: 'partial', target_unit: run.object_name, action: 'restart', effect_units: [], effect_edges: [], effect_complete: false,
+      active_activation_sources: [], active_upholding_sources: [], management_units: [], management_complete: false,
+      connection_unit: null, connection_unit_type: null, agent_unit: null, agent_complete: false, agent_unit_type: null,
+      gaps, restart_baseline_invocation_id: null, runtime_owner: null,
+    };
+    run.preview.systemd_lifecycle_context = context as never;
+    showComposer(run);
+    expect(await screen.findByRole('button', { name: 'Apply approved preview' })).toBeDisabled();
+    expect(screen.queryByText(/This connection cannot establish management-path protection/)).not.toBeInTheDocument();
   });
   it.each(['docker.container.start', 'docker.container.stop', 'docker.container.restart', 'network.interface.reconcile_mtu', 'systemd.service.self-impact-override', 'shell.session', 'command'])('has no %s mutation controls', async (operation) => {
     const run = confirmed(planned()); run.operation = operation;

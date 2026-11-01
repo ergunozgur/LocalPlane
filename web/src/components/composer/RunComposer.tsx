@@ -24,6 +24,10 @@ export function RunComposer({ run, controller }: { run: Run; controller: Control
   const supportedMethod = confirmation.required
     ? ['acknowledge', 'typed'].includes(confirmation.method)
     : confirmation.method === 'none';
+  // This is a narrow explanation of an actual lifecycle-context finding, not a second
+  // eligibility calculation. The published preview remains the only authority for apply.
+  const lifecycleGaps = preview.systemd_lifecycle_context?.gaps;
+  const loopbackTransportGap = Array.isArray(lifecycleGaps) && lifecycleGaps.includes('management_path.loopback_transport');
   const ordinary = buildOffersControl(run.operation) && preWrite && valid && supportedMethod && gate.state === 'executable' && gate.mayOfferControl && !controller.applyAttempted;
   const confirmed = !confirmation.required || (confirmation.satisfied && run.confirmation?.preview_id === preview.preview_id && run.confirmation.preview_digest === preview.preview_digest && run.confirmation.method === confirmation.method && !run.confirmation.consumed);
   useEffect(() => {
@@ -55,6 +59,7 @@ export function RunComposer({ run, controller }: { run: Run; controller: Control
         {confirmation.method === 'typed' ? <label className={styles.confirm}>Type {preview.what.object_name}<input className={styles.input} value={typed} disabled={!idle} autoComplete="off" onChange={(event) => setTyped(event.target.value)} /></label> : null}
       </> : null}
       {preWrite && !ordinary && !controller.applyAttempted ? <p className={styles.note}>Ordinary apply is unavailable. Read the execution, protection, validity and confirmation evidence below.{!supportedMethod ? ' This confirmation method is not supported here.' : ''}</p> : null}
+      {loopbackTransportGap ? <p className={styles.connectionHelp} role="note">This connection cannot establish management-path protection. Use the supported direct HTTPS Operator Console; HTTPS, sign-in, or agent capability does not clear the published gate, and other protection, containment, effect, or OS-authorization blockers may remain.</p> : null}
       {controller.applyAttempted ? <p className={styles.note}>An apply request was attempted from this tab. It will not be repeated here. Refresh this Run and inspect its Change for the recorded outcome.</p> : null}
       <div role="status" aria-live="polite">
         {controller.pending ? `${controller.pending}… The backend owns this Run.` : controller.reading ? 'Reading the Run…' : `Recorded state: ${run.state}; host effect: ${run.host_effect}.`}

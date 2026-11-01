@@ -224,6 +224,11 @@ def test_the_openapi_document_offers_no_way_to_name_a_path_a_command_or_a_deadli
         "preview_id", "acknowledge", "acknowledge_object", "expected_preview_digest"}
     assert confirm.get("additionalProperties") is False
 
+    journal = spec["components"]["schemas"]["SystemdJournalRequest"]
+    assert set(journal["properties"]) == {"acknowledge_sensitive"}
+    assert journal["required"] == ["acknowledge_sensitive"]
+    assert journal.get("additionalProperties") is False
+
     # Read from what a caller may *send*, which is the request bodies and nothing else.
     # The prose on this API names an argv in order to say there is nowhere to put one, and
     # a response may perfectly well report a route it observed; what must not exist is a
@@ -245,6 +250,8 @@ def test_the_openapi_document_offers_no_way_to_name_a_path_a_command_or_a_deadli
         # confirm / apply / keep / recovery
         "preview_id", "acknowledge", "acknowledge_object", "expected_preview_digest",
         "note", "expected_recovery_reason",
+        # Explicit read-only journal sensitivity consent; no query authority.
+        "acknowledge_sensitive",
     }
     for forbidden in ("backup_interface", "second_path", "probe_target", "watchdog_command",
                       "rollback_command", "timeout_action", "argv", "shell", "command",

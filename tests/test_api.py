@@ -270,6 +270,7 @@ def test_capabilities_are_live_and_carry_their_status(client: TestClient):
         "docker.containers.observe",
         "docker.container.lifecycle",
         "systemd.units.observe",
+        "systemd.unit.journal",
         "systemd.service.lifecycle",
         "systemd.service.lifecycle_context.observe",
     }
@@ -323,6 +324,7 @@ def test_capabilities_fall_back_to_what_was_recorded_and_say_so(
             "docker.containers.observe",
             "docker.container.lifecycle",
             "systemd.units.observe",
+            "systemd.unit.journal",
             "systemd.service.lifecycle",
             "systemd.service.lifecycle_context.observe",
         }
@@ -515,6 +517,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
         "/api/v1/docker/containers/{object_id}/stats",
         "/api/v1/systemd/units",
         "/api/v1/systemd/units/{object_id}",
+        "/api/v1/systemd/units/{object_id}/journal",
         "/api/v1/systemd/observations/refresh",
         "/api/v1/management-path",
         "/api/v1/management-path/observations/refresh",
@@ -538,7 +541,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
 
 
 def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
-    """Twenty-one endpoints are not exclusively a `GET`, and exactly two can change the host.
+    """Twenty-two endpoints are not exclusively a `GET`, and exactly two can change the host.
 
     Most of them change nothing at all. **Four read the host and record or return what
     they saw** — the interface sweep, container sweep, systemd sweep, and management-path
@@ -584,7 +587,9 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
     revokes only that browser session. Neither operation grants host-write authority.
 
     Storage observation is the twenty-first: a bounded filesystem read with no retention.
-    The document lists exactly these twenty-one so another cannot appear unnoticed, and
+    Service journal diagnosis is the twenty-second: explicit sensitivity acknowledgment,
+    fixed scope and no retention. It grants no lifecycle authority.
+    The document lists exactly these twenty-two so another cannot appear unnoticed, and
     the assertion is an equality rather than a containment for that reason.
 
     There is still deliberately no `/execute`, no `/operations/{name}/execute`, no generic
@@ -604,6 +609,7 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
         "/api/v1/network/observations/refresh": ["post"],
         "/api/v1/docker/containers/observations/refresh": ["post"],
         "/api/v1/systemd/observations/refresh": ["post"],
+        "/api/v1/systemd/units/{object_id}/journal": ["post"],
         "/api/v1/docker/containers/{object_id}/logs": ["post"],
         "/api/v1/docker/containers/{object_id}/stats": ["post"],
         "/api/v1/management-path/observations/refresh": ["post"],

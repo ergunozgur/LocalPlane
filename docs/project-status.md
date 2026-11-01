@@ -23,7 +23,7 @@ and questions that remain unresolved.
 | Release maturity | **CURRENT** | Pre-release, local development software; APIs and packaging may change |
 | Linux networking | **CURRENT** | Observation, provider evidence, management/intent, reconciliation, MTU plans and guarded execution |
 | Docker | **CURRENT** | Explicit read-only container-inventory observation with retained-record/latest-membership context, bounded logs/current stats, Docker-reported networking and mount facts, and start/stop/restart through the Engine API |
-| systemd | **CURRENT** | Bounded loaded-unit observation, readable service execution/restart context with raw manager facts, and eligible service start/stop/restart through D-Bus |
+| systemd | **CURRENT** | Bounded loaded-unit observation, readable service execution/restart context, explicit consent-gated bounded current-boot service journal reads, and eligible service start/stop/restart through D-Bus; incomplete potential-effect evidence blocks rather than clearing protection |
 | Storage pressure | **CURRENT** | Transient mounted filesystem byte/inode availability, exact mount evidence and immediate kernel block backing; ext4/xfs only in the agent mount namespace |
 | Runs and Changes | **CURRENT** | Immutable previews, confirmation, typed apply, fresh verification, and durable recovery holds |
 | Operator Console | **CURRENT** | Observation, cross-domain search, evidence-backed Relationships tabs, and a limited authenticated systemd service Composer |
@@ -33,12 +33,30 @@ and questions that remain unresolved.
 | Authentication and browser sessions | **CURRENT** | One local master Bearer credential, derived 12-hour non-sliding in-memory browser sessions, logout, and router-level enforcement |
 | Cookie Origin/CSRF boundary | **CURRENT** | Cookie-authenticated unsafe requests require exact accepted Origin; Bearer requests are exempt |
 | Frontend write workflow | **CURRENT** | Loaded systemd services: plan start/stop/restart, inspect immutable preview, confirm, apply, inspect outcome and cancel before write; other operation controls remain absent |
-| Production console delivery and TLS | **UNRESOLVED** | No accepted asset-serving topology; non-loopback TLS is not configured |
+| Direct HTTPS console delivery | **CURRENT** | Optional single-process backend HTTPS with one configured built same-origin console snapshot; default remains numeric-loopback HTTP with no console mount |
 | Docker management-path protection | **UNRESOLVED** | Container lifecycle cannot prove whether a particular container carries the operator route |
 | Database request concurrency | **CURRENT** | A process-local reentrant lock serializes runtime use of the shared SQLite connection, holding transactions through commit or rollback and reads through row retrieval; forced-contention request regressions cover overlapping refreshes and reads during rollback. Multi-process deployment is not validated |
 | Broader infrastructure control plane | **FUTURE** | More systems, networks, workloads, applications, and providers are direction, not current capability |
 | Unified metrics, logs, and historical replay | **FUTURE** | Bounded container samples and operational records exist; general series, log aggregation, and replay do not |
 | Fleet and automation | **FUTURE** | Not implemented and not a near-term commitment stated by this document |
+
+### Service incident evidence
+
+From an individual service workspace, the Journal tab performs no request until the operator
+acknowledges the sensitive-message warning and explicitly reads. Results are ephemeral, limited
+to the current boot and recent service messages, and are cleared when the workspace/tab closes
+or identity changes. Access follows the agent's effective OS permissions and the fixed set of
+system journal files the agent can enumerate/read; installed native libsystemd support is an
+optional access mechanism, not a privilege increase. Coverage is reported as complete only for
+that bounded query/file enumeration, partial when some files are inaccessible, or unknown when
+the provider cannot establish coverage. Completeness does not mean all history or a frozen view.
+System-manager service reads do not aggregate user-manager journals. Exact systemd unit matching
+can omit manager messages; journal text may contain secrets and is not reliably redacted, and
+matching messages do not establish cause.
+Metadata-only records are retained: an absent MESSAGE field is distinct from present but empty
+message text and neither is treated as an empty journal result.
+Journal access does not determine whether Start or Restart is eligible: those actions remain in
+Lifecycle and use the existing immutable preview, confirmation, durable Run and verification path.
 
 ## Mounted filesystem pressure
 
@@ -123,9 +141,9 @@ surface will ship. Source and generated contract decide what is **CURRENT**.
 
 - Authentication uses one local credential; there are no users, roles, RBAC, or named identity.
 - Browser sessions are process-local, expire absolutely after 12 hours, and disappear on restart.
-- Plain-HTTP browser use remains loopback-only; TLS and production remote exposure are not implemented.
+- Plain-HTTP browser use requires a numeric loopback bind. Optional direct HTTPS console startup validates operator-supplied certificate/key files and snapshots a newly installed protected built-console copy; group/other-writable build paths or ancestors fail closed. Restart replaces either. It is not proxy support, public exposure, or production readiness.
 - Rootful Docker socket access is effectively root-equivalent.
-- Console writes are limited to systemd service Composer; production serving topology remains unresolved.
+- Console writes are limited to systemd service Composer. The narrow pre-release direct HTTPS serving shape is accepted; broader production packaging and exposure remain unresolved.
 - Container lifecycle lacks authoritative operator-route protection.
 - systemd lifecycle fails closed when containment, effect, authorization, or verification
   evidence cannot be established.

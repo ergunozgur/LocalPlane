@@ -53,6 +53,12 @@ export const endpoints = {
   systemdUnits: (o?: Opts) => request<T.SystemdUnitList>('/systemd/units', o),
   systemdUnit: (id: string, o?: Opts) =>
     request<T.SystemdUnit>(`/systemd/units/${encodeURIComponent(id)}`, o),
+  systemdJournal: (id: string, o: Opts) =>
+    request<T.SystemdJournalResponse>(`/systemd/units/${encodeURIComponent(id)}/journal`, {
+      ...o,
+      method: 'POST',
+      body: { acknowledge_sensitive: true },
+    }),
 
   /* ---------------------------------------------------------------------------- docker */
   containers: (o?: Opts) => request<T.DockerContainerList>('/docker/containers', o),

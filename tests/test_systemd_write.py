@@ -374,6 +374,36 @@ def test_a_job_whose_completion_is_never_heard_is_also_unknown(estate: Estate):
     assert outcome.change.result == str(ChangeResult.RECOVERY_REQUIRED)
 
 
+@pytest.mark.parametrize("code", ["timeout", "agent_unavailable"])
+def test_lifecycle_transport_loss_keeps_durable_unknown_even_if_unit_is_active(
+    estate: Estate, monkeypatch, code: str,
+):
+    from localplane.backend.agent_client import AgentError
+    estate.state.units[TARGET].update({"ActiveState": "inactive", "SubState": "dead"})
+    estate.observe()
+    estate.state.on_dispatch = _restarted
+    original = estate.client.systemd_service_lifecycle
+
+    def lose_answer(**kwargs):
+        original(**kwargs)  # The scripted agent acts, but the backend loses its answer.
+        raise AgentError(code, "scripted lost lifecycle answer", dispatched=True)
+
+    monkeypatch.setattr(estate.client, "systemd_service_lifecycle", lose_answer)
+    outcome = estate.run_through(SystemdServiceAction.START)
+    assert outcome.change.mutation_outcome == str(MutationOutcome.WRITE_UNKNOWN)
+    assert outcome.change.mutation_reason == code
+    assert outcome.change.verification_outcome == str(VerificationOutcome.NOT_ATTEMPTED)
+    assert outcome.run.state == str(RunState.RECOVERY_REQUIRED)
+    estate.observe()  # Current active/running evidence cannot resolve a past unknown write.
+    assert estate.state.units[TARGET]["ActiveState"] == "active"
+    assert estate.changes.get_change(outcome.change.change_id) == outcome.change
+    assert estate.runs.get(outcome.run.run_id).state == str(RunState.RECOVERY_REQUIRED)
+    assert estate.changes.lock_for(outcome.run.run_id) is not None
+    with pytest.raises(RunRefused):
+        estate.apply(estate.runs.get(outcome.run.run_id), SystemdServiceAction.START)
+    assert sum(call[0] == "unit_lifecycle" for call in estate.state.calls) == 1
+
+
 def test_a_unit_that_vanished_mid_change_cannot_be_verified_from_a_stale_reading(
     estate: Estate,
 ):

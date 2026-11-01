@@ -29,9 +29,10 @@ evidence-backed changes.
 > model, packaging, and deployment requirements may change.
 
 > [!WARNING]
-> **Loopback development only.** LocalPlane requires a locally initialized master credential.
-> Browser sessions over plain HTTP are issued only for the configured loopback bind. Production
-> TLS, remote browser access, reverse-proxy trust, and production asset serving are not implemented.
+> **Pre-release single-process operator console.** LocalPlane requires a locally initialized
+> master credential. Plain-HTTP browser sessions are loopback development only. The supported
+> non-loopback shape is a direct backend HTTPS listener serving one configured built console;
+> it is not proxy deployment, public exposure, or a production-readiness claim.
 
 LocalPlane turns provider facts into an operational model: identity, observation, evidence,
 ownership, intent, findings, Runs, Changes, verification, recovery, and history. It respects
@@ -162,13 +163,61 @@ The agent handles `SIGTERM` and `SIGINT` by stopping its accept loop and removin
 Unix socket, allowing a clean restart. Existing daemon request handlers are not drained;
 an interrupted in-flight operation must not be assumed to have completed or been undone.
 
-The backend listens on `127.0.0.1:8080` by default. API and automation callers send
+The backend listens on `127.0.0.1:8080` by default, without mounting console assets. API and automation callers send
 `Authorization: Bearer <master-secret>`. The Operator Console exchanges the master credential
 once for an `HttpOnly`, `SameSite=Strict` browser cookie. Sessions expire absolutely after 12
 hours, do not slide, and are invalidated by backend restart or logout.
 
 Interactive API documentation at `http://127.0.0.1:8080/docs` and the generated contract at
 `http://127.0.0.1:8080/openapi.json` are authenticated surfaces too.
+
+### Direct HTTPS Operator Console
+
+For the supported direct, same-origin console shape, build the console and configure the backend
+with operator-supplied paths before startup:
+
+```sh
+(cd web && npm run build)
+export LOCALPLANE_CONSOLE_DIR="$HOME/localplane-console" # replace with a new service-owned path
+test ! -e "$LOCALPLANE_CONSOLE_DIR" || { echo "choose a new console directory" >&2; exit 1; }
+mkdir -m 0700 "$LOCALPLANE_CONSOLE_DIR"
+mkdir -m 0700 "$LOCALPLANE_CONSOLE_DIR/assets"
+install -m 0600 web/dist/index.html "$LOCALPLANE_CONSOLE_DIR/index.html"
+for asset in web/dist/assets/*; do [ -f "$asset" ] && install -m 0600 "$asset" "$LOCALPLANE_CONSOLE_DIR/assets/${asset##*/}"; done
+export LOCALPLANE_HOST=192.0.2.10 # replace with the operator-controlled HTTPS address
+export LOCALPLANE_TLS_CERT_PATH=/path/to/operator-console-cert.pem
+export LOCALPLANE_TLS_KEY_PATH=/path/to/operator-console-key.pem
+.venv/bin/localplane-backend
+```
+
+Open `https://192.0.2.10:8080/` after replacing the example address. `8080` is the default;
+set `LOCALPLANE_PORT` when the backend uses a different operator-selected port.
+
+`LOCALPLANE_TLS_CERT_PATH` and `LOCALPLANE_TLS_KEY_PATH` are a pair: set neither for the
+default HTTP development mode, or set both for direct HTTPS. HTTP startup accepts only a numeric
+loopback `LOCALPLANE_HOST`; `localhost` is not bind-proof. A non-loopback bind requires the TLS
+pair. The key must be a service-owned, unencrypted PEM regular file with mode `0400` or `0600`.
+Certificate and key paths reject links and hard links and require trusted directory ancestors that
+are not group/other writable (apart from a root-owned sticky directory). The certificate's trust,
+hostname coverage, and expiry remain the operator and browser client's responsibility. The backend
+loads the operator-supplied files into its in-process TLS context memory; it does not copy their
+contents into LocalPlane records or return them through the API or console. LocalPlane does not
+issue, provision, or upload certificates or keys.
+
+`LOCALPLANE_CONSOLE_DIR` must name the new protected installed copy, not an arbitrary checkout
+directory. Its parent directories must already be trusted and not group/other writable; for a
+same-user service, a suitable location below a protected home directory is illustrative, not an
+assumption about every home directory. Do not broadly change permissions on a checkout or existing
+parent to make this pass. Group/other-writable build files, directories, or ancestors fail closed.
+
+Only the installed build's index and flat, fingerprinted compiled assets are admitted (at most 512
+entries, 16 MiB per asset, 64 MiB total, and a 1 MiB index). Startup takes an in-memory snapshot;
+requests do not look up files. Restart the backend to replace the installed build or rotate the
+certificate/key. The index is `no-store`; assets use ETag revalidation. Same-origin `/api/v1`
+requests and real SPA deep links are supported, but API, docs, and OpenAPI paths retain their
+normal authentication and errors rather than falling back to the index. This is not a source-tree/
+general file server. Do not put a reverse proxy or TLS terminator in front of this supported shape,
+and do not treat TLS, authentication, or an available capability as permission to apply a change.
 
 The privileged helper is not needed for observation or Docker/systemd lifecycle actions.
 It is needed for the MTU write and requires an explicit peer UID or GID allowlist. See

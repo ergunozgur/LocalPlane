@@ -78,6 +78,13 @@ unsupported graph evidence stays `unknown` and blocks. A narrowly defined, singl
 self-impact override exists only for one proven backend interruption hazard; it does not
 rewrite protection truth or substitute for the ordinary confirmation.
 
+The graph records bounded *potential* effects for the requested job kind, not a promise of
+the transaction systemd will ultimately run. Start/restart may pull in starts, requisite
+checks, or conflict stops; stop/restart may propagate genuine reverse stop/restart effects.
+It is not a universal inverse-dependency closure. Conditional handlers, queued work,
+release-driven stopping, and other incomplete runtime evidence remain gaps that block rather
+than clearing a real management-path or agent coupling.
+
 Container lifecycle does not yet prove whether a particular container carries the
 operator's route. This is an unresolved safety limitation, separate from authentication.
 
@@ -126,7 +133,25 @@ or write locks.
 
 ## Deployment constraints
 
-The backend binds to loopback by default. Plain-HTTP browser sessions are issued only for that
-configured loopback topology. Non-loopback browser exposure still requires a separately accepted
-HTTPS/TLS topology that preserves authoritative connection evidence. Production asset serving is
-unresolved, so LocalPlane remains local development software.
+The backend binds to loopback by default and mounts no console assets. Plain HTTP is accepted only
+for a numeric loopback bind; `localhost` is not treated as bind proof. The supported non-loopback
+shape is one backend process terminating HTTPS itself and serving a configured built console on
+the same origin. It requires paired `LOCALPLANE_TLS_CERT_PATH` and `LOCALPLANE_TLS_KEY_PATH`, plus
+`LOCALPLANE_CONSOLE_DIR` for a newly installed protected copy of the repository `web/dist` build.
+Normal checkout build permissions are not automatically trusted: group/other-writable console
+files, directories, or ancestors fail closed rather than widening permissions in place. The private key is an
+unencrypted, service-owned regular PEM file at mode `0400` or `0600`; certificate/key paths reject
+links and hard links and require trusted ancestors that are not group/other writable (apart from a
+root-owned sticky directory). Certificate trust, hostname coverage, and expiry remain
+operator/browser responsibilities. LocalPlane neither issues nor uploads either. The backend loads
+the files into its in-process TLS context memory and does not copy their contents into LocalPlane
+records or return them through the API or console.
+
+This shape snapshots only a bounded index and flat fingerprinted build assets at startup; requests
+do not read filesystem paths. Restart for an installed-build replacement or certificate/key
+rotation. The index is `no-store`; assets use ETag revalidation. There is no reverse-proxy/header trust,
+arbitrary file serving, or source-tree mount. API, documentation, and OpenAPI paths keep their
+in-process authentication and normal error behavior; only real console deep links may use the
+built index fallback. HTTPS and authentication establish neither management-path protection nor
+permission to execute. The single-process shape remains pre-release: it is not public exposure, a
+proxy deployment contract, or a production-readiness claim.

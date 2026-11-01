@@ -58,6 +58,8 @@ export type IntentRevision = S['IntentRevision'];
 /* ------------------------------------------------------------------------------ systemd */
 export type SystemdUnit = S['SystemdUnit'];
 export type SystemdUnitList = S['SystemdUnitList'];
+export type SystemdJournalResponse = S['SystemdJournalResponse'];
+export type SystemdJournalEntry = S['SystemdJournalEntry'];
 export type SystemdRelationship = S['SystemdRelationship'];
 export type SystemdServiceFacts = S['SystemdServiceFacts'];
 export type SystemdSocketFacts = S['SystemdSocketFacts'];
