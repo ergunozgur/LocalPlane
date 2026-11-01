@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   engineFacts,
   groupContainers,
+  inventoryMembershipCounts,
   imagesInUse,
   runtimeRows,
   containerGroupOf,
@@ -119,19 +120,40 @@ describe('engine facts', () => {
     completed_at: '2026-08-28T08:00:00Z',
   } as unknown as Sweep;
 
-  it('reports only what the sweep and container list actually supply', () => {
-    const facts = engineFacts(sweep, [container('a'), container('b', {}, 'exited')]);
+  it('keeps latest-sighted, retained and unknown membership counts separate', () => {
+    const current = { ...container('a'), observed_in_latest_sweep: true };
+    const retained = { ...container('b', {}, 'exited'), observed_in_latest_sweep: false };
+    const unknown = { ...container('c'), observed_in_latest_sweep: null };
+    const facts = engineFacts(sweep, [current, retained, unknown]);
     expect(facts.provider).toBe('docker');
     expect(facts.version).toBe('29.1.3');
-    expect(facts.containersRunning).toBe(1);
-    expect(facts.containersTotal).toBe(2);
+    expect(facts.reportedRunningLatestSighted).toBe(1);
+    expect(facts.latestSightedContainers).toBe(1);
+    expect(facts.retainedNotSeen).toBe(1);
+    expect(facts.membershipUnknown).toBe(1);
   });
 
   it('reports nulls rather than zeroes when nothing was read', () => {
     const facts = engineFacts(null, null);
     expect(facts.version).toBeNull();
-    expect(facts.containersTotal).toBeNull();
-    expect(facts.containersRunning).toBeNull();
+    expect(facts.latestSightedContainers).toBeNull();
+    expect(facts.reportedRunningLatestSighted).toBeNull();
+  });
+});
+
+describe('inventory membership', () => {
+  it('counts true, false and null independently without treating false as deletion', () => {
+    const counts = inventoryMembershipCounts([
+      { ...container('seen'), observed_in_latest_sweep: true },
+      { ...container('retained', {}, 'running'), observed_in_latest_sweep: false },
+      { ...container('unknown'), observed_in_latest_sweep: null },
+    ]);
+    expect(counts).toEqual({
+      latestSighted: 1,
+      reportedRunningLatestSighted: 1,
+      retainedNotSeen: 1,
+      membershipUnknown: 1,
+    });
   });
 });
 

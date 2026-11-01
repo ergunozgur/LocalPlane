@@ -36,6 +36,7 @@ import { ContainerLogPanel } from '@/components/semantic/ContainerLogPanel';
 import { Disclosure } from '@/components/semantic/Evidence';
 import {
   containerGroupOf,
+  inventoryMembership,
   LABEL_CONFIG_FILES,
   LABEL_CONFIG_HASH,
   LABEL_CONTAINER_NUMBER,
@@ -95,7 +96,7 @@ export function WorkloadDetail(): JSX.Element {
                 main={
                   <>
                     <Plate>
-                      <PlateHead title="Runtime" level={3} meta="what the daemon reports now" />
+                      <PlateHead title="Runtime" level={3} meta="what Docker last reported for this stored record" />
                       <PlateBody>
                         <KeyValueList columns="auto">
                           <KeyValue label="State"><Value value={data.runtime.state} mono /></KeyValue>
@@ -442,6 +443,7 @@ export function WorkloadDetail(): JSX.Element {
                     size="sm"
                     token="health check"
                   />
+                  <StatusPill semantic={inventoryMembership(data.observed_in_latest_sweep)} size="sm" />
                   <ManagementChip state={data.management.state} />
                 </>
               }
@@ -507,8 +509,11 @@ function ObservationPlate({ data }: { data: import('@/api/types').DockerContaine
       <PlateHead title="Observation" level={3} meta="who read this, and when" />
       <PlateBody>
         {data.observation ? (
-          <KeyValueList>
-            <KeyValue label="Freshness">
+            <KeyValueList>
+              <KeyValue label="Latest inventory">
+                <StatusPill semantic={inventoryMembership(data.observed_in_latest_sweep)} size="sm" />
+              </KeyValue>
+              <KeyValue label="Freshness">
               <StatusPill semantic={freshnessOf(data.observation.freshness)} size="sm" />
             </KeyValue>
             <KeyValue label="Provider" hint={data.observation.provider_version}>

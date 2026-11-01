@@ -59,6 +59,16 @@ export const endpoints = {
   container: (id: string, o?: Opts) =>
     request<T.DockerContainer>(`/docker/containers/${encodeURIComponent(id)}`, o),
   /**
+   * Read the Docker inventory and record the provider result. This contacts Docker but has no
+   * lifecycle or host-write path; callers must re-read the stored list before presenting rows
+   * as updated.
+   */
+  refreshContainers: (o?: Opts) =>
+    request<T.ContainerObservationResult>('/docker/containers/observations/refresh', {
+      ...o,
+      method: 'POST',
+    }),
+  /**
    * Container resource usage. `POST` because that is what the backend declares, though it
    * reads: it samples the daemon and writes nothing. Fetched on demand from a detail page
    * only — never once per row of a list.

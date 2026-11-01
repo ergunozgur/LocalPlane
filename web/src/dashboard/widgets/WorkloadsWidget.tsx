@@ -5,11 +5,12 @@ import { endpoints } from '@/api/endpoints';
 import { useResource } from '@/hooks/useResource';
 import { Plate, PlateBody, PlateHead } from '@/components/primitives/Plate';
 import { DataTable } from '@/components/primitives/DataTable';
-import { StatusMark } from '@/components/semantic/StatusPill';
+import { StatusMark, StatusPill } from '@/components/semantic/StatusPill';
 import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty } from '@/components/states/SurfaceState';
 import { containerState } from '@/domain/vocabulary';
+import { inventoryMembership } from '@/domain/workloads';
 import { SweepCaveat, SweepFoot, WidgetAction } from './shared';
 
 const LIMIT = 8;
@@ -28,10 +29,10 @@ export function WorkloadsWidget(): JSX.Element {
             <>
               <PlateHead
                 title="Workloads"
-                meta="Docker containers as the provider last reported them"
+                meta="Stored Docker records with latest-inventory membership"
                 asOf={meta.fetchedAt.toLocaleTimeString()}
               >
-                <WidgetAction to="/workloads">All {list.count} ›</WidgetAction>
+                <WidgetAction to="/workloads">All {list.count} stored ›</WidgetAction>
               </PlateHead>
 
               {SweepCaveat({ sweep: list.last_sweep }) ? (
@@ -48,9 +49,13 @@ export function WorkloadsWidget(): JSX.Element {
                   <Empty
                     title="No containers"
                     explanation={
-                      list.last_sweep
-                        ? 'The Docker daemon answered and reported none.'
-                        : 'No sweep has recorded containers, so this is not evidence that there are none.'
+                      list.last_sweep?.status === 'ok' && list.last_sweep.issues.length === 0
+                        ? 'A complete stored Docker inventory recorded no containers. This does not describe a live daemon read.'
+                        : list.last_sweep?.status === 'failed'
+                          ? 'The most recent Docker inventory failed, so an empty stored list does not establish that no containers exist.'
+                          : list.last_sweep
+                            ? 'The most recent Docker inventory was incomplete or has an unrecognised status, so an empty stored list does not establish that no containers exist.'
+                            : 'No sweep has recorded containers, so this is not evidence that there are none.'
                     }
                   />
                 }
@@ -66,7 +71,7 @@ export function WorkloadsWidget(): JSX.Element {
                     key: 'name',
                     header: 'Container',
                     render: (row) => (
-                      <Link to={`/workloads/${row.object_id}`} className="mono">
+                      <Link to={`/workloads/${encodeURIComponent(row.object_id)}`} className="mono">
                         {row.name}
                       </Link>
                     ),
@@ -80,6 +85,11 @@ export function WorkloadsWidget(): JSX.Element {
                     key: 'runtime',
                     header: 'State',
                     render: (row) => <Value value={row.runtime.state} mono />,
+                  },
+                  {
+                    key: 'membership',
+                    header: 'Latest inventory',
+                    render: (row) => <StatusPill semantic={inventoryMembership(row.observed_in_latest_sweep)} size="sm" />,
                   },
                 ]}
               />

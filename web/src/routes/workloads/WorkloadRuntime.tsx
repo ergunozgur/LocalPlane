@@ -60,7 +60,10 @@ export function WorkloadRuntime(): JSX.Element {
   return (
     <ResourceView resource={resource} what="container list" loadingLabel="Reading runtime…">
       {(list, meta) => {
-        const groups = groupContainers(list.containers);
+        // Retained rows remain reachable on Workloads, but cannot establish a current runtime
+        // count after they were not seen (or membership was not recorded) in the latest sweep.
+        const latestSighted = list.containers.filter((container) => container.observed_in_latest_sweep === true);
+        const groups = groupContainers(latestSighted);
         const engine = engineFacts(list.last_sweep, list.containers);
         const images = imagesInUse(list.containers);
         const rows = runtimeRows(groups, list.last_sweep);
@@ -93,7 +96,7 @@ export function WorkloadRuntime(): JSX.Element {
                 <Plate quiet>
                   <PlateHead
                     title="Engine"
-                    meta="the container runtime this build currently observes"
+                    meta="the container runtime represented by the latest recorded inventory"
                     asOf={meta.fetchedAt.toLocaleTimeString()}
                   />
                   <PlateBody>
@@ -104,19 +107,21 @@ export function WorkloadRuntime(): JSX.Element {
                       <KeyValue label="Version">
                         <Value value={engine.version} mono />
                       </KeyValue>
-                      <KeyValue label="Containers">
-                        {engine.containersTotal === null ? (
+                      <KeyValue label="Latest-sighted records">
+                        {engine.latestSightedContainers === null ? (
                           <Value value={null} reason="the container list could not be read" />
                         ) : (
                           <span className="mono">
-                            {engine.containersTotal}{' '}
+                            {engine.latestSightedContainers}{' '}
                             <span className={styles.sub}>
-                              {engine.containersRunning} running ·{' '}
-                              {engine.containersTotal - (engine.containersRunning ?? 0)} not running
+                              {engine.reportedRunningLatestSighted} reported running ·{' '}
+                              {engine.latestSightedContainers - (engine.reportedRunningLatestSighted ?? 0)} not reported running
                             </span>
                           </span>
                         )}
                       </KeyValue>
+                      <KeyValue label="Retained, not seen"><Value value={engine.retainedNotSeen} mono reason="the container list could not be read" /></KeyValue>
+                      <KeyValue label="Membership unknown"><Value value={engine.membershipUnknown} mono reason="the container list could not be read" /></KeyValue>
                       <KeyValue label="Last read">
                         <Value value={formatRelative(engine.observedAt)} />
                       </KeyValue>
@@ -204,8 +209,8 @@ export function WorkloadRuntime(): JSX.Element {
               <div className={styles.column}>
                 <Plate quiet>
                   <PlateHead
-                    title="Images in use"
-                    meta="what the observed containers run from"
+                    title="Images in stored records"
+                    meta="derived from retained container observations, not the daemon image list"
                     asOf={meta.fetchedAt.toLocaleTimeString()}
                     chips={<span className={styles.countChip}>{images.length}</span>}
                   />
@@ -215,8 +220,8 @@ export function WorkloadRuntime(): JSX.Element {
                     rowKey={(row) => row.reference}
                     emptyState={
                       <Empty
-                        title="No images"
-                        explanation="No observed container reports an image reference."
+                        title="No stored image references"
+                        explanation="No retained container record reports an image reference."
                       />
                     }
                     columns={[
@@ -241,10 +246,10 @@ export function WorkloadRuntime(): JSX.Element {
                       },
                     ]}
                   />
-                  <PlateFoot source="derived from the observed containers">
+                  <PlateFoot source="derived from retained container records">
                     <span className={styles.aside}>
-                      images in use, not the daemon's image list — an image that is pulled but
-                      not running cannot appear here, and nothing reports a size
+                      retained image references, not the daemon's image list — an image that is
+                      pulled but not recorded cannot appear here, and nothing reports a size
                     </span>
                   </PlateFoot>
                 </Plate>

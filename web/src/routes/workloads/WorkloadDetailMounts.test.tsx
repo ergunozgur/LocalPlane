@@ -11,18 +11,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderMounts(container: DockerContainer): void {
-  stubBackend({ '/api/v1/docker/containers/obj_ct': container });
+function renderMounts(container: DockerContainer, objectId = 'obj_ct'): void {
+  stubBackend({ [`/api/v1/docker/containers/${encodeURIComponent(objectId)}`]: container });
   render(
-    <MemoryRouter initialEntries={['/workloads/obj_ct?tab=mounts']}>
+    <MemoryRouter initialEntries={[`/workloads/${encodeURIComponent(objectId)}?tab=mounts`]}>
       <Routes><Route path="workloads/:objectId" element={<WorkloadDetail />} /></Routes>
     </MemoryRouter>,
   );
 }
 
-function expectMountReadsOnly(): void {
+function expectMountReadsOnly(objectId = 'obj_ct'): void {
   const expectedPaths = new Set([
-    '/api/v1/docker/containers/obj_ct',
+    `/api/v1/docker/containers/${encodeURIComponent(objectId)}`,
     '/api/v1/network/interfaces',
     '/api/v1/docker/containers',
     '/api/v1/management-path',
@@ -58,6 +58,9 @@ describe('container Mounts tab', () => {
     renderMounts(container);
 
     await screen.findByRole('tabpanel', { name: 'Mounts' });
+    // This is in the workspace header rather than a single tab body, so the inventory
+    // membership context remains visible while an operator moves among detail facts.
+    expect(screen.getAllByText('seen in latest inventory')).not.toHaveLength(0);
     expect(screen.getAllByText('named-data')).toHaveLength(4);
     expect(screen.getAllByText('/var/lib/docker/volumes/named-data/_data')).toHaveLength(4);
     expect(screen.getAllByText('/very/long/host/path/that/must/remain/reachable/without/becoming/a/storage/join')).toHaveLength(2);
@@ -83,6 +86,7 @@ describe('container Mounts tab', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Overview' }));
     await user.click(screen.getByRole('tab', { name: /^Mounts/ }));
+    expect(screen.getAllByText('seen in latest inventory')).not.toHaveLength(0);
     expectMountReadsOnly();
   });
 
@@ -115,5 +119,26 @@ describe('container Mounts tab', () => {
     expect(freshness).toHaveTextContent('not known: unrecognised_freshness');
     expect(freshness).toHaveAttribute('title', expect.stringContaining('does not recognise'));
     expectMountReadsOnly();
+  });
+
+  it.each([
+    [false, 'not seen in latest inventory'],
+    [null, 'membership unknown'],
+  ] as const)('keeps %s membership visible on a direct encoded detail URL', async (membership, label) => {
+    const objectId = 'obj/special id';
+    const container: DockerContainer = {
+      ...(BACKEND['/api/v1/docker/containers/obj_ct'] as DockerContainer),
+      object_id: objectId,
+      observed_in_latest_sweep: membership,
+      mounts: [],
+    };
+    renderMounts(container, objectId);
+
+    await screen.findByRole('tabpanel', { name: 'Mounts' });
+    expect(screen.getAllByText(label)).not.toHaveLength(0);
+    expect(vi.mocked(fetch).mock.calls.map(([input]) => urlOf(input))).toContain(
+      '/api/v1/docker/containers/obj%2Fspecial%20id',
+    );
+    expectMountReadsOnly(objectId);
   });
 });
