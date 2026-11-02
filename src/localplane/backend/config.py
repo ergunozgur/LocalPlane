@@ -23,6 +23,9 @@ class Settings:
     auth_secret_path: Path = Path("var/localplane-master.secret")
     bind_host: str = "127.0.0.1"
     development_origin: str | None = None
+    tls_cert_path: Path | None = None
+    tls_key_path: Path | None = None
+    console_dir: Path | None = None
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Settings":
@@ -30,6 +33,10 @@ class Settings:
 
         def get(name: str, default: str) -> str:
             return env.get(ENV_PREFIX + name, default)
+
+        def optional_path(name: str) -> Path | None:
+            value = get(name, "")
+            return Path(value) if value else None
 
         return cls(
             database_path=Path(get("DB_PATH", "var/localplane.db")),
@@ -41,4 +48,7 @@ class Settings:
             auth_secret_path=Path(get("AUTH_SECRET_PATH", "var/localplane-master.secret")),
             bind_host=get("HOST", "127.0.0.1"),
             development_origin=env.get(ENV_PREFIX + "DEVELOPMENT_ORIGIN") or None,
+            tls_cert_path=optional_path("TLS_CERT_PATH"),
+            tls_key_path=optional_path("TLS_KEY_PATH"),
+            console_dir=optional_path("CONSOLE_DIR"),
         )

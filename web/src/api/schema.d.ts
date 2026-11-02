@@ -343,6 +343,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/systemd/units/{object_id}/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get Systemd Journal
+         * @description Explicit sensitive-content acknowledgment; no query, filters or persistence.
+         *
+         *     This diagnosis does not plan a Run or change lifecycle eligibility. Use the existing
+         *     typed Start/Restart preview/confirmation/verification path independently.
+         */
+        post: operations["get_systemd_journal_api_v1_systemd_units__object_id__journal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/docker/containers": {
         parameters: {
             query?: never;
@@ -5122,6 +5145,64 @@ export interface components {
             /** Id */
             id: number;
         };
+        /** SystemdJournalEntry */
+        SystemdJournalEntry: {
+            /** Timestamp */
+            timestamp: string | null;
+            /** Priority */
+            priority: string | null;
+            /**
+             * Message
+             * @description Null means MESSAGE is absent/unknown; an empty string means the field is present with empty text.
+             */
+            message: string | null;
+            /** Boot Id */
+            boot_id: string | null;
+            /** Invocation Id */
+            invocation_id: string | null;
+        };
+        /** SystemdJournalRequest */
+        SystemdJournalRequest: {
+            /**
+             * Acknowledge Sensitive
+             * @description Must be true for each explicit read. Service MESSAGE text can contain secrets; no reliable automatic redaction is promised.
+             */
+            acknowledge_sensitive: boolean;
+        };
+        /**
+         * SystemdJournalResponse
+         * @description Request-memory only; latest 100 entries/current boot/15 minutes, 256 KiB
+         *     collection, 4 KiB per message, three seconds total. Never persisted or exported.
+         */
+        SystemdJournalResponse: {
+            /** Object Id */
+            object_id: string;
+            /** Canonical Id */
+            canonical_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "empty" | "denied" | "unavailable" | "unsupported" | "timeout" | "busy" | "identity_changed" | "malformed";
+            /**
+             * Coverage
+             * @description Access coverage of the bounded default-namespace file selection, including UID-split system-service evidence; not all history or a frozen snapshot.
+             * @enum {string}
+             */
+            coverage: "complete" | "partial" | "unknown";
+            /** Retrieved At */
+            retrieved_at: string;
+            /** Since */
+            since: string;
+            /** Boot Id */
+            boot_id: string | null;
+            /** Truncated */
+            truncated: boolean;
+            /** Entries */
+            entries: components["schemas"]["SystemdJournalEntry"][];
+            /** Gaps */
+            gaps: string[];
+        };
         /** SystemdMountFacts */
         SystemdMountFacts: {
             /** What */
@@ -6315,6 +6396,59 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_systemd_journal_api_v1_systemd_units__object_id__journal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemdJournalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemdJournalResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Strict acknowledgment or closed-parameter refusal; rejected input is not echoed. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

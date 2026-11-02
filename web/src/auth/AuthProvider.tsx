@@ -92,7 +92,7 @@ function Login({ message, onLogin }: { message: string | null; onLogin: (credent
       {message ? <p className={styles.error} role="alert">{message}</p> : null}
       <button type="submit" disabled={!credential || submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
     </form>
-    <p className={styles.limit}>Loopback development only · no users or roles</p>
+    <p className={styles.limit}>Loopback HTTP development or configured direct HTTPS console · no users or roles</p>
   </section></main>;
 }
 

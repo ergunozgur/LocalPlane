@@ -35,6 +35,34 @@ class ErrorResponse(Model):
     error: ErrorBody
 
 
+class SystemdJournalRequest(Model):
+    acknowledge_sensitive: StrictBool = Field(description="Must be true for each explicit read. Service MESSAGE text can contain secrets; no reliable automatic redaction is promised.")
+
+
+class SystemdJournalEntry(Model):
+    timestamp: str | None
+    priority: str | None
+    message: str | None = Field(description="Null means MESSAGE is absent/unknown; an empty string means the field is present with empty text.")
+    boot_id: str | None
+    invocation_id: str | None
+
+
+class SystemdJournalResponse(Model):
+    """Request-memory only; latest 100 entries/current boot/15 minutes, 256 KiB
+    collection, 4 KiB per message, three seconds total. Never persisted or exported.
+    """
+    object_id: str
+    canonical_id: str | None
+    status: Literal["ok", "empty", "denied", "unavailable", "unsupported", "timeout", "busy", "identity_changed", "malformed"]
+    coverage: Literal["complete", "partial", "unknown"] = Field(description="Access coverage of the bounded default-namespace file selection, including UID-split system-service evidence; not all history or a frozen snapshot.")
+    retrieved_at: str
+    since: str
+    boot_id: str | None
+    truncated: bool
+    entries: list[SystemdJournalEntry]
+    gaps: list[str]
+
+
 # ----------------------------------------------------------------------- authentication
 
 

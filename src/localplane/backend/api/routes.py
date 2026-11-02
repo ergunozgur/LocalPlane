@@ -61,6 +61,7 @@ from pydantic import ValidationError
 
 from localplane import __version__
 from localplane.backend.agent_client import AgentError
+from localplane.backend.systemd_journal import read_journal
 from localplane.backend.api.storage_schemas import StorageObservation, StorageReadRequest
 from localplane.backend.api import schemas, views
 from localplane.backend.api.systemd_references import inventory_sources
@@ -723,6 +724,27 @@ def refresh_systemd_observations(request: Request) -> schemas.SystemdObservation
             else None
         ),
     )
+
+
+@router.post(
+    "/systemd/units/{object_id}/journal",
+    response_model=schemas.SystemdJournalResponse,
+    tags=["systemd"],
+    responses={422: {"model": schemas.ErrorResponse, "description": "Strict acknowledgment or closed-parameter refusal; rejected input is not echoed."}},
+)
+def get_systemd_journal(
+    object_id: str, body: schemas.SystemdJournalRequest, request: Request,
+) -> schemas.SystemdJournalResponse:
+    """Explicit sensitive-content acknowledgment; no query, filters or persistence.
+
+    This diagnosis does not plan a Run or change lifecycle eligibility. Use the existing
+    typed Start/Restart preview/confirmation/verification path independently.
+    """
+    if body.acknowledge_sensitive is not True or request.query_params:
+        raise HTTPException(422, detail={"code": "journal_acknowledgment_required", "message": "Acknowledge sensitive messages for this read; query parameters are not accepted."})
+    context = _context(request)
+    record = _require_systemd_unit(context, object_id)
+    return schemas.SystemdJournalResponse(object_id=object_id, **read_journal(context.client, record))
 
 
 # ------------------------------------------------------------------------ docker containers

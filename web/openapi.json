@@ -1017,6 +1017,87 @@
         ]
       }
     },
+    "/api/v1/systemd/units/{object_id}/journal": {
+      "post": {
+        "tags": [
+          "systemd"
+        ],
+        "summary": "Get Systemd Journal",
+        "description": "Explicit sensitive-content acknowledgment; no query, filters or persistence.\n\nThis diagnosis does not plan a Run or change lifecycle eligibility. Use the existing\ntyped Start/Restart preview/confirmation/verification path independently.",
+        "operationId": "get_systemd_journal_api_v1_systemd_units__object_id__journal_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "object_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Object Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemdJournalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemdJournalResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Strict acknowledgment or closed-parameter refusal; rejected input is not echoed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/docker/containers": {
       "get": {
         "tags": [
@@ -12103,6 +12184,188 @@
           "id"
         ],
         "title": "SystemdJob"
+      },
+      "SystemdJournalEntry": {
+        "properties": {
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Null means MESSAGE is absent/unknown; an empty string means the field is present with empty text."
+          },
+          "boot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Boot Id"
+          },
+          "invocation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invocation Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "timestamp",
+          "priority",
+          "message",
+          "boot_id",
+          "invocation_id"
+        ],
+        "title": "SystemdJournalEntry"
+      },
+      "SystemdJournalRequest": {
+        "properties": {
+          "acknowledge_sensitive": {
+            "type": "boolean",
+            "title": "Acknowledge Sensitive",
+            "description": "Must be true for each explicit read. Service MESSAGE text can contain secrets; no reliable automatic redaction is promised."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "acknowledge_sensitive"
+        ],
+        "title": "SystemdJournalRequest"
+      },
+      "SystemdJournalResponse": {
+        "properties": {
+          "object_id": {
+            "type": "string",
+            "title": "Object Id"
+          },
+          "canonical_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "denied",
+              "unavailable",
+              "unsupported",
+              "timeout",
+              "busy",
+              "identity_changed",
+              "malformed"
+            ],
+            "title": "Status"
+          },
+          "coverage": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ],
+            "title": "Coverage",
+            "description": "Access coverage of the bounded default-namespace file selection, including UID-split system-service evidence; not all history or a frozen snapshot."
+          },
+          "retrieved_at": {
+            "type": "string",
+            "title": "Retrieved At"
+          },
+          "since": {
+            "type": "string",
+            "title": "Since"
+          },
+          "boot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Boot Id"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/SystemdJournalEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gaps"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "object_id",
+          "canonical_id",
+          "status",
+          "coverage",
+          "retrieved_at",
+          "since",
+          "boot_id",
+          "truncated",
+          "entries",
+          "gaps"
+        ],
+        "title": "SystemdJournalResponse",
+        "description": "Request-memory only; latest 100 entries/current boot/15 minutes, 256 KiB\ncollection, 4 KiB per message, three seconds total. Never persisted or exported."
       },
       "SystemdMountFacts": {
         "properties": {

@@ -23,6 +23,7 @@ import { StatusPill } from '@/components/semantic/StatusPill';
 import { Value } from '@/components/semantic/UnknownValue';
 import { Gaps } from '@/components/semantic/Evidence';
 import { LifecyclePanel } from '@/components/semantic/LifecyclePanel';
+import { ServiceJournal } from '@/components/semantic/ServiceJournal';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty } from '@/components/states/SurfaceState';
 import { ObjectWorkspace, ObjectColumns, type ObjectTab } from '@/components/object/ObjectWorkspace';
@@ -134,6 +135,12 @@ function UnitDetailContent({ objectId }: { objectId: string }): JSX.Element {
             render: () => (
               <ObjectColumns main={<LifecyclePanel unit={data} capability={capability} intent={intent} />} />
             ),
+          },
+          {
+            id: 'journal',
+            label: 'Journal',
+            hidden: data.unit_type !== 'service' || !data.service,
+            render: () => <ObjectColumns main={<ServiceJournal key={`${data.object_id}:${data.canonical_id}`} objectId={data.object_id} canonicalId={data.canonical_id} />} />,
           },
           {
             id: 'relationships',

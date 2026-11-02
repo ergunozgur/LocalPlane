@@ -9,6 +9,7 @@ the moment an operator needs it to be up.
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
@@ -21,6 +22,7 @@ from localplane.backend.agent_client import AgentError
 from localplane.backend.api.routes import router, session_router
 from localplane.backend.auth import Authentication, load_master_secret, require_authentication
 from localplane.backend.config import Settings
+from localplane.backend.console import install_console
 from localplane.backend.context import AppContext
 from localplane.backend.db.database import Database, open_database
 
@@ -139,6 +141,23 @@ def create_app(
     app.include_router(session_router)
     app.include_router(router)
 
+    @app.middleware("http")
+    async def journal_privacy_boundary(request: Request, call_next):
+        # Covers auth/Origin, validation, missing-object and unexpected failures too,
+        # not merely successful endpoint responses. Never echo rejected body input.
+        sensitive = re.fullmatch(r"/api/v1/systemd/units/[^/]+/journal/?", request.url.path) is not None
+        if not sensitive:
+            return await call_next(request)
+        try:
+            result = await call_next(request)
+            if result.status_code == 422:
+                result = JSONResponse({"error": {"code": "invalid_journal_request", "message": "A strict sensitivity acknowledgment is required; no other parameters are accepted.", "detail": {}}}, status_code=422)
+        except Exception:
+            LOG.error("journal_request_failed", extra={"code": "journal_unavailable"})
+            result = JSONResponse({"error": {"code": "journal_unavailable", "message": "Journal evidence is unavailable.", "detail": {}}}, status_code=500)
+        result.headers["Cache-Control"] = "no-store"
+        return result
+
     @app.get(
         "/openapi.json",
         dependencies=[Depends(require_authentication)],
@@ -166,6 +185,8 @@ def create_app(
         return get_redoc_html(openapi_url="/openapi.json", title="LocalPlane — ReDoc")
 
     app.add_exception_handler(HTTPException, _http_exception_handler)
+    if settings.console_dir is not None:
+        install_console(app, settings.console_dir)
     return app
 
 

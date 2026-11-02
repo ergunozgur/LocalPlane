@@ -159,6 +159,7 @@ def test_hello_reports_identity_capabilities_and_privilege(client: AgentClient):
         "docker.containers.observe",
         "docker.container.lifecycle",
         "systemd.units.observe",
+        "systemd.unit.journal",
         "systemd.service.lifecycle",
         "systemd.service.lifecycle_context.observe",
     }
@@ -289,6 +290,102 @@ def test_a_capability_that_is_unavailable_blocks_its_operation(
 
 
 # ------------------------------------------------------------------------- client failure
+
+
+def test_lifecycle_uses_a_fixed_typed_budget_without_changing_other_calls(monkeypatch):
+    import inspect
+    from localplane import ipc
+    from localplane.protocol.wire import (
+        SYSTEMD_LIFECYCLE_CLIENT_TIMEOUT_S, SYSTEMD_LIFECYCLE_JOB_TIMEOUT_S,
+        SYSTEMD_LIFECYCLE_DBUS_TIMEOUT_S,
+    )
+    calls = []
+    def record(path, codec, timeout, method, params, *args, **kwargs):
+        calls.append((str(method), timeout, params))
+        return {}
+    monkeypatch.setattr(ipc, "call", record)
+    client = AgentClient("unused.sock", timeout_s=0.001)
+    client.systemd_service_lifecycle(attempt_id="a", unit_id="alpha.service", action="start")
+    client.hello()
+    client.container_lifecycle(attempt_id="a", container_id="b", action="start")
+    assert SYSTEMD_LIFECYCLE_CLIENT_TIMEOUT_S == 150.0
+    assert SYSTEMD_LIFECYCLE_CLIENT_TIMEOUT_S == (
+        SYSTEMD_LIFECYCLE_JOB_TIMEOUT_S + 10 * SYSTEMD_LIFECYCLE_DBUS_TIMEOUT_S + 10
+    )
+    assert calls == [
+        ("systemd.service_lifecycle", 150.0,
+         {"attempt_id": "a", "unit_id": "alpha.service", "action": "start"}),
+        ("agent.hello", 0.001, None),
+        ("docker.container_lifecycle", 0.001,
+         {"attempt_id": "a", "container_id": "b", "action": "start"}),
+    ]
+    assert list(inspect.signature(client.systemd_service_lifecycle).parameters) == [
+        "attempt_id", "unit_id", "action",
+    ]
+
+
+@pytest.mark.parametrize("answer_after,closed", [(91.0, False), (140.0, False), (151.0, False), (1.0, True)])
+def test_lifecycle_transport_waits_beyond_generic_budget_but_preserves_loss_truth(
+    monkeypatch, answer_after, closed,
+):
+    """Real IPC framing/error classification with a deterministic socket clock.
+
+    No 150-second sleep or host connection: the scripted reader enforces the actual
+    timeout passed to the socket, including a response after the provider's job budget.
+    """
+    import io
+    from contextlib import contextmanager
+    from localplane import ipc
+    requests = []
+
+    class ScriptedSocket:
+        def __enter__(self):
+            self.writer = io.BytesIO()
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def settimeout(self, timeout):
+            self.timeout = timeout
+
+        def connect(self, path):
+            pass
+
+        @contextmanager
+        def makefile(self, mode):
+            yield self.writer if mode == "wb" else self
+
+        def readline(self, size):
+            request = json.loads(self.writer.getvalue())
+            requests.append(request)
+            if answer_after > self.timeout:
+                raise socket.timeout()
+            if closed:
+                return b""
+            return json.dumps({
+                "localplane_protocol": PROTOCOL_VERSION,
+                "request_id": request["request_id"], "ok": True,
+                "result": {"outcome": "written", "reason": "job_completed"},
+            }).encode() + b"\n"
+
+    monkeypatch.setattr(ipc.socket, "socket", lambda *a, **k: ScriptedSocket())
+    client = AgentClient("unused.sock")
+    def dispatch():
+        return client.systemd_service_lifecycle(
+            attempt_id="attempt", unit_id="alpha.service", action="start",
+        )
+    if answer_after > 150 or closed:
+        with pytest.raises(AgentError) as caught:
+            dispatch()
+        assert caught.value.dispatched is True
+        assert caught.value.code == (ErrorCode.AGENT_UNAVAILABLE if closed else ErrorCode.TIMEOUT)
+    else:
+        assert dispatch() == {"outcome": "written", "reason": "job_completed"}
+    assert len(requests) == 1  # no automatic retry
+    assert requests[0]["params"] == {
+        "attempt_id": "attempt", "unit_id": "alpha.service", "action": "start",
+    }
 
 
 def test_an_absent_agent_is_a_structured_error_not_an_empty_result(tmp_path: Path):

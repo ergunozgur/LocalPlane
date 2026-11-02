@@ -74,6 +74,7 @@ from localplane.protocol.capabilities import (
     CAPABILITY_NETWORK_PROVIDERS_OBSERVE,
     CAPABILITY_NETWORK_ROUTE_OBSERVE,
     CAPABILITY_SYSTEMD_UNITS_OBSERVE,
+    CAPABILITY_SYSTEMD_UNIT_JOURNAL,
     CAPABILITY_SYSTEMD_SERVICE_LIFECYCLE,
     CAPABILITY_SYSTEMD_SERVICE_LIFECYCLE_CONTEXT_OBSERVE,
     CapabilityStatus,
@@ -138,6 +139,7 @@ def discover_capabilities(
     runtime_attestation = runtime_attestation_reader or DockerDirectAttestationReader()
     return (
         _probe_storage(),
+        _probe_journal(),
         _probe_host_observe(Path(root)),
         _probe_network_observe(Path(sysfs_net), runner),
         _probe_network_providers_observe(runner, docker_socket),
@@ -159,6 +161,20 @@ def _probe_storage() -> DiscoveredCapability:
         CapabilityStatus.DEGRADED if supported else CapabilityStatus.UNAVAILABLE,
         reason="filesystem_access_unverified" if supported else "mechanism_unsupported",
         detail={"scope": "agent mount namespace", "sampling": "on demand; ext4/xfs only"},
+    )
+
+
+def _probe_journal() -> DiscoveredCapability:
+    # No content read on startup, inventory, handshake or capability refresh. Native
+    # library, canonical identity and OS access are verified only on acknowledged read.
+    supported = sys.platform == "linux" and hasattr(os, "fork")
+    return _capability(
+        CAPABILITIES[CAPABILITY_SYSTEMD_UNIT_JOURNAL],
+        CapabilityStatus.DEGRADED if supported else CapabilityStatus.UNAVAILABLE,
+        reason="journal_access_unverified" if supported else "mechanism_unsupported",
+        detail={"scope": "canonical system service; current boot; default namespace",
+                "access": "existing agent OS identity only; checked on explicit read",
+                "retention": "request memory only"},
     )
 
 

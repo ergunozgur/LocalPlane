@@ -38,6 +38,9 @@ from jeepney.wrappers import DBusErrorResponse, Introspectable, Properties
 
 from localplane.protocol.capabilities import CAPABILITY_SYSTEMD_UNITS_OBSERVE
 from localplane.protocol.providers import PROVIDER_SYSTEMD, SOURCE_SYSTEMD_UNITS
+from localplane.protocol.wire import (
+    SYSTEMD_LIFECYCLE_DBUS_TIMEOUT_S, SYSTEMD_LIFECYCLE_JOB_TIMEOUT_S,
+)
 
 SYSTEMD_DESTINATION: Final = "org.freedesktop.systemd1"
 SYSTEMD_MANAGER_PATH: Final = "/org/freedesktop/systemd1"
@@ -63,7 +66,7 @@ UNIT_PATTERNS: Final = tuple(f"*{suffix}" for suffix in SUPPORTED_UNIT_SUFFIXES)
 # headroom while bounding two GetAll calls per unit.  The full manager list is read before
 # this limit is applied, so exact truncation and omitted count are always reported.
 MAX_UNITS: Final = 512
-DBUS_CALL_TIMEOUT_S: Final = 5.0
+DBUS_CALL_TIMEOUT_S: Final = SYSTEMD_LIFECYCLE_DBUS_TIMEOUT_S
 INVENTORY_TIMEOUT_S: Final = 30.0
 
 _MANAGER_CORE_PROPERTIES: Final = ("Version", "SystemState")
@@ -217,7 +220,7 @@ SYSTEMD_LIFECYCLE_UNIT_TYPE: Final = "service"
 
 #: How long a dispatch waits for its own job to finish before giving up on hearing about it.
 #: Giving up is not a failure and is never read as one: it produces ``write_unknown``.
-JOB_COMPLETION_TIMEOUT_S: Final = 90.0
+JOB_COMPLETION_TIMEOUT_S: Final = SYSTEMD_LIFECYCLE_JOB_TIMEOUT_S
 
 #: How many pending signals the job watch will hold. A burst larger than this evicts the
 #: oldest, which can only cost this dispatch its own answer — reported as ``write_unknown``.
@@ -252,20 +255,21 @@ _REACTIVATION_CHANGING_STATES: Final = frozenset(
     {"activating", "deactivating", "reloading", "refreshing", "maintenance"}
 )
 
-_START_EFFECT_RELATIONSHIPS: Final = frozenset(
-    {
-        "Requires", "Wants", "BindsTo", "Upholds", "Triggers", "TriggeredBy",
-        "Conflicts", "ConflictedBy", "OnFailure", "OnSuccess", "OnFailureOf",
-        "OnSuccessOf",
-    }
-)
-_STOP_EFFECT_RELATIONSHIPS: Final = frozenset(
-    {
-        "UpheldBy", "RequiredBy", "RequisiteOf", "BoundBy", "ConsistsOf", "PropagatesStopTo",
-        "StopPropagatedFrom", "Triggers", "TriggeredBy", "Conflicts", "ConflictedBy",
-        "OnFailure", "OnSuccess", "OnFailureOf", "OnSuccessOf",
-    }
-)
+# Closed potential-job mapping from systemd v255 unit-dependency-atom.c and
+# transaction_add_job_and_dependencies() in src/core/transaction.c. These are job
+# kinds at EACH node, not a union selected once for the requested action. TRY_RESTART
+# is conservatively RESTART: current inactive state never prunes a dependency.
+_START_JOB_RELATIONSHIPS: Final = {
+    "Requires": "start", "Wants": "start", "BindsTo": "start", "Upholds": "start",
+    "Requisite": "verify", "Conflicts": "stop", "ConflictedBy": "stop",
+}
+_STOP_JOB_RELATIONSHIPS: Final = ("RequiredBy", "RequisiteOf", "BoundBy", "ConsistsOf")
+_RELEASED_DEPENDENCIES: Final = ("Requires", "Requisite", "Wants", "BindsTo", "Upholds")
+# Four potential jobs plus three NON-job reads: released dependency metadata,
+# reactivation source evidence, and an unmodelled conditional-effect footprint.
+_EFFECT_WORK_KINDS: Final = frozenset({
+    "start", "stop", "restart", "verify", "inspect", "source", "footprint",
+})
 
 _SERVICE_PROPERTIES: Final = (
     "Type",
@@ -751,9 +755,12 @@ class _JobWatch:
     continues, because it belongs to somebody else.
     """
 
-    def __init__(self, connection: Any, queue: Any) -> None:
+    def __init__(
+        self, connection: Any, queue: Any, check_owner: Callable[[], None]
+    ) -> None:
         self._connection = connection
         self._queue = queue
+        self.check_owner = check_owner
 
     def result_for(
         self, job_path: str, unit_id: str, timeout_s: float
@@ -780,6 +787,10 @@ class _JobWatch:
                 continue
             job_id, path, unit, result = body
             if str(path) == job_path and str(unit) == unit_id:
+                # Flush bus traffic through a fresh authoritative owner lookup before
+                # trusting even a queued completion. A change (including A -> B -> A)
+                # makes this dispatch unknowable, not successfully completed.
+                self.check_owner()
                 return int(job_id), str(result)
 
 
@@ -918,16 +929,50 @@ class _JeepneySystemdConnection:
         """
         if self._connection is None:
             raise RuntimeError("systemd D-Bus connection is not open")
-        rule = MatchRule(
+        bus_rule = MatchRule(
             type="signal",
             sender=SYSTEMD_DESTINATION,
             interface=SYSTEMD_MANAGER_INTERFACE,
             member="JobRemoved",
             path=SYSTEMD_MANAGER_PATH,
         )
-        self._proxy(message_bus).AddMatch(rule, _timeout=self._timeout_s)
-        with self._connection.filter(rule, bufsize=JOB_SIGNAL_BUFFER) as queue:
-            yield _JobWatch(self._connection, queue)
+        owner_rule = MatchRule(
+            type="signal", sender="org.freedesktop.DBus",
+            interface="org.freedesktop.DBus", member="NameOwnerChanged",
+            path="/org/freedesktop/DBus",
+        )
+        owner_rule.add_arg_condition(0, SYSTEMD_DESTINATION)
+        bus = self._proxy(message_bus)
+
+        def current_owner() -> str:
+            reply = bus.GetNameOwner(SYSTEMD_DESTINATION, _timeout=self._timeout_s)
+            if (len(reply) != 1 or not isinstance(reply[0], str) or len(reply[0]) > 255
+                    or not re.fullmatch(r":[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+", reply[0])):
+                raise RuntimeError("systemd manager owner is not a unique bus name")
+            return reply[0]
+
+        # Register locally first: AddMatch/GetNameOwner may themselves receive signals.
+        # This independent one-element queue is never drained; any transition is sticky,
+        # even if job traffic overflows its own bounded queue or the owner changes back.
+        with self._connection.filter(owner_rule, bufsize=1) as owner_changes:
+            bus.AddMatch(owner_rule, _timeout=self._timeout_s)
+            owner = current_owner()
+
+            def check_owner() -> None:
+                actual = current_owner()
+                if owner_changes or actual != owner:
+                    raise RuntimeError("systemd manager owner changed during dispatch")
+
+            # The bus resolves well-known sender names, but Jeepney's local matcher
+            # compares header strings literally. Signal headers carry UNIQUE names.
+            local_rule = MatchRule(
+                type="signal", sender=owner, interface=SYSTEMD_MANAGER_INTERFACE,
+                member="JobRemoved", path=SYSTEMD_MANAGER_PATH,
+            )
+            with self._connection.filter(local_rule, bufsize=JOB_SIGNAL_BUFFER) as queue:
+                bus.AddMatch(bus_rule, _timeout=self._timeout_s)
+                yield _JobWatch(self._connection, queue, check_owner)
+        # This dispatch owns its connection; closing it removes both bus matches.
 
     def unit_lifecycle(
         self, object_path: str, action: str, timeout_s: float | None = None
@@ -948,6 +993,12 @@ class _JeepneySystemdConnection:
         self, object_path: str, timeout_s: float | None = None
     ) -> dict[str, Any]:
         return self._properties(object_path, SYSTEMD_UNIT_INTERFACE, timeout_s=timeout_s)
+
+    def unit_canonical_id(self, object_path: str) -> Any:
+        """One property only: journal diagnosis does not collect Unit/Service GetAll."""
+        address = DBusAddress(object_path, bus_name=SYSTEMD_DESTINATION, interface=SYSTEMD_UNIT_INTERFACE)
+        reply = self._proxy(Properties(address)).get("Id", _timeout=self._timeout_s)
+        return _unwrap_variant(reply[0])
 
     def type_properties(
         self, object_path: str, unit_type: str, timeout_s: float | None = None
@@ -1018,6 +1069,34 @@ class SystemdProvider:
         self._monotonic = monotonic
 
     # ---------------------------------------------------------------- manager/capability
+
+    def journal_identity(self, unit_id: str) -> str:
+        """GetUnit plus authoritative Id, only inside the deadline-bounded journal child.
+
+        Never LoadUnit, alias expansion, a caller-supplied handle, or arbitrary exception
+        detail. The outer collector includes both these checks in its total deadline.
+        """
+        from localplane.protocol.journal import valid_service
+
+        if not valid_service(unit_id):
+            return "unsupported"
+        if self._runtime_path is not None and not self._runtime_path.is_dir():
+            return "unsupported"
+        try:
+            with self._connection_factory() as connection:
+                path = connection.get_unit_path(unit_id)
+                canonical = connection.unit_canonical_id(path)
+            return "ok" if canonical == unit_id else "identity_changed"
+        except _LoadedUnitAbsent:
+            return "identity_changed"
+        except DBusErrorResponse as exc:
+            return "denied" if exc.name in _AUTHORIZATION_ERRORS else "unavailable"
+        except PermissionError:
+            return "denied"
+        except TimeoutError:
+            return "timeout"
+        except Exception:
+            return "unavailable"
 
     def read_manager(self) -> ManagerObservation:
         observed_at = _now()
@@ -1388,6 +1467,9 @@ class SystemdProvider:
                     detail["invocation_id_at_dispatch"] = invocation
                     detail["active_state_at_dispatch"] = active_state
 
+                    # Failure here precedes the mutating call. An owner race after this
+                    # check is caught before accepting completion and stays unknown.
+                    watch.check_owner()
                     try:
                         job_path = connection.unit_lifecycle(object_path, action)
                     except DBusErrorResponse as exc:
@@ -1773,15 +1855,9 @@ class SystemdProvider:
                 detail=unavailable.detail,
             )
 
-        relations = (
-            _START_EFFECT_RELATIONSHIPS
-            if action == "start"
-            else _STOP_EFFECT_RELATIONSHIPS
-            if action == "stop"
-            else _START_EFFECT_RELATIONSHIPS | _STOP_EFFECT_RELATIONSHIPS
-        )
         deadline = self._monotonic() + deadline_s
         nodes: dict[str, dict[str, Any]] = {}
+        effect_units: set[str] = set()
         edges: set[tuple[str, str, str]] = set()
         gaps: set[str] = set()
         active_sources: set[str] = set()
@@ -1829,87 +1905,154 @@ class SystemdProvider:
                         gaps=("target.canonical_id",),
                     )
 
-                pending: list[tuple[str, int, str | None]] = [
-                    (canonical_target, 0, target_path)
-                ]
-                queued = {canonical_target}
-                aliases: dict[str, str] = {canonical_target: canonical_target}
+                pending: list[tuple[str, str, int]] = [(canonical_target, action, 0)]
+                queued = {(canonical_target, action)}
+                visited: set[tuple[str, str]] = set()
+                admitted_names = {canonical_target}
+                aliases: dict[str, str] = {}
+                attempted: set[str] = set()
                 provisional_edges: set[tuple[str, str, str]] = set()
-                edge_limit_reached = False
-                while pending:
-                    requested, depth, known_path = pending.pop(0)
-                    if len(nodes) >= node_limit:
-                        gaps.add("effect_graph.node_limit")
-                        break
+                reactivation_edges: set[tuple[str, str, str]] = set()
+                # Including aliases/unresolved names, at most node_limit reads and
+                # seven states per name/canonical unit. Repeated list entries cannot
+                # create unbounded work independently of the unique-edge ceiling.
+                reference_budget = edge_limit * len(_EFFECT_WORK_KINDS)
+
+                def references(properties: dict[str, Any], relation: str, canonical: str):
+                    nonlocal reference_budget
+                    raw = properties.get(relation)
+                    if raw is None:
+                        gaps.add(f"effect_graph.unsupported:{relation}:{canonical}")
+                        return
+                    if not isinstance(raw, (list, tuple)):
+                        gaps.add(f"effect_graph.unreadable:{relation}:{canonical}")
+                        return
+                    for referenced in raw:
+                        remaining()
+                        if reference_budget <= 0:
+                            gaps.add("effect_graph.edge_limit")
+                            return
+                        reference_budget -= 1
+                        if not isinstance(referenced, str) or not _UNIT_NAME.fullmatch(referenced):
+                            gaps.add(f"effect_graph.unreadable:{relation}:{canonical}")
+                            continue
+                        yield referenced
+
+                def enqueue(referenced: str, kind: str, depth: int) -> None:
+                    if kind not in _EFFECT_WORK_KINDS:
+                        raise ValueError("unsupported effect work kind")
+                    if (referenced, kind) in queued:
+                        return
                     if depth > depth_limit:
                         gaps.add("effect_graph.depth_limit")
-                        continue
-                    try:
-                        path = known_path or connection.get_unit_path(
-                            requested, timeout_s=remaining()
-                        )
-                        properties = connection.unit_properties(path, timeout_s=remaining())
-                    except _LoadedUnitAbsent:
-                        gaps.add(f"effect_graph.unresolved:{requested}")
-                        continue
-                    canonical = properties.get("Id")
-                    if not isinstance(canonical, str) or not canonical:
-                        gaps.add(f"effect_graph.canonical_id:{requested}")
-                        continue
-                    if canonical in nodes:
-                        aliases[requested] = canonical
-                        continue
-                    aliases[requested] = canonical
-                    nodes[canonical] = properties
-                    if requested != canonical:
-                        gaps.add(f"effect_graph.alias_reference:{requested}")
+                        return
+                    if referenced not in admitted_names:
+                        if len(admitted_names) >= node_limit:
+                            gaps.add("effect_graph.node_limit")
+                            return
+                        admitted_names.add(referenced)
+                    queued.add((referenced, kind))
+                    pending.append((referenced, kind, depth))
 
-                    if action in {"stop", "restart"}:
+                def follow(canonical: str, relation: str, referenced: str,
+                           kind: str, depth: int) -> None:
+                    edge = (canonical, relation, referenced)
+                    if edge not in provisional_edges and len(provisional_edges) >= edge_limit:
+                        gaps.add("effect_graph.edge_limit")
+                        return
+                    provisional_edges.add(edge)
+                    enqueue(referenced, kind, depth + 1)
+
+                while pending:
+                    remaining()
+                    requested, kind, depth = pending.pop(0)
+                    if requested not in attempted:
+                        attempted.add(requested)
+                        try:
+                            path = target_path if requested == canonical_target else connection.get_unit_path(
+                                requested, timeout_s=remaining()
+                            )
+                            properties = connection.unit_properties(path, timeout_s=remaining())
+                        except _LoadedUnitAbsent:
+                            gaps.add(f"effect_graph.unresolved:{requested}")
+                            continue
+                        canonical = properties.get("Id")
+                        if not isinstance(canonical, str) or not _UNIT_NAME.fullmatch(canonical):
+                            gaps.add(f"effect_graph.canonical_id:{requested}")
+                            continue
+                        aliases[requested] = canonical
+                        # Alias uncertainty is sticky even when the canonical node was
+                        # already visited through another name or another job kind.
+                        if requested != canonical:
+                            gaps.add(f"effect_graph.alias_reference:{requested}")
+                        nodes.setdefault(canonical, properties)
+                    canonical = aliases.get(requested)
+                    if canonical is None or (canonical, kind) in visited:
+                        continue
+                    visited.add((canonical, kind))
+                    properties = nodes[canonical]
+                    if kind != "inspect":
+                        effect_units.add(canonical)
+                    if properties.get("LoadState") != "loaded":
+                        gaps.add(f"effect_graph.load_state:{canonical}")
+                    _, runtime_gaps = _reactivation_source_evidence(properties)
+                    gaps.update(f"effect_graph.runtime_{gap}:{canonical}" for gap in runtime_gaps)
+
+                    if action in {"stop", "restart"} or kind in {"stop", "restart", "inspect"}:
                         stop_when_unneeded = properties.get("StopWhenUnneeded")
                         if stop_when_unneeded is None:
                             gaps.add(f"effect_graph.unsupported:StopWhenUnneeded:{canonical}")
                         elif stop_when_unneeded is True:
                             gaps.add(f"effect_graph.stop_when_unneeded:{canonical}")
+                            effect_units.add(canonical)
+                        elif stop_when_unneeded is not False:
+                            gaps.add(f"effect_graph.unreadable:StopWhenUnneeded:{canonical}")
 
-                    for relation in relations:
-                        raw = properties.get(relation)
-                        if raw is None:
-                            gaps.add(f"effect_graph.unsupported:{relation}:{canonical}")
-                            continue
-                        if not isinstance(raw, (list, tuple)):
-                            gaps.add(f"effect_graph.unreadable:{relation}:{canonical}")
-                            continue
-                        for referenced in raw:
-                            if not isinstance(referenced, str) or not referenced:
-                                gaps.add(f"effect_graph.unreadable:{relation}:{canonical}")
-                                continue
-                            if len(provisional_edges) >= edge_limit:
-                                gaps.add("effect_graph.edge_limit")
-                                edge_limit_reached = True
-                                break
-                            provisional_edges.add((canonical, relation, referenced))
-                            if referenced not in queued:
-                                if len(queued) >= node_limit:
-                                    gaps.add("effect_graph.node_limit")
-                                    continue
-                                queued.add(referenced)
-                                pending.append((referenced, depth + 1, None))
-                        if edge_limit_reached:
-                            break
-                    if edge_limit_reached:
-                        break
+                    # VERIFY_ACTIVE has no child jobs. The other three kinds below
+                    # are evidence reads, not a disguised STOP/START traversal.
+                    if kind in {"verify", "inspect", "source", "footprint"}:
+                        continue
+                    if kind in {"start", "restart"}:
+                        for relation, child_kind in _START_JOB_RELATIONSHIPS.items():
+                            for referenced in references(properties, relation, canonical):
+                                follow(canonical, relation, referenced, child_kind, depth)
+                                if relation == "Upholds":
+                                    gaps.add(f"effect_graph.runtime_upholding:{canonical}")
+                    if kind in {"stop", "restart"}:
+                        for relation in _STOP_JOB_RELATIONSHIPS:
+                            for referenced in references(properties, relation, canonical):
+                                follow(canonical, relation, referenced, kind, depth)
+                        for referenced in references(properties, "PropagatesStopTo", canonical):
+                            # Graceful stop can merge with START into RESTART. Keep
+                            # BOTH phases' possible effects; do not simulate job merging.
+                            gaps.add(f"effect_graph.graceful_stop:{canonical}")
+                            follow(canonical, "PropagatesStopTo", referenced, "restart", depth)
+                        for relation in _RELEASED_DEPENDENCIES:
+                            for referenced in references(properties, relation, canonical):
+                                enqueue(referenced, "inspect", depth + 1)
+
+                    # Handler modes (notably isolate) and runtime activation queues are
+                    # not transaction pull-ins. Retain a bounded named footprint, but
+                    # explicitly refuse completeness instead of inventing their jobs.
+                    for relation in ("OnFailure", "OnSuccess", "Triggers"):
+                        for referenced in references(properties, relation, canonical):
+                            gaps.add(f"effect_graph.conditional:{relation}:{canonical}")
+                            follow(canonical, relation, referenced, "footprint", depth)
+                    for relation in sorted(_REACTIVATION_RELATIONSHIPS):
+                        for referenced in references(properties, relation, canonical):
+                            follow(canonical, relation, referenced, "source", depth)
+                            if (canonical, relation, referenced) in provisional_edges:
+                                reactivation_edges.add((canonical, relation, referenced))
 
                 for source, relation, referenced in provisional_edges:
+                    remaining()
                     resolved = aliases.get(referenced, referenced)
                     edges.add((source, relation, resolved))
                     referenced_properties = nodes.get(resolved)
                     if referenced_properties is None:
                         gaps.add(f"effect_graph.unresolved:{referenced}")
                         continue
-                    if (
-                        source == canonical_target
-                        and relation in _REACTIVATION_RELATIONSHIPS
-                    ):
+                    if (source, relation, referenced) in reactivation_edges:
                         active, evidence_gaps = _reactivation_source_evidence(
                             referenced_properties
                         )
@@ -1917,9 +2060,13 @@ class SystemdProvider:
                             f"effect_graph.reactivation_source_{gap}:{relation}:{resolved}"
                             for gap in evidence_gaps
                         )
-                        if active and relation == "TriggeredBy":
+                        if any((resolved, kind) in visited for kind in ("start", "stop", "restart")):
+                            gaps.add(f"effect_graph.reactivation_source_in_closure:{relation}:{resolved}")
+                        if active and source != canonical_target:
+                            gaps.add(f"effect_graph.transitive_reactivation:{relation}:{source}")
+                        if active and source == canonical_target and relation == "TriggeredBy":
                             active_sources.add(resolved)
-                        if active and relation == "UpheldBy":
+                        if active and source == canonical_target and relation == "UpheldBy":
                             active_upholding_sources.add(resolved)
         except Exception as exc:
             gaps.add("effect_graph.read_failed")
@@ -1931,7 +2078,7 @@ class SystemdProvider:
                 provider_version=provider_version,
                 canonical_target=canonical_target,
                 target=target,
-                units=tuple(sorted(nodes)),
+                units=tuple(sorted(effect_units)),
                 edges=tuple(
                     {"source": source, "relation": relation, "target": destination}
                     for source, relation, destination in sorted(edges)
@@ -1951,7 +2098,7 @@ class SystemdProvider:
             provider_version=provider_version,
             canonical_target=canonical_target,
             target=target,
-            units=tuple(sorted(nodes)),
+            units=tuple(sorted(effect_units)),
             edges=tuple(
                 {"source": source, "relation": relation, "target": destination}
                 for source, relation, destination in sorted(edges)

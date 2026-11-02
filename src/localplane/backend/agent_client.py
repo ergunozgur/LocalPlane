@@ -26,7 +26,9 @@ from pathlib import Path
 from typing import Any
 
 from localplane import ipc
-from localplane.protocol.wire import CODEC, PROTOCOL_VERSION, ErrorCode, Method
+from localplane.protocol.wire import (
+    CODEC, PROTOCOL_VERSION, SYSTEMD_LIFECYCLE_CLIENT_TIMEOUT_S, ErrorCode, Method,
+)
 
 LOG = logging.getLogger("localplane.backend.agent_client")
 
@@ -192,6 +194,10 @@ class AgentClient:
         """Read one already-loaded unit.  The provider uses GetUnit, never LoadUnit."""
         return self.call(Method.SYSTEMD_OBSERVE_UNIT, {"unit_id": unit_id})
 
+    def systemd_unit_journal(self, unit_id: str, host_id: str) -> dict[str, Any]:
+        """Ephemeral read, never ingested into observations, Runs or Changes."""
+        return self.call(Method.SYSTEMD_UNIT_JOURNAL, {"unit_id": unit_id, "host_id": host_id}, timeout_s=4.0)
+
     def resolve_agent_systemd_unit(self) -> dict[str, Any]:
         """Resolve the agent process's containing unit from official cgroup evidence."""
         return self.call(Method.SYSTEMD_RESOLVE_AGENT_UNIT)
@@ -266,6 +272,7 @@ class AgentClient:
         return self.call(
             Method.SYSTEMD_SERVICE_LIFECYCLE,
             {"attempt_id": attempt_id, "unit_id": unit_id, "action": action},
+            timeout_s=SYSTEMD_LIFECYCLE_CLIENT_TIMEOUT_S,
         )
 
     # ------------------------------------------------------------------------ transport

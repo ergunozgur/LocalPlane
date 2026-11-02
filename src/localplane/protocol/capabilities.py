@@ -72,12 +72,19 @@ CAPABILITY_NETWORK_INTERFACE_MTU_GUARD: Final = "network.interface.mtu_guard"
 CAPABILITY_DOCKER_CONTAINERS_OBSERVE: Final = "docker.containers.observe"
 CAPABILITY_DOCKER_CONTAINER_LIFECYCLE: Final = "docker.container.lifecycle"
 CAPABILITY_SYSTEMD_UNITS_OBSERVE: Final = "systemd.units.observe"
+CAPABILITY_SYSTEMD_UNIT_JOURNAL: Final = "systemd.unit.journal"
 CAPABILITY_SYSTEMD_SERVICE_LIFECYCLE: Final = "systemd.service.lifecycle"
 CAPABILITY_SYSTEMD_SERVICE_LIFECYCLE_CONTEXT_OBSERVE: Final = (
     "systemd.service.lifecycle_context.observe"
 )
 
 CAPABILITIES: Final[dict[str, CapabilityDefinition]] = {
+    CAPABILITY_SYSTEMD_UNIT_JOURNAL: CapabilityDefinition(
+        capability=CAPABILITY_SYSTEMD_UNIT_JOURNAL,
+        version=1,
+        summary="Explicit bounded current-boot canonical service journal read. Sensitive messages; memory only. Access unverified until read.",
+        mutating=False,
+    ),
     CAPABILITY_STORAGE_OBSERVE: CapabilityDefinition(
         capability=CAPABILITY_STORAGE_OBSERVE,
         version=1,

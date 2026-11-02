@@ -44,6 +44,16 @@ from localplane import ipc
 
 PROTOCOL_VERSION: Final = "1"
 
+# Fixed systemd lifecycle budgets, not request parameters. The transport covers the
+# job wait plus ten bounded bus phases (connect/Subscribe, two AddMatch calls,
+# initial owner lookup, GetUnit/GetAll, pre-write owner check, dispatch and final
+# owner check), with ten seconds for agent framing/scheduling overhead.
+SYSTEMD_LIFECYCLE_DBUS_TIMEOUT_S: Final = 5.0
+SYSTEMD_LIFECYCLE_JOB_TIMEOUT_S: Final = 90.0
+SYSTEMD_LIFECYCLE_CLIENT_TIMEOUT_S: Final = (
+    SYSTEMD_LIFECYCLE_JOB_TIMEOUT_S + 10 * SYSTEMD_LIFECYCLE_DBUS_TIMEOUT_S + 10.0
+)
+
 MAX_MESSAGE_BYTES: Final = 16 * 1024 * 1024
 """Hard ceiling on a single framed message.
 
@@ -75,6 +85,7 @@ class Method(StrEnum):
     DOCKER_CONTAINER_LIFECYCLE = "docker.container_lifecycle"
     SYSTEMD_OBSERVE_UNITS = "systemd.observe_units"
     SYSTEMD_OBSERVE_UNIT = "systemd.observe_unit"
+    SYSTEMD_UNIT_JOURNAL = "systemd.unit_journal"
     SYSTEMD_RESOLVE_AGENT_UNIT = "systemd.resolve_agent_unit"
     SYSTEMD_OBSERVE_LIFECYCLE_CONTEXT = "systemd.observe_lifecycle_context"
     SYSTEMD_SERVICE_LIFECYCLE = "systemd.service_lifecycle"

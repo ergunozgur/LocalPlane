@@ -51,6 +51,8 @@ from localplane.agent.docker_direct_attestation import DockerDirectAttestationRe
 from localplane.agent.docker_runtime_owner import DockerRuntimeOwnerCorrelator
 from localplane.agent.providers.base import CommandRunner
 from localplane.agent.providers.storage import COLLECTOR
+from localplane.agent.providers.journal import COLLECTOR as JOURNAL_COLLECTOR
+from localplane.protocol.journal import response as journal_response, validate as validate_journal, valid_service
 from localplane.agent.providers.collector import NetworkProviderEvidenceCollector
 from localplane.agent.providers.docker import (
     DEFAULT_DOCKER_SOCKET,
@@ -128,11 +130,13 @@ class AgentService:
         runtime_attestation_reader: Any | None = None,
         runtime_owner_correlator: Any | None = None,
         storage_provider: Any | None = None,
+        journal_provider: Any | None = None,
         guard_timer: Callable[[float, Callable[[], None]], Any] | None = None,
         guard_clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._root = Path(root)
         self._storage = storage_provider if storage_provider is not None else COLLECTOR
+        self._journal = journal_provider if journal_provider is not None else JOURNAL_COLLECTOR
         self._sysfs_net = Path(sysfs_net)
         self._runner = runner
         self._transport = transport
@@ -229,6 +233,7 @@ class AgentService:
             Method.DOCKER_CONTAINER_LIFECYCLE: self._docker_container_lifecycle,
             Method.SYSTEMD_OBSERVE_UNITS: self._systemd_observe_units,
             Method.SYSTEMD_OBSERVE_UNIT: self._systemd_observe_unit,
+            Method.SYSTEMD_UNIT_JOURNAL: self._systemd_unit_journal,
             Method.SYSTEMD_RESOLVE_AGENT_UNIT: self._systemd_resolve_agent_unit,
             Method.SYSTEMD_OBSERVE_LIFECYCLE_CONTEXT: (
                 self._systemd_observe_lifecycle_context
@@ -691,6 +696,29 @@ class AgentService:
         return None
 
     # -------------------------------------------------------------------------- systemd
+
+    def _systemd_unit_journal(self, params: dict[str, Any]) -> dict[str, Any]:
+        # Closed protocol: backend derives both identifiers from the observed object.
+        # Do not reflect unknown keys/values or raw exceptions on this sensitive path.
+        if set(params) != {"unit_id", "host_id"} or not valid_service(params.get("unit_id")):
+            raise ProtocolError(ErrorCode.INVALID_PARAMS, "Invalid journal read parameters")
+        host_id = None
+        try:
+            host_id = self._identity().host_id
+            if params["host_id"] != host_id:
+                answer = journal_response("identity_changed")
+            elif self._root != Path("/") and self._journal is JOURNAL_COLLECTOR:
+                # Alternate-root inventory is not authority to read the running host journal.
+                answer = journal_response("unsupported")
+            else:
+                answer = validate_journal(self._journal.read(self._systemd, params["unit_id"]), params["unit_id"])
+                if self._identity().host_id != host_id:
+                    answer = journal_response("identity_changed")
+        except Exception:
+            # The general IPC handler logs unexpected exceptions. Keep sensitive provider
+            # failures inside this boundary, with no raw detail/traceback in that logger.
+            answer = journal_response("unavailable")
+        return {"host_id": host_id, "journal": answer}
 
     def _systemd_observe_units(self, params: dict[str, Any]) -> dict[str, Any]:
         """Observe the bounded loaded estate.  No parameter can widen its scope."""

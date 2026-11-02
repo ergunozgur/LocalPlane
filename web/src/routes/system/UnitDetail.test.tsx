@@ -3,8 +3,10 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { UnitDetail } from './UnitDetail';
+import { RunDetail } from '../operations/RunDetail';
 import { BACKEND, stubBackend, urlOf } from '@/test/backend';
-import type { SystemdUnit, SystemdUnitList, SystemdRelationship } from '@/api/types';
+import type { Run, SystemdUnit, SystemdUnitList, SystemdRelationship } from '@/api/types';
+import runFixture from '@/test/fixtures/systemd-run.json';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -117,6 +119,121 @@ describe('incoming systemd references', () => {
 });
 
 describe('service execution diagnosis', () => {
+  it('requires a deliberate journal read, links to the same service Lifecycle tab, and never creates a Run', async () => {
+    const journal = {
+      object_id: 'obj_unit', canonical_id: base.canonical_id, status: 'ok', retrieved_at: '2026-11-01T00:00:00Z',
+      since: '2026-11-01T00:00:00Z', boot_id: 'boot-test', truncated: false, coverage: 'complete', gaps: [],
+      entries: [{ timestamp: null, priority: '6', message: 'nonsecret fixture', boot_id: 'boot-test', invocation_id: null }],
+    };
+    stubBackend({ '/api/v1/systemd/units/obj_unit': detail, '/api/v1/systemd/units': list,
+      '/api/v1/systemd/units/obj_unit/journal': journal });
+    mount('/system/obj_unit');
+    await screen.findByRole('heading', { name: 'Execution diagnosis' });
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => urlOf(input).endsWith('/journal'))).toBe(false);
+    await userEvent.click(screen.getByRole('tab', { name: 'Journal' }));
+    expect(await screen.findByRole('link', { name: /Lifecycle for/ })).toHaveAttribute('href', '/system/obj_unit?tab=lifecycle');
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => urlOf(input).endsWith('/journal'))).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: /acknowledge and read/i }));
+    expect(await screen.findByText('nonsecret fixture')).toBeInTheDocument();
+    const journalCall = vi.mocked(fetch).mock.calls.find(([input]) => urlOf(input).endsWith('/journal'));
+    expect(journalCall?.[1]?.method).toBe('POST');
+    expect(journalCall?.[1]?.body).toBe(JSON.stringify({ acknowledge_sensitive: true }));
+    expect(vi.mocked(fetch).mock.calls.some(([input, init]) => urlOf(input).includes('/runs') && init?.method === 'POST')).toBe(false);
+    await userEvent.click(screen.getByRole('link', { name: /Lifecycle for/ }));
+    expect(await screen.findByRole('tab', { name: 'Lifecycle' })).toHaveAttribute('aria-selected', 'true');
+    expect(vi.mocked(fetch).mock.calls.some(([input, init]) => urlOf(input).includes('/runs') && init?.method === 'POST')).toBe(false);
+  });
+
+  it('keeps one incident journey on the canonical service and durable Run boundary', async () => {
+    const journal = {
+      object_id: 'obj_unit', canonical_id: base.canonical_id, status: 'ok', retrieved_at: '2026-11-01T00:00:00Z',
+      since: '2026-11-01T00:00:00Z', boot_id: 'boot-test', truncated: false, coverage: 'complete', gaps: [],
+      entries: [{ timestamp: null, priority: '3', message: 'nonsecret incident fixture', boot_id: 'boot-test', invocation_id: null }],
+    };
+    const run = structuredClone(runFixture) as unknown as Run;
+    run.run_id = 'run_incident';
+    run.object_id = base.object_id;
+    run.object_name = base.canonical_id;
+    run.preview.what = { ...run.preview.what, object_id: base.object_id, object_name: base.canonical_id };
+    run.state = 'preview';
+    run.preview.how = { ...run.preview.how, availability: 'available', eligibility: 'eligible', blockers: [], note: 'Eligible service action.' };
+    run.preview.protection = { ...run.preview.protection, status: 'clear', unresolved: [], missing_evidence: [] };
+    run.preview.validity = { state: 'current', as_of: '2026-11-01T00:00:00Z', reasons: [] };
+    run.preview.confirmation = { ...run.preview.confirmation, required: true, method: 'acknowledge', satisfiable: true, satisfied: false, unsatisfiable_reason: null };
+    let current = run;
+    const requests: Array<{ path: string; init: RequestInit | undefined }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = urlOf(input); requests.push({ path, init });
+      if (path === '/api/v1/systemd/units/obj_unit') return new Response(JSON.stringify(detail));
+      if (path === '/api/v1/systemd/units') return new Response(JSON.stringify(list));
+      if (path === '/api/v1/systemd/units/obj_unit/journal') return new Response(JSON.stringify(journal));
+      if (path === '/api/v1/runs' && init?.method === 'POST') return new Response(JSON.stringify(current), { status: 201 });
+      if (path === '/api/v1/runs/run_incident/confirm') {
+        current = {
+          ...current,
+          preview: { ...current.preview, confirmation: { ...current.preview.confirmation, satisfied: true } },
+          confirmation: {
+            confirmation_id: 'confirmation', preview_id: current.preview.preview_id, preview_digest: current.preview.preview_digest,
+            required_method: 'acknowledge', method: 'acknowledge', typed_statement: null, policy: '', source: 'authenticated_request',
+            satisfied_at: '2026-11-01T00:00:01Z', consumed: false, consumed_at: null, consumed_by_attempt_id: null,
+          },
+        };
+        return new Response(JSON.stringify(current));
+      }
+      if (path === '/api/v1/runs/run_incident/apply') {
+        current = {
+          ...current, state: 'recovery_required', host_effect: 'written', change_id: 'change_incident',
+          change: {
+            result: 'recovery_required', mutation: { outcome: 'written', reason: 'provider completed dispatch' },
+            verification: { outcome: 'mismatch' }, recovery: { reason: 'verification mismatch; no automatic retry or rollback is available' },
+          } as Run['change'],
+        };
+        return new Response(JSON.stringify(current));
+      }
+      if (path === '/api/v1/runs/run_incident') return new Response(JSON.stringify(current));
+      return new Response(JSON.stringify({ error: { code: 'not_found', message: 'not found', detail: {} } }), { status: 404 });
+    }));
+    render(<MemoryRouter initialEntries={['/system/obj_unit?tab=journal']}><Routes>
+      <Route path="system/:objectId" element={<UnitDetail />} />
+      <Route path="operations/runs/:runId" element={<RunDetail />} />
+      <Route path="operations" element={<><p>Operations list</p><Link to="/operations/runs/run_incident">Reopen retained Run</Link></>} />
+    </Routes></MemoryRouter>);
+
+    // A journal request has no side effect on planning and keeps the canonical Lifecycle handoff.
+    await screen.findByRole('button', { name: /acknowledge and read/i });
+    expect(requests.filter(({ path }) => path === '/api/v1/systemd/units/obj_unit/journal')).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: /acknowledge and read/i }));
+    await screen.findByText('nonsecret incident fixture');
+    const lifecycle = screen.getByRole('link', { name: `Lifecycle for ${base.canonical_id}` });
+    expect(lifecycle).toHaveAttribute('href', '/system/obj_unit?tab=lifecycle');
+    await userEvent.click(lifecycle);
+    const plan = await screen.findByRole('button', { name: 'Plan restart' });
+    await userEvent.click(plan);
+    expect(requests.filter(({ path, init }) => path === '/api/v1/runs' && init?.method === 'POST')).toHaveLength(1);
+    const planned = requests.find(({ path, init }) => path === '/api/v1/runs' && init?.method === 'POST')!;
+    expect(JSON.parse(planned.init?.body as string)).toEqual({ operation: { type: 'systemd.service.restart', object_id: base.object_id } });
+
+    await userEvent.click(await screen.findByRole('link', { name: /Open Composer/ }));
+    await userEvent.click(await screen.findByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm preview' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Apply approved preview' })).toBeEnabled());
+    const confirmation = requests.find(({ path }) => path.endsWith('/confirm'))!;
+    expect(JSON.parse(confirmation.init?.body as string)).toEqual({ preview_id: run.preview.preview_id, expected_preview_digest: run.preview.preview_digest, acknowledge: true });
+    await userEvent.click(screen.getByRole('button', { name: 'Apply approved preview' }));
+    expect(await screen.findByText(/Recorded state: recovery_required/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Recorded outcome')).toHaveTextContent('Change result: recovery_required · Mutation: written · Verification: mismatch');
+    expect(screen.getByLabelText('Recorded outcome')).toHaveTextContent('no automatic retry or rollback is available');
+    expect(requests.filter(({ path }) => path.endsWith('/apply'))).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole('link', { name: 'Close Composer' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'Reopen retained Run' }));
+    expect(await screen.findByText(/Recorded state: recovery_required/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Recorded outcome')).toHaveTextContent('no automatic retry or rollback is available');
+    expect(requests.filter(({ path, init }) => path === '/api/v1/runs' && init?.method === 'POST')).toHaveLength(1);
+    expect(requests.filter(({ path }) => path.endsWith('/apply'))).toHaveLength(1);
+    expect(requests.every(({ path }) => path.startsWith('/api/v1/'))).toBe(true);
+  });
+
   it('keeps a prior failure distinct from current active, health, and freshness evidence', async () => {
     stubBackend({ '/api/v1/systemd/units/obj_unit': {
       ...detail,

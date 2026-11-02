@@ -22,14 +22,16 @@ from __future__ import annotations
 
 import ast
 import inspect
+from collections import deque
 from dataclasses import dataclass, field
+from itertools import count
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from jeepney.low_level import HeaderFields
-from jeepney.wrappers import DBusErrorResponse
+from jeepney.low_level import HeaderFields, MessageType
+from jeepney.wrappers import DBusErrorResponse, DBusAddress, new_method_return, new_signal
 
 from localplane.agent.providers import systemd as systemd_provider
 from localplane.agent.providers.systemd import (
@@ -139,6 +141,9 @@ class DispatchConnection:
         state.calls.append(("job_watch",))
 
         class _Watch:
+            def check_owner(self):
+                pass
+
             def result_for(self, job_path: str, unit_id: str, timeout_s: float):
                 state.calls.append(("await_job", job_path, unit_id, timeout_s))
                 if state.wait_error is not None:
@@ -560,6 +565,7 @@ def test_a_foreign_job_removed_signal_is_not_this_dispatch_s_answer():
             ]
         ),
         queue=None,
+        check_owner=lambda: None,
     )
     assert watch.result_for(
         "/org/freedesktop/systemd1/job/17", "alpha.service", 5.0
@@ -575,6 +581,7 @@ def test_a_malformed_signal_body_is_skipped_rather_than_read():
             ]
         ),
         queue=None,
+        check_owner=lambda: None,
     )
     assert watch.result_for(
         "/org/freedesktop/systemd1/job/17", "alpha.service", 5.0
@@ -582,7 +589,9 @@ def test_a_malformed_signal_body_is_skipped_rather_than_read():
 
 
 def test_a_signal_that_never_arrives_ends_the_wait_without_an_answer():
-    watch = systemd_provider._JobWatch(_RecordingConnection([]), queue=None)
+    watch = systemd_provider._JobWatch(
+        _RecordingConnection([]), queue=None, check_owner=lambda: None
+    )
     assert watch.result_for("/job/17", "alpha.service", 0.05) is None
 
 
@@ -596,6 +605,211 @@ class _RecordingConnection:
         if not self._signals:
             raise TimeoutError("no further signals")
         return self._signals.pop(0)
+
+
+# Real Jeepney filtering and reply processing; only the bus I/O is scripted. In
+# particular, signals emitted before a method reply take Jeepney's normal path.
+class _MessageBus(systemd_provider.DBusConnection):
+    def __init__(self, hook=None):
+        self._filters = systemd_provider.MessageFilters()
+        self.outgoing_serial = count(1)
+        self.incoming = deque()
+        self.calls = []
+        self.rules = []
+        self.owner = ":1.42"
+        self.hook = hook
+        self.signals = [_job_signal()]
+        self.closed = False
+
+    def filter(self, rule, **kwargs):
+        self.rules.append(rule)
+        return super().filter(rule, **kwargs)
+
+    def send_message(self, message, serial):
+        message.header.serial = serial
+        member = message.header.fields[HeaderFields.member]
+        self.calls.append((member, message.body))
+        if self.hook:
+            self.hook(self, member)
+        if member == "GetNameOwner":
+            signature, body = "s", (self.owner,)
+        elif member == "GetUnit":
+            signature, body = "o", ("/org/freedesktop/systemd1/unit/alpha",)
+        elif member == "GetAll":
+            signature, body = "a{sv}", ({
+                "Id": ("s", "alpha.service"), "LoadState": ("s", "loaded"),
+                "ActiveState": ("s", "inactive"),
+            },)
+        elif member in {"Start", "Stop", "Restart"}:
+            # Completion can outrun the method return; the filter must already exist.
+            self.incoming.extend(self.signals)
+            signature, body = "o", ("/org/freedesktop/systemd1/job/17",)
+        else:
+            assert member in {"Subscribe", "AddMatch"}
+            signature, body = None, ()
+        self.incoming.append(new_method_return(message, signature, body))
+
+    def receive(self, *, timeout=None):
+        assert timeout is not None and timeout <= JOB_COMPLETION_TIMEOUT_S
+        if not self.incoming:
+            raise TimeoutError("scripted silence")
+        return self.incoming.popleft()
+
+    def close(self):
+        self.closed = True
+
+    def change_owner(self, owner, *, sender="org.freedesktop.DBus"):
+        signal = new_signal(
+            DBusAddress("/org/freedesktop/DBus", interface="org.freedesktop.DBus"),
+            "NameOwnerChanged", "sss",
+            (systemd_provider.SYSTEMD_DESTINATION, self.owner, owner),
+        )
+        signal.header.fields[HeaderFields.sender] = sender
+        self.incoming.append(signal)
+        self.owner = owner
+
+
+def _job_signal(sender=":1.42", path="/org/freedesktop/systemd1/job/17",
+                unit="alpha.service"):
+    signal = new_signal(
+        DBusAddress(systemd_provider.SYSTEMD_MANAGER_PATH,
+                    interface=systemd_provider.SYSTEMD_MANAGER_INTERFACE),
+        "JobRemoved", "uoss", (17, path, unit, "done"),
+    )
+    if sender is not None:
+        signal.header.fields[HeaderFields.sender] = sender
+    return signal
+
+
+def _message_dispatch(monkeypatch, bus):
+    monkeypatch.setattr(systemd_provider, "_open_bounded_system_bus", lambda *a, **k: bus)
+    provider = SystemdProvider(runtime_path=None)
+    result = provider.dispatch_service_lifecycle("alpha.service", "start")
+    assert bus.closed
+    return result
+
+
+def test_real_jeepney_unique_sender_completion_before_method_reply(monkeypatch):
+    bus = _MessageBus()
+    result = _message_dispatch(monkeypatch, bus)
+    assert result.outcome == "written" and result.job_id == 17
+    job_rule = bus.rules[1]
+    assert job_rule.header_fields["sender"] == ":1.42"
+    assert job_rule.matches(_job_signal())
+    remote_rule = [body[0] for member, body in bus.calls if member == "AddMatch"][1]
+    assert "sender='org.freedesktop.systemd1'" in remote_rule
+    # Demonstrate the original defect with the actual installed matcher.
+    old_rule = systemd_provider.MatchRule(type="signal", sender="org.freedesktop.systemd1")
+    assert not old_rule.matches(_job_signal())
+    names = [name for name, _ in bus.calls]
+    assert names.index("Subscribe") < names.index("AddMatch") < names.index("Start")
+    assert names.count("Start") == 1 and names.count("GetNameOwner") == 3
+
+
+@pytest.mark.parametrize("sender", [":1.99", "org.freedesktop.systemd1", None])
+def test_real_jeepney_rejects_wrong_or_missing_signal_sender(monkeypatch, sender):
+    bus = _MessageBus()
+    bus.signals = [_job_signal(sender)]
+    assert _message_dispatch(monkeypatch, bus).outcome == "write_unknown"
+
+
+@pytest.mark.parametrize("field,value", [
+    (HeaderFields.path, "/wrong"), (HeaderFields.member, "OtherSignal"),
+    (HeaderFields.interface, "org.example.Other"),
+])
+def test_real_jeepney_rejects_wrong_signal_headers(monkeypatch, field, value):
+    bus = _MessageBus()
+    bus.signals[0].header.fields[field] = value
+    assert _message_dispatch(monkeypatch, bus).outcome == "write_unknown"
+
+
+def test_real_jeepney_still_requires_exact_job_and_canonical_unit(monkeypatch):
+    bus = _MessageBus()
+    bus.signals = [_job_signal(path="/other/job"), _job_signal(unit="other.service")]
+    assert _message_dispatch(monkeypatch, bus).outcome == "write_unknown"
+
+
+def test_real_jeepney_rejects_non_signal_message(monkeypatch):
+    bus = _MessageBus()
+    bus.signals[0].header.message_type = MessageType.method_call
+    assert _message_dispatch(monkeypatch, bus).outcome == "write_unknown"
+
+
+@pytest.mark.parametrize("owner", ["", "org.freedesktop.systemd1", ":bad", None])
+def test_unusable_authoritative_owner_refuses_before_write(monkeypatch, owner):
+    bus = _MessageBus()
+    bus.owner = owner
+    assert _message_dispatch(monkeypatch, bus).outcome == "not_written"
+    assert not any(name == "Start" for name, _ in bus.calls)
+
+
+@pytest.mark.parametrize("phase", ["setup", "prewrite", "dispatch", "completion"])
+@pytest.mark.parametrize("change_back", [False, True])
+def test_owner_change_races_never_report_completion(monkeypatch, phase, change_back):
+    def hook(bus, member):
+        lookups = sum(name == "GetNameOwner" for name, _ in bus.calls)
+        hit = (member == "GetNameOwner" and lookups == {
+            "setup": 1, "prewrite": 2, "completion": 3,
+        }.get(phase)) or (phase == "dispatch" and member == "Start")
+        if hit:
+            bus.change_owner(":1.99")
+            if change_back:
+                bus.change_owner(":1.42")
+    bus = _MessageBus(hook)
+    result = _message_dispatch(monkeypatch, bus)
+    assert result.outcome == ("not_written" if phase in {"setup", "prewrite"} else "write_unknown")
+    assert sum(name == "Start" for name, _ in bus.calls) == (phase not in {"setup", "prewrite"})
+
+
+def test_owner_transition_cannot_be_overwritten_by_job_traffic(monkeypatch):
+    def hook(bus, member):
+        if member == "Start":
+            bus.change_owner(":1.99")
+            bus.change_owner(":1.42")
+    bus = _MessageBus(hook)
+    bus.signals = [_job_signal(path=f"/other/{i}") for i in range(1000)] + [_job_signal()]
+    assert _message_dispatch(monkeypatch, bus).outcome == "write_unknown"
+
+
+@pytest.mark.parametrize("lookup", [1, 2, 3])
+def test_owner_lookup_timeout_fails_closed_at_each_boundary(monkeypatch, lookup):
+    def hook(bus, member):
+        if member == "GetNameOwner" and sum(n == member for n, _ in bus.calls) == lookup:
+            raise TimeoutError("scripted owner lookup timeout")
+    bus = _MessageBus(hook)
+    assert _message_dispatch(monkeypatch, bus).outcome == ("write_unknown" if lookup == 3 else "not_written")
+
+
+@pytest.mark.parametrize("lookup", [1, 2, 3])
+def test_missing_bus_owner_fails_closed_at_each_boundary(monkeypatch, lookup):
+    def hook(bus, member):
+        if member == "GetNameOwner" and sum(n == member for n, _ in bus.calls) == lookup:
+            raise _error_reply("org.freedesktop.DBus.Error.NameHasNoOwner")
+    bus = _MessageBus(hook)
+    assert _message_dispatch(monkeypatch, bus).outcome == ("write_unknown" if lookup == 3 else "not_written")
+
+
+def test_changed_owner_lookup_alone_cannot_accept_old_queued_completion(monkeypatch):
+    def hook(bus, member):
+        if member == "GetNameOwner" and sum(n == member for n, _ in bus.calls) == 3:
+            bus.owner = ":1.99"
+    assert _message_dispatch(monkeypatch, _MessageBus(hook)).outcome == "write_unknown"
+
+
+def test_other_jobs_and_senders_do_not_hide_a_valid_completion(monkeypatch):
+    bus = _MessageBus()
+    bus.signals = [
+        _job_signal(":1.99"), _job_signal(path="/other/job"),
+        _job_signal(unit="other.service"), _job_signal(),
+    ]
+    assert _message_dispatch(monkeypatch, bus).outcome == "written"
+
+
+def test_spoofed_owner_change_cannot_match_bus_authority(monkeypatch):
+    def hook(bus, member):
+        if member == "Start":
+            bus.change_owner(":1.42", sender=":1.99")
+    assert _message_dispatch(monkeypatch, _MessageBus(hook)).outcome == "written"
 
 
 # ----------------------------------------------------------------------- the name rule

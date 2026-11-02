@@ -226,17 +226,21 @@ def test_backend_keeps_loopback_default_and_disables_proxy_rewriting(
     import localplane.backend.__main__ as backend_main
 
     called: dict[str, Any] = {}
+    monkeypatch.setattr(backend_main, "configure_logging", lambda *a: None)
     monkeypatch.delenv("LOCALPLANE_HOST", raising=False)
     monkeypatch.setenv("LOCALPLANE_DB_PATH", str(tmp_path / "localplane.db"))
     monkeypatch.setenv("LOCALPLANE_OBSERVE_ON_STARTUP", "0")
+    for name in ("LOCALPLANE_TLS_CERT_PATH", "LOCALPLANE_TLS_KEY_PATH", "LOCALPLANE_CONSOLE_DIR"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(
-        backend_main.uvicorn,
+        backend_main.uvicorn.Server,
         "run",
-        lambda app, **kwargs: called.update({"app": app, **kwargs}),
+        lambda server: called.update(vars(server.config)),
     )
     assert backend_main.main([]) == 0
     assert called["host"] == "127.0.0.1"
     assert called["proxy_headers"] is False
+    assert called["workers"] == 1
 
 
 class _Graph:
