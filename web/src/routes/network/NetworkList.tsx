@@ -16,75 +16,131 @@
  * word-pills, the capability that produced the row as a sub-entry under its name, and a
  * reserved traffic slot that stays empty because no throughput series exists.
  */
-import { useCallback } from 'react';
+
 import { Link, useNavigate } from 'react-router-dom';
-import { endpoints } from '@/api/endpoints';
-import { useResource } from '@/hooks/useResource';
 import { Plate, PlateBody, PlateHead } from '@/components/primitives/Plate';
 import { DataTable } from '@/components/primitives/DataTable';
 import { StatusMark, StatusPill } from '@/components/semantic/StatusPill';
 import { ManagementChip, ReconciliationChip } from '@/components/semantic/SemanticGlyph';
+import { ObservationOutcome } from '@/components/semantic/ObservationOutcome';
 import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
-import { Empty } from '@/components/states/SurfaceState';
+import { Degraded, Empty } from '@/components/states/SurfaceState';
 import { PageHeader } from '../PageHeader';
 import { ScopeBar } from '@/components/layout/ScopeBar';
 import { useHostName } from '@/hooks/useEstateCounts';
 import { AddressingSummary } from './AddressingSummary';
 import styles from './NetworkList.module.css';
 import { SweepCaveat, SweepFoot } from '@/dashboard/widgets/shared';
+import { inventoryMembership, membershipCounts } from '@/domain/inventory';
 import {
   freshness as freshnessOf,
   health as healthOf,
   ownershipState,
 } from '@/domain/vocabulary';
+import { useNetworkObservation } from './useNetworkObservation';
 
 export function NetworkList(): JSX.Element {
-  const { resource } = useResource(
-    'interfaces',
-    useCallback((signal) => endpoints.interfaces({ signal }), []),
-  );
+  const {
+    resource,
+    outcome,
+    storedReadError,
+    refreshInventory,
+    retryStoredRead,
+  } = useNetworkObservation();
   const hostName = useHostName();
   const navigate = useNavigate();
+  const refreshPending = outcome?.phase === 'observing' || outcome?.phase === 'reading';
+
+  const listCount = resource.status === 'success' ? resource.data.count : undefined;
 
   return (
-    <ResourceView resource={resource} what="interface list" loadingLabel="Reading interfaces…">
-      {(list, meta) => (
-        <>
-          <ScopeBar
-            crumbs={[{ label: hostName, to: '/' }, { label: 'network' }]}
-            tabs={[
-              {
-                to: '/network',
-                label: 'Interfaces',
-                count: list.count,
-                end: true,
-                drift: list.interfaces.some((item) => item.reconciliation === 'drifted'),
-              },
-            ]}
-            observedAt={meta.fetchedAt}
-          />
+    <>
+      <PageHeader
+        title="Network"
+        count={listCount}
+        annotation="Management, ownership, reconciliation, health and freshness are independent of one another. An observed object does not drift; a drifted one may be perfectly healthy. Stored records stay visible until an explicit observation and a successful stored-record reread."
+      >
+        <button
+          type="button"
+          className="btn"
+          onClick={refreshInventory}
+          disabled={refreshPending}
+        >
+          {refreshPending ? 'Observing network…' : 'Observe network'}
+        </button>
+      </PageHeader>
 
-          <PageHeader
-            title="Network"
-            count={list.count}
-            annotation="Management, ownership, reconciliation, health and freshness are independent of one another. An observed object does not drift; a drifted one may be perfectly healthy."
-          />
-          <Plate quiet>
+      <ObservationOutcome
+        outcome={outcome}
+        subject="Network"
+        resultSummary={(result) => (
+          <>
+            {' '}Agent returned status <code>{result.status}</code> · {result.object_count} interface{result.object_count === 1 ? '' : 's'} · {result.observation_count} observation{result.observation_count === 1 ? '' : 's'} · sweep <code>{result.sweep_id}</code>.
+            {result.issues.length > 0 ? ` ${result.issues.length} issue${result.issues.length === 1 ? '' : 's'} reported.` : ''}
+            {result.providers && result.providers.length > 0
+              ? ` ${result.providers.length} ownership provider${result.providers.length === 1 ? '' : 's'} consulted.`
+              : ''}
+          </>
+        )}
+        onRefresh={refreshInventory}
+        onRetryStoredRead={retryStoredRead}
+      />
+      {storedReadError && outcome?.phase !== 'reread_failed' ? (
+        <div className="outcome" role="alert">
+          <Degraded tone="unknown" title="Stored interface records could not be re-read">
+            The last visible records remain on screen.{' '}
+            <button type="button" className="btn sm" onClick={retryStoredRead}>Re-read stored records</button>
+          </Degraded>
+        </div>
+      ) : null}
+
+      <ResourceView resource={resource} what="interface list" loadingLabel="Reading interfaces…">
+        {(list, meta) => {
+          const membership = membershipCounts(list.interfaces);
+          const managed = list.interfaces.filter((i) => i.management.state === 'managed').length;
+          return (
+          <>
+            <ScopeBar
+              crumbs={[{ label: hostName, to: '/' }, { label: 'network' }]}
+              tabs={[
+                {
+                  to: '/network',
+                  label: 'Interfaces',
+                  count: list.count,
+                  end: true,
+                  drift: list.interfaces.some((item) => item.reconciliation === 'drifted'),
+                },
+              ]}
+              observedAt={meta.fetchedAt}
+            />
+
+            <Plate quiet>
             <PlateHead
               title="Interfaces"
-              meta="every attachment this host has, and what it is supposed to be"
+              meta="stored interface observations, including retained history"
               asOf={meta.fetchedAt.toLocaleTimeString()}
               chips={
                 <>
                   <span className={styles.chip}>
-                    <b>{list.interfaces.filter((i) => i.management.state === 'managed').length}</b>{' '}
-                    managed
+                    <b>{managed}</b> managed
+                  </span>
+                  <span className={styles.chip} title="retained stored records returned">
+                    <b>{list.count}</b> stored
                   </span>
                   <span className={styles.chip}>
-                    <b>{list.interfaces.filter((i) => i.management.state === 'observed').length}</b>{' '}
-                    observed
+                    <b>{membership.latestSighted}</b> latest-sighted
                   </span>
+                  {membership.retainedNotSeen > 0 ? (
+                    <span className={styles.chip}>
+                      <b>{membership.retainedNotSeen}</b> retained
+                    </span>
+                  ) : null}
+                  {membership.membershipUnknown > 0 ? (
+                    <span className={styles.chip}>
+                      <b>{membership.membershipUnknown}</b> membership unknown
+                    </span>
+                  ) : null}
                 </>
               }
             />
@@ -194,6 +250,13 @@ export function NetworkList(): JSX.Element {
                   ),
                 },
                 {
+                  key: 'membership',
+                  header: 'Latest inventory',
+                  render: (row) => (
+                    <StatusPill semantic={inventoryMembership(row.observed_in_latest_sweep)} size="sm" />
+                  ),
+                },
+                {
                   // The reserved traffic slot. LocalPlane keeps no throughput history, so
                   // nothing is drawn here — the space is held so a real series can arrive
                   // without every row in the table moving.
@@ -228,8 +291,9 @@ export function NetworkList(): JSX.Element {
           </Plate>
 
           <AddressingSummary interfaces={list.interfaces} observedAt={meta.fetchedAt} />
-        </>
-      )}
+        </>);
+      }}
     </ResourceView>
+  </>
   );
 }

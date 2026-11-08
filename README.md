@@ -72,6 +72,13 @@ and bounded recent operational records, then opens their detail views. Authentic
 service start/stop/restart uses the guarded Composer; Docker, MTU, Adopt and intent-revision
 controls remain absent. See [project status](docs/project-status.md) for scope and limits.
 
+The console distinguishes re-reading stored records from collecting provider evidence.
+Network, System and Docker have explicit inventory observation controls; failed observations
+do not make older evidence fresh. Overview includes unresolved recovery holds separately from
+Findings, and inventory summaries distinguish latest-sighted membership from retained history.
+Filesystem observations, container samples and sensitive log/journal reads require their own
+controls; the global record reread does not repeat them.
+
 ## How a change works
 
 ```text

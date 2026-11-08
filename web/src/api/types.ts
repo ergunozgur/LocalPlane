@@ -27,13 +27,21 @@ export type Sweep = S['Sweep'];
 export type SweepList = S['SweepList'];
 export type Observation = S['Observation'];
 export type ProviderIssue = S['ProviderIssue'];
+export type ProviderReadingSummary = S['ProviderReadingSummary'];
 export type Freshness = S['Freshness'];
 
 /* ------------------------------------------------------------------------------ network */
-export type NetworkInterface = S['NetworkInterface'];
-export type NetworkInterfaceList = S['NetworkInterfaceList'];
+export type NetworkInterface = Omit<S['NetworkInterface'], 'addresses'> & { addresses: Address[] | null };
+export type NetworkInterfaceList = Omit<S['NetworkInterfaceList'], 'interfaces'> & {
+  interfaces: NetworkInterface[];
+};
 export type Link = S['Link'];
-export type Address = S['Address'];
+export type LifetimeState = 'unknown' | 'finite' | 'infinite';
+export type Address = S['Address'] & {
+  /** Agent-normalised lifetime classification, added atomically with the seconds value. */
+  valid_lifetime_state?: LifetimeState;
+  preferred_lifetime_state?: LifetimeState;
+};
 export type Statistics = S['Statistics'];
 export type Ownership = S['Ownership'];
 export type OwnershipClaimSummary = S['OwnershipClaimSummary'];
@@ -58,6 +66,7 @@ export type IntentRevision = S['IntentRevision'];
 /* ------------------------------------------------------------------------------ systemd */
 export type SystemdUnit = S['SystemdUnit'];
 export type SystemdUnitList = S['SystemdUnitList'];
+export type SystemdAgentContainment = S['SystemdAgentContainment'];
 export type SystemdJournalResponse = S['SystemdJournalResponse'];
 export type SystemdJournalEntry = S['SystemdJournalEntry'];
 export type SystemdRelationship = S['SystemdRelationship'];
@@ -77,6 +86,12 @@ export type ContainerStats = S['ContainerStats'];
 export type ContainerLogs = S['ContainerLogs'];
 export type ContainerLogLine = S['ContainerLogLine'];
 export type ContainerObservationResult = S['ContainerObservationResult'];
+
+/* --------------------------------------------------------------- explicit observations */
+
+export type RefreshResult = S['RefreshResult'];
+export type SystemdObservationResult = S['SystemdObservationResult'];
+export type RecoveryHolds = S['RecoveryHolds'];
 
 /* --------------------------------------------------------------------- runs and changes */
 export type Run = S['Run'];

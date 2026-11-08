@@ -26,6 +26,7 @@ export function HostScope(): JSX.Element {
   const { resource: agent } = useResource(
     'agent',
     useCallback((signal) => endpoints.agent({ signal }), []),
+    { kind: 'live' },
   );
   const { resource: path } = useResource(
     'management-path',
@@ -98,7 +99,7 @@ export function HostScope(): JSX.Element {
           {[hostData.os_pretty_name, agentData.agent ? `agent ${agentData.agent.agent_version}` : null]
             .filter(Boolean)
             .join(' · ')}
-          {agentData.reachable ? ' · observing' : ' · agent unreachable'}
+          {agentData.reachable ? ' · agent answered' : ' · agent unreachable'}
         </span>
       </Link>
 

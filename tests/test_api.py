@@ -533,6 +533,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
         "/api/v1/runs/{run_id}/apply",
         "/api/v1/runs/{run_id}/guard/keep",
         "/api/v1/changes",
+        "/api/v1/changes/recovery-holds",
         "/api/v1/changes/{change_id}",
         "/api/v1/changes/{change_id}/recovery/confirm",
         "/api/v1/changes/{change_id}/recovery/retry",

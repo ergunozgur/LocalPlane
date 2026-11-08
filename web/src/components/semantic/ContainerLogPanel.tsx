@@ -54,6 +54,7 @@ function Loaded({
   const { resource, refresh } = useResource(
     `container-logs:${objectId}:${tail}`,
     useCallback((signal) => endpoints.containerLogs(objectId, tail, { signal }), [objectId, tail]),
+    { kind: 'live' },
   );
 
   return (

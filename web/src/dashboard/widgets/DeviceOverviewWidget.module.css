@@ -26,6 +26,13 @@
   color: var(--ink);
 }
 
+.chipLink {
+  color: var(--accent);
+  text-decoration: none;
+  margin-left: 4px;
+}
+.chipLink:hover { text-decoration: underline; }
+
 .action {
   display: inline-flex;
   align-items: center;

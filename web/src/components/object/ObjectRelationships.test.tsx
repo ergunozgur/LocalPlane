@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ApiError } from '@/api/client';
 import { ViewerProvider } from '@/identity/viewer';
@@ -40,6 +40,53 @@ function bridge(): NetworkInterface {
 
 function container(objectId: string, networks = [{ name: 'app_default', network_id: 'network-a' }]): DockerContainer {
   return { kind: 'docker.container', object_id: objectId, name: objectId, networks } as unknown as DockerContainer;
+}
+
+function observation(freshness: string) {
+  return {
+    observation_id: 'obs_1',
+    sweep_id: 'swp_1',
+    observed_at: '2026-08-27T21:47:01Z',
+    received_at: '2026-08-27T21:47:01Z',
+    freshness,
+    age_seconds: 3,
+    provider: 'test',
+    provider_version: '1',
+    method: 'test',
+    capability: 'test.observe',
+    fidelity: 'complete',
+    gaps: [],
+  };
+}
+
+function bridgeWith(freshness: string): NetworkInterface {
+  return { ...bridge(), observed_in_latest_sweep: true, observation: observation(freshness) } as unknown as NetworkInterface;
+}
+
+function containerWith(objectId: string, freshness: string, latest = true): DockerContainer {
+  return { ...container(objectId), observed_in_latest_sweep: latest, observation: observation(freshness) } as unknown as DockerContainer;
+}
+
+function listEnvelope(status: string, sweepFreshness: string): { last_sweep: Record<string, unknown> } {
+  return {
+    last_sweep: {
+      sweep_id: 'swp_1',
+      capability: 'test.observe',
+      scope: 'inventory',
+      provider: 'test',
+      provider_version: '1',
+      status,
+      started_at: '2026-08-27T21:47:00Z',
+      completed_at: '2026-08-27T21:47:01Z',
+      received_at: '2026-08-27T21:47:01Z',
+      object_count: 1,
+      missing: [],
+      issues: [],
+      agent_instance_id: 'agent_1',
+      freshness: sweepFreshness,
+      age_seconds: 0,
+    },
+  };
 }
 
 describe('ObjectRelationships', () => {
@@ -124,7 +171,128 @@ describe('ObjectRelationships', () => {
     expect(screen.getByText(/loading: containers/)).toBeInTheDocument();
     expect(screen.queryByText('No relationship is established')).not.toBeInTheDocument();
   });
+
+  it('shows subject membership, row freshness, and sweep status together', () => {
+    const subject = bridgeWith('current');
+    render(
+      <MemoryRouter>
+        <ObjectRelationships
+          subject={subject}
+          interfaces={resource<NetworkInterfaceList>({ ...listEnvelope('ok', 'current'), interfaces: [subject], count: 1 } as NetworkInterfaceList)}
+          containers={resource<DockerContainerList>({ ...listEnvelope('ok', 'current'), containers: [containerWith('ct-a', 'current')], count: 1 } as DockerContainerList)}
+          managementPath={resource(path)}
+        />
+      </MemoryRouter>,
+    );
+
+    const subjectCoverage = coverage(rowContaining('contains container'), 'subject');
+    expect(within(subjectCoverage).getByText('seen in latest inventory')).toBeInTheDocument();
+    expect(within(subjectCoverage).getByText(/sweep ok · current/)).toBeInTheDocument();
+  });
+
+  it('shows counterpart row freshness and sweep status even when the row is current', () => {
+    const subject = bridgeWith('current');
+    render(
+      <MemoryRouter>
+        <ObjectRelationships
+          subject={subject}
+          interfaces={resource<NetworkInterfaceList>({ ...listEnvelope('ok', 'current'), interfaces: [subject], count: 1 } as NetworkInterfaceList)}
+          containers={resource<DockerContainerList>({ ...listEnvelope('partial', 'current'), containers: [containerWith('ct-a', 'current')], count: 1 } as DockerContainerList)}
+          managementPath={resource(path)}
+        />
+      </MemoryRouter>,
+    );
+
+    const counterpartCoverage = coverage(rowContaining('contains container'), 'counterpart');
+    expect(within(counterpartCoverage).getByText('current')).toBeInTheDocument();
+    expect(within(counterpartCoverage).getByText(/sweep partial · current/)).toBeInTheDocument();
+  });
+
+  it('shows retained subject membership and stale row freshness without hiding sweep status', () => {
+    const subject = { ...bridgeWith('stale'), observed_in_latest_sweep: false } as unknown as NetworkInterface;
+    render(
+      <MemoryRouter>
+        <ObjectRelationships
+          subject={subject}
+          interfaces={resource<NetworkInterfaceList>({ ...listEnvelope('ok', 'current'), interfaces: [subject], count: 1 } as NetworkInterfaceList)}
+          containers={resource<DockerContainerList>({ ...listEnvelope('ok', 'current'), containers: [containerWith('ct-a', 'current')], count: 1 } as DockerContainerList)}
+          managementPath={resource(path)}
+        />
+      </MemoryRouter>,
+    );
+
+    const subjectCoverage = coverage(rowContaining('contains container'), 'subject');
+    expect(within(subjectCoverage).getByText('not seen in latest inventory')).toBeInTheDocument();
+    expect(within(subjectCoverage).getByText('stale')).toBeInTheDocument();
+    expect(within(subjectCoverage).getByText(/sweep ok · current/)).toBeInTheDocument();
+  });
+
+  it('carries authoritative envelope freshness separately from row freshness', () => {
+    const subject = bridgeWith('current');
+    render(
+      <MemoryRouter>
+        <ObjectRelationships
+          subject={subject}
+          interfaces={resource<NetworkInterfaceList>({ ...listEnvelope('ok', 'stale'), interfaces: [subject], count: 1 } as NetworkInterfaceList)}
+          containers={resource<DockerContainerList>({ ...listEnvelope('ok', 'stale'), containers: [containerWith('ct-a', 'current')], count: 1 } as DockerContainerList)}
+          managementPath={resource(path)}
+        />
+      </MemoryRouter>,
+    );
+
+    const row = rowContaining('contains container');
+    const subjectCoverage = coverage(row, 'subject');
+    const counterpartCoverage = coverage(row, 'counterpart');
+    expect(within(subjectCoverage).getByText('current')).toBeInTheDocument();
+    expect(within(subjectCoverage).getByText(/sweep ok · stale/)).toBeInTheDocument();
+    expect(within(counterpartCoverage).getByText('current')).toBeInTheDocument();
+    expect(within(counterpartCoverage).getByText(/sweep ok · stale/)).toBeInTheDocument();
+  });
+
+  it('says inventory not read when the envelope is absent', () => {
+    const subject = bridgeWith('current');
+    render(
+      <MemoryRouter>
+        <ObjectRelationships
+          subject={subject}
+          interfaces={resource<NetworkInterfaceList>({ interfaces: [subject], count: 1 } as NetworkInterfaceList)}
+          containers={resource<DockerContainerList>({ containers: [containerWith('ct-a', 'current')], count: 1 } as DockerContainerList)}
+          managementPath={resource(path)}
+        />
+      </MemoryRouter>,
+    );
+
+    const row = rowContaining('contains container');
+    expect(within(coverage(row, 'subject')).getByText('inventory not read')).toBeInTheDocument();
+    expect(within(coverage(row, 'counterpart')).getByText('inventory not read')).toBeInTheDocument();
+  });
+
+  it('marks a Docker network target as not independently observed', () => {
+    const subject = container('ct-a');
+    render(
+      <MemoryRouter>
+        <ObjectRelationships
+          subject={subject}
+          interfaces={resource<NetworkInterfaceList>({ host_id: 'host_1', last_sweep: null, interfaces: [], count: 0 })}
+          containers={resource<DockerContainerList>({ ...listEnvelope('ok', 'current'), containers: [subject], count: 1 } as DockerContainerList)}
+          managementPath={resource(path)}
+        />
+      </MemoryRouter>,
+    );
+
+    const counterpartCoverage = coverage(rowContaining('connected to Docker network'), 'counterpart');
+    expect(within(counterpartCoverage).getByText('not independently observed')).toBeInTheDocument();
+    expect(within(counterpartCoverage).getByText(/source inventory sweep ok · current/)).toBeInTheDocument();
+  });
 });
+
+function rowContaining(text: string): HTMLElement {
+  return screen.getByText(text).closest('tr') as HTMLElement;
+}
+
+function coverage(row: HTMLElement, endpoint: 'subject' | 'counterpart'): HTMLElement {
+  return within(row).getByTestId(`${endpoint}-coverage`);
+}
 
 describe('detail workspace integration', () => {
   it('renders the relationships tab on a workload detail route', async () => {

@@ -15,6 +15,13 @@
   overflow-wrap: anywhere;
 }
 
+.targetRow {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
 .target {
   color: var(--ink);
 }
@@ -32,6 +39,47 @@
 
 .guarded {
   margin-left: 7px;
+}
+
+.coverage {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.coverageItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.coverageLabel {
+  font-size: 10px;
+  color: var(--faint);
+  text-transform: uppercase;
+  flex-basis: 100%;
+  flex-shrink: 0;
+}
+
+.sweepStatus,
+.targetAge,
+.notObserved {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.notObserved {
+  font-style: italic;
+}
+
+.targetAge {
+  font-family: var(--mono);
+}
+
+.retainedNote {
+  font-size: 10px;
+  color: var(--amber);
 }
 
 .open,

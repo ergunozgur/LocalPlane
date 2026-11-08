@@ -34,6 +34,8 @@ import {
   managementPathState,
   humanise,
 } from '@/domain/vocabulary';
+import { membershipCounts } from '@/domain/inventory';
+import { formatTimestamp } from '@/domain/format';
 import styles from './DeviceOverviewWidget.module.css';
 
 /**
@@ -64,6 +66,7 @@ export function DeviceOverviewWidget(): JSX.Element {
   const { resource: agent } = useResource(
     'agent',
     useCallback((signal) => endpoints.agent({ signal }), []),
+    { kind: 'live' },
   );
   const { resource: path } = useResource(
     'management-path',
@@ -163,9 +166,17 @@ function DeviceOverview({
     [host, agent, path, interfaces, containers, units],
   );
 
-  const managed = interfaces?.filter((item) => item.management.state === 'managed').length ?? 0;
-  const drifted = interfaces?.filter((item) => item.reconciliation === 'drifted').length ?? 0;
-  const running = containers?.filter((item) => item.runtime.state === 'running').length ?? 0;
+  const interfaceMembership = interfaces === null ? null : membershipCounts(interfaces);
+  const containerMembership = containers === null ? null : membershipCounts(containers);
+  const latestInterfaces = interfaceMembership?.latestSighted ?? 0;
+  const retainedInterfaces = interfaceMembership?.retainedNotSeen ?? 0;
+  const unknownInterfaces = interfaceMembership?.membershipUnknown ?? 0;
+  const latestContainers = containerMembership?.latestSighted ?? 0;
+  const retainedContainers = containerMembership?.retainedNotSeen ?? 0;
+  const unknownContainers = containerMembership?.membershipUnknown ?? 0;
+  const managed = (interfaces ?? []).filter((item) => item.management.state === 'managed').length;
+  const drifted = (interfaces ?? []).filter((item) => item.reconciliation === 'drifted').length;
+  const running = (containers ?? []).filter((item) => item.observed_in_latest_sweep === true && item.runtime.state === 'running').length;
 
   // Agent reachability says whether this request could observe the host. It is not a host
   // health verdict: this build has no such contract.
@@ -173,7 +184,7 @@ function DeviceOverview({
     ? {
         tone: 'good' as const,
         label: 'agent reachable',
-        description: 'The agent answered this request. No overall host health is inferred.',
+        description: 'The agent answered the dated connection check. No overall host health is inferred.',
       }
     : {
         tone: 'unknown' as const,
@@ -202,17 +213,35 @@ function DeviceOverview({
         chips={
           <>
             <StatusPill semantic={observability} size="sm" />
-            <StatusPill semantic={freshnessOf(host.freshness)} size="sm" token={host.freshness} />
-            {density !== 'minimal' && containers ? (
-              <span className={styles.countChip}>
+            <StatusPill semantic={{ ...freshnessOf(host.freshness), label: `identity ${freshnessOf(host.freshness).label}` }} size="sm" token={host.freshness} />
+            {density !== 'minimal' && containers !== null ? (
+              <span className={styles.countChip} title="latest-sighted Docker containers">
                 <b>{running}</b>
-                <span>/{containers.length} running</span>
+                <span>/{latestContainers} running among latest-sighted</span>
+                {retainedContainers > 0 || unknownContainers > 0 ? (
+                  <Link className={styles.chipLink} to="/workloads">
+                    {' '}({retainedContainers} retained{unknownContainers > 0 ? `, ${unknownContainers} unknown` : ''})
+                  </Link>
+                ) : null}
               </span>
             ) : null}
-            {density !== 'minimal' && managed > 0 ? (
-              <span className={styles.countChip}>
-                <b>{managed}</b>
-                <span>&nbsp;managed{drifted > 0 ? ` · ${drifted} drifted` : ''}</span>
+            {density !== 'minimal' && interfaces !== null ? (
+              <span className={styles.countChip} title="stored network interfaces">
+                {managed > 0 ? (
+                  <>
+                    <b>{managed}</b>
+                    <span>&nbsp;managed{drifted > 0 ? ` · ${drifted} drifted` : ''}</span>
+                  </>
+                ) : (
+                  <span>none managed</span>
+                )}
+                {retainedInterfaces > 0 || unknownInterfaces > 0 ? (
+                  <Link className={styles.chipLink} to="/network">
+                    {' · '}{latestInterfaces} latest{retainedInterfaces > 0 ? ` · ${retainedInterfaces} retained` : ''}{unknownInterfaces > 0 ? ` · ${unknownInterfaces} unknown` : ''}
+                  </Link>
+                ) : (
+                  <span>{' · '}{latestInterfaces} latest-sighted</span>
+                )}
               </span>
             ) : null}
           </>
@@ -239,7 +268,7 @@ function DeviceOverview({
           <StatusPill
             semantic={
               agent.reachable
-                ? { tone: 'good', label: 'agent reachable', description: 'The agent answered this request.' }
+                ? { tone: 'good', label: 'agent reachable', description: 'The agent answered the dated connection check.' }
                 : {
                     tone: 'bad',
                     label: 'agent unreachable',
@@ -282,7 +311,8 @@ function DeviceOverview({
         source={
           <>
             {host.identity_basis} · agent {agent.agent?.agent_version ?? 'unreachable'} ·{' '}
-            {agent.source === 'live' ? 'probed for this request' : 'last recorded'}
+            {agent.source === 'live' ? 'connection check' : 'last recorded'} at {formatTimestamp(agent.as_of) ?? 'unknown time'}.
+            {' '}Diagram attachments are latest-sighted stored evidence, not live presence or a connectivity check.
           </>
         }
       />

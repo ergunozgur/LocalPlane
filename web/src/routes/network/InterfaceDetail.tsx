@@ -39,7 +39,8 @@ import {
   protection as protectionOf,
   sourceStatus,
 } from '@/domain/vocabulary';
-import { formatBytes, formatCount, formatTimestamp } from '@/domain/format';
+import { addressLifetimeState, formatAddressLifetime, formatBytes, formatCount, formatTimestamp } from '@/domain/format';
+import { inventoryMembership } from '@/domain/inventory';
 import styles from './InterfaceDetail.module.css';
 
 export function InterfaceDetail(): JSX.Element {
@@ -194,7 +195,7 @@ export function InterfaceDetail(): JSX.Element {
                           <PlateBody>
                             <Empty
                               title="No addresses"
-                              explanation="Observed, and it genuinely has none."
+                              explanation="No addresses were reported in this stored observation. This does not establish current absence."
                             />
                           </PlateBody>
                         }
@@ -211,6 +212,26 @@ export function InterfaceDetail(): JSX.Element {
                             header: 'Dynamic',
                             render: (r) => (
                               <Value value={r.dynamic === null ? null : r.dynamic ? 'yes' : 'no'} mono />
+                            ),
+                          },
+                          {
+                            key: 'valid',
+                            header: 'Valid',
+                            render: (r) => (
+                              <LifetimeValue
+                                state={addressLifetimeState(r.valid_lifetime_state, r.valid_lifetime_s)}
+                                seconds={r.valid_lifetime_s}
+                              />
+                            ),
+                          },
+                          {
+                            key: 'preferred',
+                            header: 'Preferred',
+                            render: (r) => (
+                              <LifetimeValue
+                                state={addressLifetimeState(r.preferred_lifetime_state, r.preferred_lifetime_s)}
+                                seconds={r.preferred_lifetime_s}
+                              />
                             ),
                           },
                         ]}
@@ -433,7 +454,7 @@ export function InterfaceDetail(): JSX.Element {
               headline={
                 data.management.state === 'managed'
                   ? 'LocalPlane retains an intended state for this interface and compares the host against it.'
-                  : 'Read and recorded. Nothing is retained for this interface, so it has a health but no reconciliation state.'
+                  : 'Read and recorded. No intended state is retained for this interface, so reconciliation is not tracked.'
               }
               path={[
                 { label: 'network', to: '/network' },
@@ -444,6 +465,8 @@ export function InterfaceDetail(): JSX.Element {
                   {/* The head carries the mark twice — standalone before the name, and
                       inside the health chip. Not three times: the pill draws its own. */}
                   <StatusPill semantic={healthOf(data.health?.state)} size="sm" token={data.health?.reason} />
+                  <StatusPill semantic={inventoryMembership(data.observed_in_latest_sweep)} size="sm" />
+                  <StatusPill semantic={freshnessOf(data.observation?.freshness ?? 'never_observed')} size="sm" />
                   <ManagementChip state={data.management.state} />
                   <ReconciliationChip state={data.reconciliation} />
                   {guarded ? (
@@ -460,6 +483,23 @@ export function InterfaceDetail(): JSX.Element {
         );
       }}
     </ResourceView>
+  );
+}
+
+function LifetimeValue({
+  state,
+  seconds,
+}: {
+  state: 'unknown' | 'finite' | 'infinite';
+  seconds: number | null;
+}): JSX.Element {
+  if (state === 'infinite') {
+    return <span className={styles.forever}>forever</span>;
+  }
+  return (
+    <span className={state === 'unknown' ? styles.unknownLifetime : 'mono'}>
+      {formatAddressLifetime(state, seconds)}
+    </span>
   );
 }
 

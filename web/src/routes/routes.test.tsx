@@ -146,6 +146,8 @@ const UNIT_LIST = {
     missing: [],
     issues: [],
     agent_instance_id: 'agent_1',
+    freshness: 'current',
+    age_seconds: 0,
   },
   count: 2,
   units: [

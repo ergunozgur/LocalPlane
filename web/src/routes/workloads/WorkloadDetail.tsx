@@ -355,7 +355,7 @@ export function WorkloadDetail(): JSX.Element {
                   <Plate>
                     <PlateHead title="Resource usage" level={3} meta="one sample, taken on demand" />
                     <PlateBody>
-                      <ResourceUsagePanel objectId={data.object_id} />
+                      <ResourceUsagePanel key={data.object_id} objectId={data.object_id} />
                     </PlateBody>
                   </Plate>
                 }
@@ -387,7 +387,7 @@ export function WorkloadDetail(): JSX.Element {
                   <Plate>
                     <PlateHead title="Logs" level={3} meta="what this container has written" />
                     <PlateBody>
-                      <ContainerLogPanel objectId={data.object_id} />
+                      <ContainerLogPanel key={data.object_id} objectId={data.object_id} />
                     </PlateBody>
                   </Plate>
                 }
@@ -537,18 +537,36 @@ function ObservationPlate({ data }: { data: import('@/api/types').DockerContaine
  * Deliberately not a list-row concern: one stats call per container would turn the Workloads
  * list into N requests against a backend with a known concurrency defect.
  */
-function ResourceUsagePanel({ objectId }: { objectId: string }): JSX.Element {
+export function ResourceUsagePanel({ objectId }: { objectId: string }): JSX.Element {
   const { resource, refresh } = useResource(
     `container-stats:${objectId}`,
     useCallback((signal) => endpoints.containerStats(objectId, { signal }), [objectId]),
+    { kind: 'consent' },
   );
 
   return (
-    <ResourceView resource={resource} what="resource sample" loadingLabel="Sampling…">
-      {(stats) => (
+    <ResourceView
+      resource={resource}
+      what="resource sample"
+      loadingLabel="Sampling…"
+      idle={
+        <>
+          <p className="note">Resource usage is sampled only when you ask. Nothing is collected automatically.</p>
+          <button type="button" className={styles.resample} onClick={refresh}>
+            Sample usage
+          </button>
+        </>
+      }
+    >
+      {(stats, meta) => (
         <>
           <ResourceUsage stats={stats} />
-          <button type="button" className={styles.resample} onClick={refresh}>
+          <button
+            type="button"
+            className={styles.resample}
+            onClick={refresh}
+            disabled={meta.refreshing}
+          >
             Sample again
           </button>
         </>

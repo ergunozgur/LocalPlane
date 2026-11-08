@@ -29,11 +29,25 @@ function fixture(id = 'a'.repeat(32)): StorageObservation {
 
 const response = (value: unknown, status = 200): Response => new Response(JSON.stringify(value), { status });
 
+async function observe(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByRole('button', { name: 'Observe filesystems' }));
+}
+
+it('starts idle and requires explicit observation', async () => {
+  const fetch = vi.fn().mockResolvedValue(response(fixture()));
+  vi.stubGlobal('fetch', fetch);
+  render(<Storage />);
+  expect(screen.getByRole('button', { name: 'Observe filesystems' })).toBeInTheDocument();
+  expect(screen.getByText(/Storage evidence is not collected automatically/)).toBeInTheDocument();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 it('separates byte/inode exhaustion, exact reserved evidence, backing and bounds', async () => {
   const fetch = vi.fn().mockResolvedValue(response(fixture()));
   vi.stubGlobal('fetch', fetch);
   const user = userEvent.setup();
   render(<Storage />);
+  await observe(user);
   expect(await screen.findByText('No usable bytes')).toBeInTheDocument();
   expect(screen.getByText('No usable inodes')).toBeInTheDocument();
   expect(screen.getByText('unsupported')).toBeInTheDocument();
@@ -51,6 +65,7 @@ it('sorts by available percentage, filters locally and supports keyboard selecti
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(fixture())));
   const user = userEvent.setup();
   render(<Storage />);
+  await observe(user);
   await screen.findByRole('button', { name: '/byte-pressure' });
   await user.selectOptions(screen.getByRole('combobox', { name: 'Order by' }), 'inodes');
   expect(screen.getAllByRole('row')[1]).toHaveTextContent('/inode-pressure');
@@ -73,6 +88,7 @@ it('keeps capacity first, separates unresolved ext4 from virtual mounts, and rev
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(data)));
   const user = userEvent.setup();
   render(<Storage />);
+  await observe(user);
   expect(await screen.findByText('capacity and inode pressure first')).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: 'Total' })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: 'Used' })).toBeInTheDocument();
@@ -107,7 +123,9 @@ it('keeps zero totals and unsupported evidence explicit in their respective grou
   data.mounts[0]!.bytes = { total: '0', used: '0', free: '0', available: '0', reserved: '0' };
   data.mounts[2] = { ...data.mounts[2]!, filesystem: 'ext4', status: 'unsupported', reason: 'Unsupported ext4 sample.' };
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(data)));
+  const user = userEvent.setup();
   render(<Storage />);
+  await observe(user);
   expect(await screen.findByText('Total is zero; ratio unknown')).toBeInTheDocument();
   expect(screen.getByText('Unsupported ext4 sample.')).toBeInTheDocument();
   expect(screen.getByText('Other unsupported or unresolved mounts')).toBeInTheDocument();
@@ -125,6 +143,7 @@ it('hides stale details during refresh and resets selection when mount ID is reu
   vi.stubGlobal('fetch', fetch);
   const user = userEvent.setup();
   render(<Storage />);
+  await observe(user);
   await user.click(await screen.findByRole('button', { name: '/byte-pressure' }));
   await user.click(screen.getByRole('button', { name: 'Refresh filesystems' }));
   expect(screen.getByText(/Refreshing — previous observation/)).toBeInTheDocument();
@@ -136,25 +155,28 @@ it('hides stale details during refresh and resets selection when mount ID is reu
   expect(screen.queryByRole('region', { name: 'Selected mount evidence' })).not.toBeInTheDocument();
 });
 
-it('ignores an older asynchronous response after a new explicit refresh', async () => {
+it('guards rapid explicit observation clicks to one in-flight request', async () => {
+  let call = 0;
   const resolvers: ((value: Response) => void)[] = [];
-  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise<Response>((resolve) => resolvers.push(resolve))));
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise<Response>((resolve) => {
+    call += 1;
+    resolvers[call] = resolve;
+  })));
+  const user = userEvent.setup();
   render(<Storage />);
-  expect(screen.getByText('Reading mounted filesystem evidence…')).toBeInTheDocument();
-  act(() => refreshAll());
-  await waitFor(() => expect(resolvers).toHaveLength(2));
-  const newer = fixture('c'.repeat(32));
-  newer.mounts[0]!.mountpoint = '/newer';
-  await act(async () => resolvers[1]!(response(newer)));
-  await screen.findByRole('button', { name: '/newer' });
-  await act(async () => resolvers[0]!(response(fixture())));
-  expect(screen.queryByRole('button', { name: '/byte-pressure' })).not.toBeInTheDocument();
+  const button = screen.getByRole('button', { name: 'Observe filesystems' });
+  await user.click(button);
+  await user.click(button);
+  await waitFor(() => expect(call).toBe(1));
+  await act(async () => resolvers[1]!(response(fixture())));
+  await screen.findByRole('button', { name: '/byte-pressure' });
 });
 
 it('makes refresh failure explicit rather than retaining current-looking evidence', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(fixture())).mockResolvedValueOnce(response({ error: { code: 'agent_unavailable', message: 'Agent unavailable', detail: {} } }, 503)));
   const user = userEvent.setup();
   render(<Storage />);
+  await observe(user);
   await screen.findByRole('button', { name: '/byte-pressure' });
   await user.click(screen.getByRole('button', { name: 'Refresh filesystems' }));
   expect(await screen.findByText('Agent unavailable')).toBeInTheDocument();
@@ -163,7 +185,9 @@ it('makes refresh failure explicit rather than retaining current-looking evidenc
 
 it.each(['busy', 'unavailable', 'partial'] as const)('shows %s and empty coverage truthfully', async (status) => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ...fixture(), status, mounts: [], namespace: status === 'partial' ? 'mnt:[42]' : null })));
+  const user = userEvent.setup();
   render(<Storage />);
+  await observe(user);
   expect(await screen.findByText(`${status} observation`)).toBeInTheDocument();
   expect(screen.getByText(/No mount rows were returned/)).toBeInTheDocument();
 });
@@ -173,7 +197,9 @@ it('rejects malformed evidence and invalid counters before rendering', async () 
   bad.mounts[0]!.bytes!.available = 'NaN';
   expect(() => storageResponse(bad)).toThrow('unreadable');
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(bad)));
+  const user = userEvent.setup();
   render(<Storage />);
+  await observe(user);
   expect(await screen.findByText('The backend returned unreadable filesystem evidence.')).toBeInTheDocument();
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
 });
@@ -186,4 +212,32 @@ it('preserves large counters and avoids division by zero', () => {
   const duplicated = fixture();
   duplicated.mounts[1]!.mount_id = 1;
   expect(() => storageResponse(duplicated)).toThrow('unreadable');
+});
+
+it('does not collect filesystem evidence from global refresh or page mount', async () => {
+  const fetch = vi.fn().mockResolvedValue(response(fixture()));
+  vi.stubGlobal('fetch', fetch);
+  render(<Storage />);
+  act(() => refreshAll());
+  await waitFor(() => expect(fetch).not.toHaveBeenCalled());
+  expect(screen.getByRole('button', { name: 'Observe filesystems' })).toBeInTheDocument();
+});
+
+it('keeps a pending explicit observation immune to global refresh', async () => {
+  let call = 0;
+  const resolvers: ((value: Response) => void)[] = [];
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise<Response>((resolve) => {
+    call += 1;
+    resolvers[call] = resolve;
+  })));
+  const user = userEvent.setup();
+  render(<Storage />);
+  await observe(user);
+  await waitFor(() => expect(call).toBe(1));
+  act(() => refreshAll());
+  await waitFor(() => expect(call).toBe(1));
+  const explicitResponse = fixture('e1b2a3d4c5f6071890abcdef12345678');
+  explicitResponse.mounts[0]!.mountpoint = '/explicit-observation';
+  await act(async () => resolvers[1]!(response(explicitResponse)));
+  await screen.findByRole('button', { name: '/explicit-observation' });
 });

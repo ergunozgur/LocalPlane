@@ -112,10 +112,13 @@ export interface paths {
         };
         /**
          * Get Agent Capabilities
-         * @description What the agent can actually do, re-probed if it is answering.
+         * @description The capability snapshot the agent reports in its hello.
          *
-         *     A capability absent from this list is not available. A capability listed
-         *     ``unavailable`` is not available either, and ``reason`` says why.
+         *     The agent caches this snapshot for its running instance; this endpoint asks for the
+         *     hello and does not request a fresh provider rediscovery. A capability absent from
+         *     this list is not available. A capability listed ``unavailable`` is not available
+         *     either, and ``reason`` says why. If the agent is not answering, the last recorded
+         *     hello snapshot is returned with ``source`` saying it is recorded, not live.
          */
         get: operations["get_agent_capabilities_api_v1_agent_capabilities_get"];
         put?: never;
@@ -1196,6 +1199,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/changes/recovery-holds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recovery Holds
+         * @description Every unresolved recovery hold, with an accurate total and a bounded list.
+         *
+         *     A hold is unresolved while its Change says ``recovery_required`` and no append-only
+         *     release marker has resolved it. Resolved history still says ``recovery_required``,
+         *     so it is excluded here rather than presented as attention a second time.
+         *
+         *     ``total_count`` is counted over the whole authoritative store and is not limited by
+         *     ``limit`` or by the newest general Change history. The list is newest first and
+         *     capped so a backlog cannot make one response unbounded. Pure: reading holds contacts
+         *     no agent, collects no provider evidence and writes nothing. There is no control to
+         *     retry, confirm or release from this endpoint; those stay on the exact Change.
+         */
+        get: operations["list_recovery_holds_api_v1_changes_recovery_holds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/changes/{change_id}": {
         parameters: {
             query?: never;
@@ -1364,10 +1397,30 @@ export interface components {
             scope: string | null;
             /** Dynamic */
             dynamic: boolean | null;
-            /** Valid Lifetime S */
+            /**
+             * Valid Lifetime S
+             * @description Seconds remaining, or null. Null alone cannot distinguish 'not reported' from 'forever'; read the state beside it.
+             */
             valid_lifetime_s: number | null;
-            /** Preferred Lifetime S */
+            /**
+             * Preferred Lifetime S
+             * @description Seconds remaining, or null. Null alone cannot distinguish 'not reported' from 'forever'; read the state beside it.
+             */
             preferred_lifetime_s: number | null;
+            /**
+             * Valid Lifetime State
+             * @description How the valid lifetime is known: unknown when the source was absent or malformed, finite when seconds is the kernel's value (including 0), infinite only when the kernel gave its explicit forever sentinel. The state and the nullable seconds describe the same fact and are normalized together. Defaults to unknown for older typed fixtures; API views always supply the normalized value.
+             * @default unknown
+             * @enum {string}
+             */
+            valid_lifetime_state: "unknown" | "finite" | "infinite";
+            /**
+             * Preferred Lifetime State
+             * @description How the preferred lifetime is known: unknown when the source was absent or malformed, finite when seconds is the kernel's value (including 0), infinite only when the kernel gave its explicit forever sentinel. The state and the nullable seconds describe the same fact and are normalized together. Defaults to unknown for older typed fixtures; API views always supply the normalized value.
+             * @default unknown
+             * @enum {string}
+             */
+            preferred_lifetime_state: "unknown" | "finite" | "infinite";
         };
         /**
          * AdoptionEligibility
@@ -1468,15 +1521,28 @@ export interface components {
             version: string;
             database: components["schemas"]["DatabaseStatus"];
         };
-        /** Capabilities */
+        /**
+         * Capabilities
+         * @description The capability snapshot the agent reports in its hello.
+         *
+         *     This is the hello the agent cached for its running instance, not a fresh provider
+         *     rediscovery performed for this request. LocalPlane does not ask the agent to re-probe
+         *     capabilities here; the list says what the agent said it can do when that instance
+         *     answered. A capability being present is therefore a claim about the agent, not proof
+         *     that every provider was re-examined just now.
+         */
         Capabilities: {
             /** Reachable */
             reachable: boolean;
-            /** Source */
+            /**
+             * Source
+             * @description live — the agent answered the hello for this request and its own cached capability snapshot is returned; recorded — the agent could not be reached and the last recorded hello snapshot is returned.
+             */
             source: string;
             /**
              * As Of
              * Format: date-time
+             * @description When this response was assembled. It is not the moment the agent discovered capabilities; the snapshot belongs to the agent instance that reported it.
              */
             as_of: string;
             /** Agent Instance Id */
@@ -2310,9 +2376,12 @@ export interface components {
         DockerContainerList: {
             /** Host Id */
             host_id: string;
-            /** @description The sweep these containers were last re-read by. An empty list with a failed sweep means nobody could look; an empty list with no sweep means nobody has. */
+            /** @description The latest Docker inventory sweep recorded, not a guarantee that every listed container was present in it. The list retains containers from earlier sweeps too; check each container's observed_in_latest_sweep and observation freshness. An empty list with a failed sweep means nobody could look; an empty list with no sweep means nobody has. */
             last_sweep: components["schemas"]["Sweep"] | null;
-            /** Count */
+            /**
+             * Count
+             * @description Number of retained stored containers returned, not the size of the latest inventory sweep.
+             */
             count: number;
             /** Containers */
             containers: components["schemas"]["DockerContainer"][];
@@ -3115,9 +3184,12 @@ export interface components {
         NetworkInterfaceList: {
             /** Host Id */
             host_id: string;
-            /** @description The sweep these objects were last re-read by. An empty list with a failed sweep means nobody could look; an empty list with no sweep means nobody has. */
+            /** @description The latest inventory sweep recorded for this capability, not a guarantee that every listed object was present in it. The list retains objects from earlier sweeps too; check each object's observed_in_latest_sweep and observation freshness. An empty list with a failed sweep means nobody could look; an empty list with no sweep means nobody has. */
             last_sweep: components["schemas"]["Sweep"] | null;
-            /** Count */
+            /**
+             * Count
+             * @description Number of retained stored interfaces returned, not the size of the latest inventory sweep.
+             */
             count: number;
             /** Interfaces */
             interfaces: components["schemas"]["NetworkInterface"][];
@@ -4358,6 +4430,44 @@ export interface components {
             expected_recovery_reason?: string | null;
         };
         /**
+         * RecoveryHolds
+         * @description Unresolved recovery holds: the full count, and a bounded page of them.
+         *
+         *     A hold is unresolved while its Change says ``recovery_required`` and no append-only
+         *     release marker has resolved it. Resolved history keeps saying ``recovery_required``,
+         *     so it is deliberately excluded here. ``total_count`` is the whole authoritative count
+         *     and never shrinks to fit ``limit`` or the newest general Change history.
+         */
+        RecoveryHolds: {
+            /** Host Id */
+            host_id: string;
+            /**
+             * Total Count
+             * @description Every unresolved recovery hold on this host, independent of limit.
+             */
+            total_count: number;
+            /**
+             * Count
+             * @description Number of holds returned in changes.
+             */
+            count: number;
+            /**
+             * Limit
+             * @description The bound that was applied to changes.
+             */
+            limit: number;
+            /**
+             * Truncated
+             * @description True when total_count is greater than count, so more holds exist.
+             */
+            truncated: boolean;
+            /**
+             * Changes
+             * @description Newest first, at most limit. Each carries recovery_state=unresolved.
+             */
+            changes: components["schemas"]["ChangeSummary"][];
+        };
+        /**
          * RecoveryResolveRequest
          * @description Release a recovery hold by hand. No host mutation, and the store refuses one.
          *
@@ -5095,6 +5205,16 @@ export interface components {
             issues: components["schemas"]["ProviderIssue"][];
             /** Agent Instance Id */
             agent_instance_id: string | null;
+            /**
+             * @description Currency of this sweep's own completed_at under the backend's configured freshness TTL: current | stale | never_observed. It qualifies the sweep, not the retained objects listed elsewhere; a targeted observation cannot make an older inventory sweep current. Defaulted only for older typed fixtures.
+             * @default never_observed
+             */
+            freshness: components["schemas"]["Freshness"];
+            /**
+             * Age Seconds
+             * @description Seconds since completed_at, derived with the same backend clock and TTL as freshness. Null only when no completed_at is available; older typed fixtures default to null.
+             */
+            age_seconds?: number | null;
         };
         /** SweepList */
         SweepList: {
@@ -5530,8 +5650,12 @@ export interface components {
             host_id: string;
             /** @description Last recorded systemd observation capability, including unavailable. */
             capability: components["schemas"]["Capability"] | null;
+            /** @description The latest systemd inventory sweep recorded, not a guarantee that every listed unit was present in it. The list retains units from earlier sweeps too; check each unit's observed_in_latest_sweep and observation freshness. */
             last_sweep: components["schemas"]["Sweep"] | null;
-            /** Count */
+            /**
+             * Count
+             * @description Number of retained stored units returned, not the size of the latest inventory sweep.
+             */
             count: number;
             /** Units */
             units: components["schemas"]["SystemdUnit"][];
@@ -7743,6 +7867,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChangeList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_recovery_holds_api_v1_changes_recovery_holds_get: {
+        parameters: {
+            query?: {
+                /** @description Maximum holds to return. total_count is never bounded by it. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryHolds"];
                 };
             };
             /** @description Unauthorized */

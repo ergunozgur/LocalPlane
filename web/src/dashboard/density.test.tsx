@@ -70,7 +70,7 @@ describe('expanded (wide container)', () => {
 
   it('shows the estate counts on the host node', async () => {
     renderAt(1400);
-    expect(await screen.findByText(/1 interfaces/)).toBeInTheDocument();
+    expect(await screen.findByText(/1 latest-sighted interface/)).toBeInTheDocument();
   });
 });
 

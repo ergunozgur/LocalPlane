@@ -240,8 +240,9 @@ export function ChangeDetail(): JSX.Element {
                         ))}
                       </ul>
                       <p className={styles.actionNote}>
-                        Listed as record, not offered as controls. Recovery writes to the host and
-                        this build produces nothing across the write boundary.
+                        Listed as record, not offered as controls. Retry reads first; a fresh write
+                        may need explicit authority. Human release is no host mutation and no
+                        retrospective verification.
                       </p>
                     </div>
                   ) : null}

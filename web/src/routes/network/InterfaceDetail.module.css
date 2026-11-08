@@ -36,3 +36,7 @@
 /* The word beside the ladder. Colour alone must never carry a confidence level, and three
    bars are a shape rather than a word — so the word stays. */
 .confidenceWord { font-size: 11px; color: var(--faint); }
+
+.forever { font-size: 11.5px; color: var(--dim); border-bottom: 1px dotted var(--rule); cursor: help; }
+
+.unknownLifetime { font-size: 11.5px; color: var(--amber); font-style: italic; }

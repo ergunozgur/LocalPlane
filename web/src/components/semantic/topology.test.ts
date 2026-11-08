@@ -39,6 +39,7 @@ function dockerBridge(networkId: string, label: string, name: string): NetworkIn
       adoption: { eligible: false, reason: 'externally_configured' },
     },
     health: { state: 'healthy', reason: 'up' },
+    observed_in_latest_sweep: true,
     link: { mtu: 1500, operstate: 'up' },
     addresses: [],
   } as unknown as NetworkInterface;
@@ -48,6 +49,7 @@ function container(name: string, networkId: string, state = 'running'): DockerCo
   return {
     object_id: `obj_${name}`, name,
     runtime: { state },
+    observed_in_latest_sweep: true,
     networks: [{ name: 'ignored-name', network_id: networkId, ip_address: '172.20.0.2', aliases: [] }],
     ports: [],
   } as unknown as DockerContainer;
@@ -137,6 +139,7 @@ describe('attached — joins are on identifiers, never on names', () => {
       management: { state: 'observed', reason: 'observe_only' },
       ownership: { state: 'attributed', reason: 'x', created_by: null, configured_by: null, evidence_gaps: [], adoption: { eligible: false, reason: 'x' } },
       health: { state: 'healthy', reason: 'up' },
+      observed_in_latest_sweep: true,
       link: {},
       addresses: [
         { family: 'inet', address: '192.168.1.42', prefix_length: 24, scope: 'global' },
@@ -227,6 +230,7 @@ describe('the Attached column stays readable', () => {
       management: { state: 'observed', reason: 'observe_only' },
       ownership: { state: 'attributed', reason: 'x', created_by: null, configured_by: null, evidence_gaps: [], adoption: { eligible: false, reason: 'x' } },
       health: { state: 'healthy', reason: 'up' },
+      observed_in_latest_sweep: true,
       link: {},
       addresses: [{ family: 'inet', address: '192.0.2.5', prefix_length: 24, scope: 'global' }],
     } as unknown as NetworkInterface;

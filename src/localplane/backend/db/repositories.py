@@ -2305,6 +2305,40 @@ class ChangeRepository:
         )
         return [ChangeRecord.from_row(r) for r in rows]
 
+    def unresolved_recovery_required(
+        self, host_id: str, *, limit: int
+    ) -> tuple[int, list[ChangeRecord]]:
+        """A bounded page of open recovery holds and the whole open count, in one read.
+
+        The same rule the per-page read uses: the Change says ``recovery_required`` and
+        no append-only attempt has a ``releases_hold`` marker. Resolved history keeps
+        saying ``recovery_required`` forever, so a query on that result alone would
+        report old released holds as attention.
+
+        ``COUNT(*) OVER ()`` is evaluated over the filtered set before ``LIMIT``, so the
+        total is accurate without loading the whole history into Python. The window value
+        is removed before constructing a record; it is not part of a Change.
+        """
+        rows = self._db.query(
+            "SELECT c.*, COUNT(*) OVER () AS _total_count FROM changes c "
+            "WHERE c.host_id = ? AND c.result = 'recovery_required' "
+            "AND NOT EXISTS ("
+            "    SELECT 1 FROM change_recovery_attempts a "
+            "    WHERE a.change_id = c.change_id AND a.releases_hold = 1"
+            ") "
+            "ORDER BY c.created_at DESC, c.rowid DESC LIMIT ?",
+            (host_id, limit),
+        )
+        if not rows:
+            return 0, []
+        total_count = int(rows[0]["_total_count"])
+        records = []
+        for row in rows:
+            values = dict(row)
+            values.pop("_total_count", None)
+            records.append(ChangeRecord.from_row(values))
+        return total_count, records
+
     def unsettled(self, host_id: str | None = None) -> list[ChangeRecord]:
         """Changes that crossed the boundary and never recorded what became of them.
 

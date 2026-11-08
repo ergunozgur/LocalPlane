@@ -42,7 +42,7 @@ does not replace the Change Engine or provider/privilege safety boundaries.
 
 | Domain | Purpose |
 | --- | --- |
-| Status, host, agent | Backend status, host identity, agent state, and probed capabilities |
+| Status, host, agent | Backend status, stored host identity, agent connectivity, and agent-cached capabilities |
 | Network | Stored interfaces, evidence, provenance, protection, intent, reconciliation, and refresh |
 | Docker | Stored containers plus explicit refresh, bounded log reads, and current statistics |
 | systemd | Stored loaded units plus explicit bounded inventory refresh |
@@ -50,10 +50,10 @@ does not replace the Change Engine or provider/privilege safety boundaries.
 | Observations | Sweep history and completeness |
 | Findings | Durable drift and ownership-conflict records |
 | Runs | Create, inspect, preview, confirm, apply, keep a guard, cancel, and grant a bounded self-impact override |
-| Changes | Inspect mutation history and confirm, retry, or resolve recovery |
+| Changes | Inspect mutation history and unresolved recovery holds; confirm, retry, or resolve recovery through separate endpoints |
 
-The current committed contract contains 44 paths and 47 operations. Those counts describe
-this pre-release snapshot, not a compatibility guarantee.
+The committed OpenAPI document defines the supported routes for this pre-release snapshot;
+it is not a long-term compatibility guarantee.
 
 ## Reads, observations, and records
 
@@ -65,10 +65,33 @@ explicit so a response can distinguish a stored fact from a new read:
 - `POST /systemd/observations/refresh`
 - `POST /management-path/observations/refresh`
 
-Container logs and statistics also use `POST`; they sample Docker on demand and write
-nothing. `GET /agent/capabilities` is the notable exception to store-only GET behavior: it
-performs a handshake and records LocalPlane capability evidence, but it does not mutate the
-host.
+Filesystem observations, container logs/statistics and service journal reads also use `POST`.
+They collect on demand, not as a side effect of navigation or the console's global stored-record
+reread. Content reads retain their separate acknowledgment boundary. Filesystem evidence and
+container samples are transient; a new read does not establish retained inventory membership.
+
+`GET /agent` and `GET /agent/capabilities` are exceptions to store-only GET behavior: they
+perform a handshake and record identity and the agent's cached capability evidence. A handshake
+does not rediscover provider capabilities or refresh inventories. The console dates these checks
+separately and excludes them from the global stored-record reread.
+
+`GET /changes/recovery-holds` is a pure stored read. Its `total_count` counts all unresolved
+holds, independently of the bounded `changes` list; `count`, `limit` and `truncated` describe
+the displayed page. A later release does not rewrite a Change's original recovery-required
+outcome, but excludes it from this unresolved-hold result.
+
+Inventory `count` fields count retained records, not necessarily current provider objects.
+`observed_in_latest_sweep` states membership in the latest recorded inventory, independently
+of each observation's age and fidelity. Partial or failed collection does not prove absence.
+Each sweep also publishes its own `freshness` and `age_seconds` under the configured backend
+TTL. Fresh targeted object evidence cannot make an older full inventory current, including an
+inventory that returned no objects.
+The console preserves history and qualifies relationship counterparts with this evidence.
+
+Address `valid_lifetime_state` and `preferred_lifetime_state` distinguish `unknown`, `finite`
+and `infinite`; the corresponding nullable seconds retain finite zero. Only an explicit kernel
+infinite sentinel establishes no expiry. Older null lifetimes without that distinction remain
+unknown until observed again; they cannot be safely backfilled as infinite.
 
 Adoption, release, intent revision, Run creation/confirmation/cancellation, recovery
 confirmation/resolution, and the self-impact override change LocalPlane records only.
@@ -112,10 +135,14 @@ unresolved. The API retains that distinction instead of fabricating a complete g
 
 ## Console coverage
 
-The current console consumes the integrated contract for overview, network, Docker,
-systemd, management-path evidence, sweeps, findings, Runs, and Changes. It intentionally
-binds no record-writing or host-writing endpoints. Its topology renders only relationships
-supported by API evidence and states when a source could not be read.
+The console consumes the integrated contract for overview, network, Docker, systemd,
+management-path evidence, sweeps, findings, Runs and Changes. Explicit inventory observation
+is followed by a stored-record reread; if that reread fails it can be retried without collecting
+again. Observation and stored-read failures remain separate from the age of retained facts.
+The existing guarded Composer binds only systemd service start/stop/restart. Hold-resolution,
+Docker lifecycle and broader configuration controls are not exposed by this refresh workflow.
+Topology renders only evidence-backed, membership-qualified relationships and identifies
+missing coverage rather than inferring that there are no objects.
 
 The V4.2 image in the repository overview includes directional surfaces with no current
 contract. It must not be used to infer API or topology support.

@@ -158,13 +158,56 @@ def test_addresses_carry_their_source_and_lifetimes(populated_sysfs, working_run
     assert (address.family, address.address, address.prefix_length) == ("inet", "192.0.2.215", 24)
     assert address.dynamic is True
     assert address.valid_lifetime_s == 41039
+    assert address.valid_lifetime_state == "finite"
+    assert address.preferred_lifetime_state == "finite"
 
 
-def test_forever_lifetimes_are_reported_as_absent(populated_sysfs, working_runner):
-    """0xffffffff is iproute2 for 'forever', which is no lifetime at all."""
+def test_forever_lifetimes_are_reported_as_absent_but_infinite(populated_sysfs, working_runner):
+    """0xffffffff is iproute2 for 'forever': no seconds, but explicitly infinite."""
     lo = facts_by_name(observe(populated_sysfs, working_runner))["lo"].addresses[0]
     assert lo.valid_lifetime_s is None
     assert lo.preferred_lifetime_s is None
+    assert lo.valid_lifetime_state == "infinite"
+    assert lo.preferred_lifetime_state == "infinite"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (0, (0, "finite")),
+        (1, (1, "finite")),
+        (4294967294, (4294967294, "finite")),
+        (4294967295, (None, "infinite")),
+        (None, (None, "unknown")),
+        (True, (None, "unknown")),
+        (-1, (None, "unknown")),
+        (4294967296, (None, "unknown")),
+        ("3600", (None, "unknown")),
+        (3600.0, (None, "unknown")),
+    ],
+)
+def test_lifetime_normalization_keeps_zero_and_only_the_sentinel_is_infinite(raw, expected):
+    from localplane.agent.providers.linux_network import _lifetime
+
+    assert _lifetime(raw) == expected
+
+
+def test_lifetime_states_survive_as_dict_for_ingestion():
+    from localplane.agent.providers.base import InterfaceAddress
+
+    address = InterfaceAddress(
+        family="inet",
+        address="192.0.2.5",
+        prefix_length=24,
+        valid_lifetime_s=0,
+        valid_lifetime_state="finite",
+        preferred_lifetime_s=None,
+        preferred_lifetime_state="infinite",
+    )
+    assert address.as_dict()["valid_lifetime_state"] == "finite"
+    assert address.as_dict()["preferred_lifetime_state"] == "infinite"
+    assert address.as_dict()["valid_lifetime_s"] == 0
+    assert address.as_dict()["preferred_lifetime_s"] is None
 
 
 def test_bridge_membership_is_recorded(populated_sysfs, working_runner):

@@ -28,6 +28,7 @@ export interface DomainEntry {
   to: string;
   label: string;
   count?: number | null | undefined;
+  countDescription?: string;
   description: string;
   /** The domain's own index surface. Matched exactly, so a child route does not light it. */
   root?: boolean;
@@ -41,7 +42,13 @@ export interface Domain {
   priority: number;
   attention?: boolean;
   count?: number | null | undefined;
+  countDescription?: string;
   entries: readonly DomainEntry[];
+}
+
+function countScope(count: number | null, description?: string): string | undefined {
+  if (!description) return undefined;
+  return count === null ? `${description}: not read` : `${count.toLocaleString()} ${description}`;
 }
 
 function isCurrent(pathname: string, to: string): boolean {
@@ -125,7 +132,7 @@ function DomainControl({ domain, current }: { domain: Domain; current: boolean }
             <span className={navStyles.dot} title="Something in this domain wants attention" />
           ) : null}
           {domain.count === undefined ? null : (
-            <span className={navStyles.count}>
+            <span className={navStyles.count} title={countScope(domain.count, domain.countDescription)} aria-label={countScope(domain.count, domain.countDescription)}>
               {domain.count === null ? '—' : domain.count.toLocaleString()}
             </span>
           )}
@@ -158,7 +165,7 @@ function DomainControl({ domain, current }: { domain: Domain; current: boolean }
               <span className={navStyles.dot} title="Something in this domain wants attention" />
             ) : null}
             {domain.count === undefined ? null : (
-              <span className={navStyles.count}>
+              <span className={navStyles.count} title={countScope(domain.count, domain.countDescription)} aria-label={countScope(domain.count, domain.countDescription)}>
                 {domain.count === null ? '—' : domain.count.toLocaleString()}
               </span>
             )}
@@ -182,7 +189,7 @@ function DomainMenuItem({ entry }: { entry: DomainEntry }): JSX.Element {
       <span className={styles.itemTitle}>
         {entry.label}
         {entry.count === undefined ? null : (
-          <span className={styles.itemCount}>
+          <span className={styles.itemCount} title={countScope(entry.count, entry.countDescription)} aria-label={countScope(entry.count, entry.countDescription)}>
             {entry.count === null ? '—' : entry.count.toLocaleString()}
           </span>
         )}

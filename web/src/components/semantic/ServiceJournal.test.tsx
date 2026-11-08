@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { endpoints } from '@/api/endpoints';
 import { MemoryRouter } from 'react-router-dom';
 import { ServiceJournal } from './ServiceJournal';
+import { refreshAll } from '@/hooks/useResource';
 
 vi.mock('@/api/endpoints', () => ({ endpoints: { systemdJournal: vi.fn() } }));
 const mockRead = vi.mocked(endpoints.systemdJournal);
@@ -149,5 +150,16 @@ describe('ServiceJournal', () => {
     expect(signal?.aborted).toBe(true);
     await act(async () => finish(response()));
     expect(screen.queryByText(/literal/)).not.toBeInTheDocument();
+  });
+
+  it('does not re-read on the global refreshAll signal; consent stays explicit', async () => {
+    mockRead.mockResolvedValue(response());
+    renderJournal();
+    fireEvent.click(screen.getByRole('button', { name: /acknowledge and read/i }));
+    await screen.findByText('<img onerror=x> literal');
+    expect(mockRead).toHaveBeenCalledTimes(1);
+
+    act(() => refreshAll());
+    await waitFor(() => expect(mockRead).toHaveBeenCalledTimes(1));
   });
 });

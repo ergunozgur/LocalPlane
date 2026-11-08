@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { ContainerObservationResult, Sweep } from '@/api/types';
+import type { Sweep } from '@/api/types';
 import { useHostName } from '@/hooks/useEstateCounts';
 import { Plate, PlateBody, PlateFoot, PlateHead, StatusDot } from '@/components/primitives/Plate';
 import { StatusPill } from '@/components/semantic/StatusPill';
@@ -15,11 +15,11 @@ import { ResourceView } from '@/components/states/ResourceView';
 import { Degraded, Empty } from '@/components/states/SurfaceState';
 import { PageHeader } from '../PageHeader';
 import { ScopeBar } from '@/components/layout/ScopeBar';
-import { SweepCaveat } from '@/dashboard/widgets/shared';
+import { IssueList, SweepCaveat } from '@/dashboard/widgets/shared';
 import {
   groupContainers,
   inventoryMembership,
-  inventoryMembershipCounts,
+  containerMembershipCounts,
   type ContainerGroup,
 } from '@/domain/workloads';
 import {
@@ -58,7 +58,7 @@ export function WorkloadList(): JSX.Element {
           ? groups.filter((g) => g.origin === 'compose' && g.name === groupFilter)
           : groups;
         const activeContainers = activeGroups.flatMap((g) => g.containers);
-        const membership = inventoryMembershipCounts(activeContainers);
+        const membership = containerMembershipCounts(activeContainers);
 
         return (
           <>
@@ -322,14 +322,17 @@ function InventoryOutcomeView({
   const { result, list } = outcome;
   const latest = list.last_sweep;
   const matchesReturnedSweep = latest?.sweep_id === result.sweep_id;
+  const providerFailed = result.status === 'failed';
   const title = outcome.phase === 'complete'
     ? 'Docker inventory completed'
     : outcome.phase === 'partial'
       ? 'Docker inventory completed with gaps'
-      : `Docker inventory returned unrecognised status: ${result.status}`;
+      : providerFailed
+        ? 'Docker inventory reported provider failure'
+        : `Docker inventory returned unrecognised status: ${result.status}`;
   return (
     <div id="docker-inventory-status" className={styles.outcome} role="status" aria-live="polite">
-      <Degraded tone={outcome.phase === 'complete' ? 'unknown' : 'warn'} title={title}>
+      <Degraded tone={outcome.phase === 'complete' ? 'unknown' : providerFailed ? 'bad' : 'warn'} title={title}>
         <AcknowledgedResult result={result} />
         {matchesReturnedSweep
           ? <> Stored records were re-read for this sweep{latest?.completed_at ? ` at ${formatTimestamp(latest.completed_at)}` : ''}.</>
@@ -356,16 +359,6 @@ function AcknowledgedResult({ result }: { result: import('@/api/types').Containe
     Docker returned status <code>{result.status}</code> · {result.container_count} container{result.container_count === 1 ? '' : 's'} · provider version <code>{result.provider_version}</code> · sweep <code>{result.sweep_id}</code>.
     {result.issues.length > 0 ? ` ${result.issues.length} issue${result.issues.length === 1 ? '' : 's'} reported.` : ''}
   </>;
-}
-
-function IssueList({ issues, label }: { issues: ContainerObservationResult['issues']; label: string }): JSX.Element | null {
-  if (issues.length === 0) return null;
-  const visible = issues.slice(0, 3);
-  return <details className={styles.issues}>
-    <summary>{label} ({issues.length})</summary>
-    <ul>{visible.map((issue, index) => <li key={`${issue.source}-${issue.code}-${index}`}><code>{issue.source}/{issue.code}</code> {issue.message}</li>)}</ul>
-    {issues.length > visible.length ? <span>Only the first {visible.length} issues are shown.</span> : null}
-  </details>;
 }
 
 function ErrorFact({ error }: { error: import('@/api/client').ApiError }): JSX.Element {

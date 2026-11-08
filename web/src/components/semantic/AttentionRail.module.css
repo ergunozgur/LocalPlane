@@ -15,6 +15,8 @@
 
 .rail[data-state='drift'] { border-left-color: var(--oxide); }
 .rail[data-state='finding'] { border-left-color: var(--amber); }
+.rail[data-state='hold'] { border-left-color: var(--amber); }
+.rail[data-state='serviceFailure'] { border-left-color: var(--crimson); }
 .rail[data-state='unknown'] {
   border-left-color: var(--rule);
   border-left-style: dashed;
@@ -102,6 +104,8 @@
 
 .headline[data-kind='drift'] .count { color: var(--oxide); }
 .headline[data-kind='finding'] .count { color: var(--amber); }
+.headline[data-kind='hold'] .count { color: var(--amber); }
+.headline[data-kind='serviceFailure'] .count { color: var(--crimson); }
 .headline[data-empty='true'] .count { color: var(--verd); }
 
 /* Pills wrap into the available width instead of queueing behind a horizontal scroller. */
@@ -154,6 +158,12 @@ a.item:hover { color: var(--ink); border-color: var(--accent-line); text-decorat
 .finding { border-color: var(--amber-line); background: var(--amber-soft); }
 .finding .itemName { color: var(--amber); font-weight: 600; }
 
+.hold { border-color: var(--amber-line); background: var(--amber-soft); }
+.hold .itemName { color: var(--amber); font-weight: 600; }
+
+.serviceFailure { border-color: var(--crimson-line); background: var(--crimson-soft); }
+.serviceFailure .itemName { color: var(--crimson); font-weight: 600; }
+
 .incomplete {
   display: inline-flex;
   align-items: center;
@@ -164,6 +174,23 @@ a.item:hover { color: var(--ink); border-color: var(--accent-line); text-decorat
   color: var(--faint);
 }
 .incomplete b { color: var(--ink); font-weight: 650; }
+
+.retainedNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.retainedNote b { color: var(--ink); font-weight: 650; }
+
+.retainedLink {
+  color: var(--dim);
+  text-decoration: underline;
+  text-decoration-color: var(--rule2);
+}
+.retainedLink:hover { color: var(--ink); }
 
 .end {
   margin-left: auto;

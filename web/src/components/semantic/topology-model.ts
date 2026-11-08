@@ -137,6 +137,10 @@ function subnetOf(address: string, prefix: number): string | null {
  * becomes a node that says it is uncertain rather than a node that is omitted — an absent
  * column would read as "nothing there", which is a different claim from "not established".
  */
+function isPresent(item: { observed_in_latest_sweep: boolean | null }): boolean {
+  return item.observed_in_latest_sweep === true;
+}
+
 export function buildTopology(input: {
   host: Host;
   agent: AgentStatus;
@@ -156,6 +160,10 @@ export function buildTopology(input: {
 }): TopologyNode[] {
   const { host, agent, path, interfaces, containers } = input;
   const estateRead = input.estateRead ?? { interfaces: true, containers: true };
+  const presentInterfaces = interfaces.filter(isPresent);
+  const presentContainers = containers.filter(isPresent);
+  const retainedInterfaces = interfaces.length - presentInterfaces.length;
+  const retainedContainers = containers.length - presentContainers.length;
   const nodes: TopologyNode[] = [];
 
   /* -------------------------------------------------------------------- 0 · Upstream */
@@ -231,9 +239,15 @@ export function buildTopology(input: {
   // of* rather than repeating its identity. Counts come from the estate reads; a count that
   // could not be read is omitted rather than shown as zero.
   const estateCounts: string[] = [];
-  if (estateRead.interfaces) estateCounts.push(`${interfaces.length} interfaces`);
-  if (estateRead.containers) estateCounts.push(`${containers.length} workloads`);
-  if (input.unitCount !== undefined) estateCounts.push(`${input.unitCount} units`);
+  if (estateRead.interfaces) {
+    estateCounts.push(`${presentInterfaces.length} latest-sighted interface${presentInterfaces.length === 1 ? '' : 's'}`);
+    if (retainedInterfaces > 0) estateCounts.push(`${retainedInterfaces} retained interface${retainedInterfaces === 1 ? '' : 's'}`);
+  }
+  if (estateRead.containers) {
+    estateCounts.push(`${presentContainers.length} latest-sighted workload${presentContainers.length === 1 ? '' : 's'}`);
+    if (retainedContainers > 0) estateCounts.push(`${retainedContainers} retained workload${retainedContainers === 1 ? '' : 's'}`);
+  }
+  if (input.unitCount !== undefined) estateCounts.push(`${input.unitCount} stored units`);
 
   // The interfaces this machine is actually reachable through. They belong here rather than
   // only in the Network table: the plane's whole subject is what the host is attached by,
@@ -242,7 +256,9 @@ export function buildTopology(input: {
   // "Carries traffic" is the kernel's own answer — a global address, or a carrier — not a
   // judgement made here. Bridges are excluded because they appear in Attached as the
   // networks they are, and listing them twice would say the same thing in two places.
-  const reachableThrough = interfaces
+  // Retained interfaces are excluded from the present attachment plane; they remain
+  // reachable from the Network list.
+  const reachableThrough = presentInterfaces
     // Loopback goes nowhere, so it is not a way this host is reached.
     .filter((item) => item.interface_kind !== 'loopback' && item.name !== 'lo')
     // A bridge appears in Attached as the network it is, and a member of one (a veth) is
@@ -298,9 +314,10 @@ export function buildTopology(input: {
   /* -------------------------------------------------------------------- 3 · Attached */
 
   // Subnets this host holds an address on. Global scope only: a link-local address is not a
-  // network the host is attached to in any operationally useful sense.
+  // network the host is attached to in any operationally useful sense. Only present interfaces
+  // are drawn in the attachment plane.
   const subnets = new Map<string, { via: string[]; family: string }>();
-  for (const item of interfaces) {
+  for (const item of presentInterfaces) {
     for (const address of item.addresses ?? []) {
       if (address.scope !== 'global') continue;
       const subnet =
@@ -313,8 +330,9 @@ export function buildTopology(input: {
   }
 
   // Docker networks, joined to their bridge by the network id the backend attributed, and to
-  // their containers by the same id. No name matching anywhere on this path.
-  const dockerBridges = interfaces.filter(
+  // their containers by the same id. No name matching anywhere on this path. Retained bridges
+  // and containers are excluded from the present attachment plane.
+  const dockerBridges = presentInterfaces.filter(
     (item) => item.ownership.created_by?.owner.provider === 'docker',
   );
   const bridgeByNetworkId = new Map<string, NetworkInterface>();
@@ -324,7 +342,7 @@ export function buildTopology(input: {
   }
 
   const containersByNetworkId = new Map<string, DockerContainer[]>();
-  for (const container of containers) {
+  for (const container of presentContainers) {
     for (const network of container.networks) {
       if (!network.network_id) continue;
       const list = containersByNetworkId.get(network.network_id);
@@ -404,7 +422,7 @@ export function buildTopology(input: {
 
   // Published ports. `published` is Docker's own flag, and an unpublished exposed port is
   // deliberately not counted — exposure is the operationally interesting fact.
-  const published = containers.flatMap((container) =>
+  const published = presentContainers.flatMap((container) =>
     container.ports
       .filter((port) => port.published && port.host_port !== null)
       .map((port) => ({ container, port })),

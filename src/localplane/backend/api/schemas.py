@@ -165,9 +165,29 @@ class AgentStatus(Model):
 
 
 class Capabilities(Model):
+    """The capability snapshot the agent reports in its hello.
+
+    This is the hello the agent cached for its running instance, not a fresh provider
+    rediscovery performed for this request. LocalPlane does not ask the agent to re-probe
+    capabilities here; the list says what the agent said it can do when that instance
+    answered. A capability being present is therefore a claim about the agent, not proof
+    that every provider was re-examined just now.
+    """
+
     reachable: bool
-    source: str
-    as_of: datetime
+    source: str = Field(
+        description=(
+            "live — the agent answered the hello for this request and its own cached "
+            "capability snapshot is returned; recorded — the agent could not be reached "
+            "and the last recorded hello snapshot is returned."
+        )
+    )
+    as_of: datetime = Field(
+        description=(
+            "When this response was assembled. It is not the moment the agent discovered "
+            "capabilities; the snapshot belongs to the agent instance that reported it."
+        )
+    )
     agent_instance_id: str | None
     error: ErrorBody | None = None
     capabilities: list[Capability]
@@ -215,8 +235,34 @@ class Address(Model):
     prefix_length: int
     scope: str | None
     dynamic: bool | None
-    valid_lifetime_s: int | None
-    preferred_lifetime_s: int | None
+    valid_lifetime_s: int | None = Field(
+        description="Seconds remaining, or null. Null alone cannot distinguish 'not reported' from 'forever'; read the state beside it."
+    )
+    preferred_lifetime_s: int | None = Field(
+        description="Seconds remaining, or null. Null alone cannot distinguish 'not reported' from 'forever'; read the state beside it."
+    )
+    valid_lifetime_state: Literal["unknown", "finite", "infinite"] = Field(
+        default="unknown",
+        description=(
+            "How the valid lifetime is known: unknown when the source was absent or "
+            "malformed, finite when seconds is the kernel's value (including 0), infinite "
+            "only when the kernel gave its explicit forever sentinel. The state and the "
+            "nullable seconds describe the same fact and are normalized together. "
+            "Defaults to unknown for older typed fixtures; API views always supply the "
+            "normalized value."
+        ),
+    )
+    preferred_lifetime_state: Literal["unknown", "finite", "infinite"] = Field(
+        default="unknown",
+        description=(
+            "How the preferred lifetime is known: unknown when the source was absent or "
+            "malformed, finite when seconds is the kernel's value (including 0), infinite "
+            "only when the kernel gave its explicit forever sentinel. The state and the "
+            "nullable seconds describe the same fact and are normalized together. "
+            "Defaults to unknown for older typed fixtures; API views always supply the "
+            "normalized value."
+        ),
+    )
 
 
 class Link(Model):
@@ -536,17 +582,42 @@ class Sweep(Model):
     )
     issues: list[ProviderIssue]
     agent_instance_id: str | None
+    freshness: Freshness = Field(
+        default=Freshness.NEVER_OBSERVED,
+        description=(
+            "Currency of this sweep's own completed_at under the backend's configured "
+            "freshness TTL: current | stale | never_observed. It qualifies the sweep, not "
+            "the retained objects listed elsewhere; a targeted observation cannot make an "
+            "older inventory sweep current. Defaulted only for older typed fixtures."
+        ),
+    )
+    age_seconds: float | None = Field(
+        default=None,
+        description=(
+            "Seconds since completed_at, derived with the same backend clock and TTL as "
+            "freshness. Null only when no completed_at is available; older typed fixtures "
+            "default to null."
+        ),
+    )
 
 
 class NetworkInterfaceList(Model):
     host_id: str
     last_sweep: Sweep | None = Field(
         description=(
-            "The sweep these objects were last re-read by. An empty list with a failed "
-            "sweep means nobody could look; an empty list with no sweep means nobody has."
+            "The latest inventory sweep recorded for this capability, not a guarantee that "
+            "every listed object was present in it. The list retains objects from earlier "
+            "sweeps too; check each object's observed_in_latest_sweep and observation "
+            "freshness. An empty list with a failed sweep means nobody could look; an empty "
+            "list with no sweep means nobody has."
         )
     )
-    count: int
+    count: int = Field(
+        description=(
+            "Number of retained stored interfaces returned, not the size of the latest "
+            "inventory sweep."
+        )
+    )
     interfaces: list[NetworkInterface]
 
 
@@ -698,11 +769,19 @@ class DockerContainerList(Model):
     host_id: str
     last_sweep: Sweep | None = Field(
         description=(
-            "The sweep these containers were last re-read by. An empty list with a failed "
-            "sweep means nobody could look; an empty list with no sweep means nobody has."
+            "The latest Docker inventory sweep recorded, not a guarantee that every listed "
+            "container was present in it. The list retains containers from earlier sweeps "
+            "too; check each container's observed_in_latest_sweep and observation freshness. "
+            "An empty list with a failed sweep means nobody could look; an empty list with "
+            "no sweep means nobody has."
         )
     )
-    count: int
+    count: int = Field(
+        description=(
+            "Number of retained stored containers returned, not the size of the latest "
+            "inventory sweep."
+        )
+    )
     containers: list[DockerContainer]
 
 
@@ -980,8 +1059,19 @@ class SystemdUnitList(Model):
     capability: Capability | None = Field(
         description="Last recorded systemd observation capability, including unavailable."
     )
-    last_sweep: Sweep | None
-    count: int
+    last_sweep: Sweep | None = Field(
+        description=(
+            "The latest systemd inventory sweep recorded, not a guarantee that every listed "
+            "unit was present in it. The list retains units from earlier sweeps too; check "
+            "each unit's observed_in_latest_sweep and observation freshness."
+        )
+    )
+    count: int = Field(
+        description=(
+            "Number of retained stored units returned, not the size of the latest inventory "
+            "sweep."
+        )
+    )
     units: list[SystemdUnit]
 
 
@@ -2815,6 +2905,29 @@ class ChangeList(Model):
     host_id: str
     count: int
     changes: list[ChangeSummary]
+
+
+class RecoveryHolds(Model):
+    """Unresolved recovery holds: the full count, and a bounded page of them.
+
+    A hold is unresolved while its Change says ``recovery_required`` and no append-only
+    release marker has resolved it. Resolved history keeps saying ``recovery_required``,
+    so it is deliberately excluded here. ``total_count`` is the whole authoritative count
+    and never shrinks to fit ``limit`` or the newest general Change history.
+    """
+
+    host_id: str
+    total_count: int = Field(
+        description="Every unresolved recovery hold on this host, independent of limit."
+    )
+    count: int = Field(description="Number of holds returned in changes.")
+    limit: int = Field(description="The bound that was applied to changes.")
+    truncated: bool = Field(
+        description="True when total_count is greater than count, so more holds exist."
+    )
+    changes: list[ChangeSummary] = Field(
+        description="Newest first, at most limit. Each carries recovery_state=unresolved."
+    )
 
 
 class RecoveryConfirmRequest(Model):

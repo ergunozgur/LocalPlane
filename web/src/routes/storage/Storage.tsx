@@ -151,12 +151,23 @@ function Observation({ data, refreshing }: { data: StorageObservation; refreshin
 }
 
 export function Storage(): JSX.Element {
-  const { resource, refresh } = useResource('storage-filesystems', (signal) => endpoints.filesystems({ signal }));
+  const { resource, refresh } = useResource('storage-filesystems', (signal) => endpoints.filesystems({ signal }), { kind: 'consent' });
   return <>
     <PageHeader title="Storage" annotation="Which mounted filesystem is short of usable bytes or inodes?">
-      <button className="btn" onClick={refresh} disabled={resource.status === 'loading' || (resource.status === 'success' && resource.refreshing)}>Refresh filesystems</button>
+      <button className="btn" onClick={refresh} disabled={resource.status === 'loading' || (resource.status === 'success' && resource.refreshing)}>
+        {resource.status === 'idle' ? 'Observe filesystems' : 'Refresh filesystems'}
+      </button>
     </PageHeader>
-    <ResourceView resource={resource} what="filesystem observation" loadingLabel="Reading mounted filesystem evidence…">
+    <ResourceView
+      resource={resource}
+      what="filesystem observation"
+      loadingLabel="Reading mounted filesystem evidence…"
+      idle={
+        <p className="note">
+          Storage evidence is not collected automatically. Choose <strong>Observe filesystems</strong> to read capacity and backing evidence once.
+        </p>
+      }
+    >
       {(data, meta) => <Observation key={data.observation_id} data={data} refreshing={meta.refreshing} />}
     </ResourceView>
   </>;

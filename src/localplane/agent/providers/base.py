@@ -57,6 +57,11 @@ class InterfaceAddress:
     dynamic: bool | None = None
     valid_lifetime_s: int | None = None
     preferred_lifetime_s: int | None = None
+    #: ``unknown | finite | infinite``. Kept beside the nullable seconds because
+    #: ``None`` alone cannot distinguish "the source did not say" from "the kernel
+    #: says this never expires". An explicit sentinel is the only evidence of infinite.
+    valid_lifetime_state: str = "unknown"
+    preferred_lifetime_state: str = "unknown"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -67,6 +72,8 @@ class InterfaceAddress:
             "dynamic": self.dynamic,
             "valid_lifetime_s": self.valid_lifetime_s,
             "preferred_lifetime_s": self.preferred_lifetime_s,
+            "valid_lifetime_state": self.valid_lifetime_state,
+            "preferred_lifetime_state": self.preferred_lifetime_state,
         }
 
 

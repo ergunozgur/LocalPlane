@@ -358,10 +358,13 @@ def get_agent(request: Request) -> schemas.AgentStatus:
 
 @router.get("/agent/capabilities", response_model=schemas.Capabilities, tags=["agent"])
 def get_agent_capabilities(request: Request) -> schemas.Capabilities:
-    """What the agent can actually do, re-probed if it is answering.
+    """The capability snapshot the agent reports in its hello.
 
-    A capability absent from this list is not available. A capability listed
-    ``unavailable`` is not available either, and ``reason`` says why.
+    The agent caches this snapshot for its running instance; this endpoint asks for the
+    hello and does not request a fresh provider rediscovery. A capability absent from
+    this list is not available. A capability listed ``unavailable`` is not available
+    either, and ``reason`` says why. If the agent is not answering, the last recorded
+    hello snapshot is returned with ``source`` saying it is recorded, not live.
     """
     context = _context(request)
     try:
@@ -437,7 +440,7 @@ def list_network_interfaces(request: Request) -> schemas.NetworkInterfaceList:
         )
     return schemas.NetworkInterfaceList(
         host_id=host_id,
-        last_sweep=views.sweep_view(latest) if latest else None,
+        last_sweep=views.sweep_view(latest, context.settings.freshness_ttl_s) if latest else None,
         count=len(interfaces),
         interfaces=interfaces,
     )
@@ -645,7 +648,7 @@ def list_systemd_units(request: Request) -> schemas.SystemdUnitList:
     return schemas.SystemdUnitList(
         host_id=host_id,
         capability=_recorded_systemd_capability(context, host_id),
-        last_sweep=views.sweep_view(sweep) if sweep else None,
+        last_sweep=views.sweep_view(sweep, context.settings.freshness_ttl_s) if sweep else None,
         count=len(records),
         units=[
             views.systemd_unit_view(
@@ -805,7 +808,7 @@ def list_docker_containers(request: Request) -> schemas.DockerContainerList:
     evidence = context.provenance.evidence(host_id)
     return schemas.DockerContainerList(
         host_id=host_id,
-        last_sweep=views.sweep_view(sweep) if sweep else None,
+        last_sweep=views.sweep_view(sweep, context.settings.freshness_ttl_s) if sweep else None,
         count=len(records),
         containers=[
             _container_view(context, record, current_members, evidence)
@@ -1055,7 +1058,11 @@ def list_sweeps(
     host_id = _resolve_host_id(context)
     sweeps = context.ingestor.sweeps.recent(host_id, limit)
     return schemas.SweepList(
-        host_id=host_id, count=len(sweeps), sweeps=[views.sweep_view(s) for s in sweeps]
+        host_id=host_id,
+        count=len(sweeps),
+        sweeps=[
+            views.sweep_view(s, context.settings.freshness_ttl_s) for s in sweeps
+        ],
     )
 
 
@@ -2135,6 +2142,54 @@ def list_changes(
                 record,
                 object_name=names.get(record.object_id, record.object_id),
                 recovery_state=str(holds[record.change_id]),
+            )
+            for record in records
+        ],
+    )
+
+
+@router.get(
+    "/changes/recovery-holds", response_model=schemas.RecoveryHolds, tags=["changes"]
+)
+def list_recovery_holds(
+    request: Request,
+    limit: int = Query(
+        default=12,
+        ge=1,
+        le=100,
+        description="Maximum holds to return. total_count is never bounded by it.",
+    ),
+) -> schemas.RecoveryHolds:
+    """Every unresolved recovery hold, with an accurate total and a bounded list.
+
+    A hold is unresolved while its Change says ``recovery_required`` and no append-only
+    release marker has resolved it. Resolved history still says ``recovery_required``,
+    so it is excluded here rather than presented as attention a second time.
+
+    ``total_count`` is counted over the whole authoritative store and is not limited by
+    ``limit`` or by the newest general Change history. The list is newest first and
+    capped so a backlog cannot make one response unbounded. Pure: reading holds contacts
+    no agent, collects no provider evidence and writes nothing. There is no control to
+    retry, confirm or release from this endpoint; those stay on the exact Change.
+    """
+    context = _context(request)
+    host_id = _resolve_host_id(context)
+    total_count, records = context.changes.recovery_holds(host_id, limit=limit)
+    names = context.ingestor.objects.display_names([r.object_id for r in records])
+    return schemas.RecoveryHolds(
+        host_id=host_id,
+        total_count=total_count,
+        count=len(records),
+        limit=limit,
+        truncated=total_count > len(records),
+        changes=[
+            views.change_summary_view(
+                record,
+                object_name=names.get(record.object_id, record.object_id),
+                # The query already selected only holds with no release marker. Because
+                # this state comes from that same snapshot, a release written immediately
+                # afterwards cannot make the page disagree with the total it returned.
+                recovery_state="unresolved",
             )
             for record in records
         ],
