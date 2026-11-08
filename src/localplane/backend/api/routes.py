@@ -56,7 +56,7 @@ from datetime import datetime, timezone
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, Security
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, Security
 from pydantic import ValidationError
 
 from localplane import __version__
@@ -1685,6 +1685,7 @@ def _run_response(
         checkpoint=context.changes.checkpoint_for(run.run_id),
         guard=context.changes.guards.for_run(run.run_id),
         change=change,
+        change_representation=_change_response(context, change) if change else None,
         events=context.changes.transcript(run.run_id),
         write_locked=context.changes.lock_for(run.run_id) is not None,
     )
@@ -2234,23 +2235,29 @@ def _require_change(context: AppContext, change_id: str) -> ChangeRecord:
 
 def _change_response(context: AppContext, record: ChangeRecord) -> schemas.Change:
     """One Change and everything a reader needs to act on it, from persisted truth only."""
-    names = context.ingestor.objects.display_names([record.object_id])
-    return views.change_view(
-        record,
-        object_name=names.get(record.object_id, record.object_id),
-        events=context.changes.transcript(record.run_id),
-        write_locked=context.changes.lock_for(record.run_id) is not None,
-        hold=context.changes.recovery_hold(record),
-        attempts=context.changes.recovery_history(record),
-        authority=context.changes.recovery_confirmation_for(record),
-    )
+    with context.database.transaction():
+        names = context.ingestor.objects.display_names([record.object_id])
+        run = context.runs.get(record.run_id)
+        return views.change_view(
+            record,
+            object_name=names.get(record.object_id, record.object_id),
+            events=context.changes.transcript(record.run_id),
+            write_locked=context.changes.lock_for(record.run_id) is not None,
+            hold=context.changes.recovery_hold(record),
+            attempts=context.changes.recovery_history(record),
+            authority=context.changes.recovery_confirmation_for(record),
+            recovery_revision=context.changes.recovery_revision(record),
+            confirmation_method=run.preview.confirmation_method if run else "unknown",
+            confirmation_policy=run.preview.confirmation_policy if run else "unknown",
+        )
 
 
 @router.post(
     "/changes/{change_id}/recovery/confirm", response_model=schemas.Change, tags=["changes"]
 )
 def confirm_change_recovery(
-    change_id: str, body: schemas.RecoveryConfirmRequest, request: Request
+    change_id: str, body: schemas.RecoveryConfirmRequest, request: Request,
+    if_recovery_revision: int | None = Header(default=None, alias="If-Recovery-Revision"),
 ) -> schemas.Change:
     """Authorise one recovery retry of this change to write to the host again.
 
@@ -2277,6 +2284,8 @@ def confirm_change_recovery(
         context.changes.recovery_confirm(
             record,
             acknowledge=body.acknowledge,
+            acknowledge_object=body.acknowledge_object,
+            recovery_revision=if_recovery_revision,
             expected_recovery_reason=body.expected_recovery_reason,
             management_path=management_path,
         )
@@ -2285,10 +2294,27 @@ def confirm_change_recovery(
     return _change_response(context, _require_change(context, change_id))
 
 
+@router.post("/changes/{change_id}/recovery/assess", response_model=schemas.Change, tags=["changes"])
+def assess_change_recovery(change_id: str, request: Request,
+    if_recovery_revision: int | None = Header(default=None, alias="If-Recovery-Revision"),
+) -> schemas.Change:
+    context = _context(request)
+    record = _require_change(context, change_id)
+    management_path, _transport = _management_path(context, request, record.host_id)
+    try:
+        context.changes.recovery_assess(record, management_path, if_recovery_revision)
+    except RunRefused as exc:
+        raise _refused(exc) from exc
+    return _change_response(context, _require_change(context, change_id))
+
+
 @router.post(
     "/changes/{change_id}/recovery/retry", response_model=schemas.Change, tags=["changes"]
 )
-def retry_change_recovery(change_id: str, request: Request) -> schemas.Change:
+def retry_change_recovery(change_id: str, request: Request,
+    if_recovery_revision: int | None = Header(default=None, alias="If-Recovery-Revision"),
+    if_recovery_confirmation: str | None = Header(default=None, alias="If-Recovery-Confirmation"),
+) -> schemas.Change:
     """Try again to reach the end state this change wanted. The way out of a recovery hold.
 
     **There is no request body, and that is the design.** Every authoritative value is
@@ -2328,6 +2354,8 @@ def retry_change_recovery(change_id: str, request: Request) -> schemas.Change:
         run = context.runs.get(record.run_id)
         context.changes.recovery_retry(
             record, management_path,
+            recovery_revision=if_recovery_revision,
+            confirmation_id=if_recovery_confirmation,
             systemd_lifecycle_context=(
                 _lifecycle_context_for(context, request, run, management_path)
                 if run is not None
@@ -2343,7 +2371,8 @@ def retry_change_recovery(change_id: str, request: Request) -> schemas.Change:
     "/changes/{change_id}/recovery/resolve", response_model=schemas.Change, tags=["changes"]
 )
 def resolve_change_recovery(
-    change_id: str, body: schemas.RecoveryResolveRequest, request: Request
+    change_id: str, body: schemas.RecoveryResolveRequest, request: Request,
+    if_recovery_revision: int | None = Header(default=None, alias="If-Recovery-Revision"),
 ) -> schemas.Change:
     """Release this change's recovery hold by hand. **No host mutation happens here.**
 
@@ -2380,6 +2409,7 @@ def resolve_change_recovery(
             object_name=names.get(record.object_id, record.object_id),
             note=body.note,
             expected_recovery_reason=body.expected_recovery_reason,
+            recovery_revision=if_recovery_revision,
         )
     except RunRefused as exc:
         raise _refused(exc) from exc

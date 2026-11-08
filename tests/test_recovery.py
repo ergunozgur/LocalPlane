@@ -287,6 +287,22 @@ def test_a_fresh_observation_can_settle_a_recovery_without_a_second_write(ready:
         str(RunEvent.RECOVERY_RETRY_FINISHED), str(RunEvent.RECOVERY_HOLD_RELEASED)]
 
 
+@pytest.mark.parametrize("satisfied", [False, True])
+def test_assessment_never_spends_outstanding_authority_or_dispatches(ready: LinkEstate, satisfied):
+    change = into_recovery(ready)
+    grant = authorise(ready, change)
+    before = list(ready.kernel.mutations)
+    if satisfied:
+        ready.write("eth0", "mtu", "1500")
+        ready.kernel.links[2] = ("eth0", 1500)
+    result = ready.changes.recovery_assess(change, ready.management_path)
+    assert ready.kernel.mutations == before
+    assert result.attempt.mutation_attempt_id is None
+    assert ready.changes.recovery_confirmation_for(change).confirmation_id == grant.confirmation_id
+    assert result.attempt.outcome == ("proven" if satisfied else "refused")
+    assert result.hold.object_write_locked is not satisfied
+
+
 def test_a_retry_that_proves_the_end_state_needs_no_confirmation(ready: LinkEstate):
     """Authority is for writing. A retry that writes nothing consumes none and needs none."""
     change = into_recovery(ready)
@@ -388,6 +404,48 @@ def test_a_retry_writes_verifies_and_releases_the_hold_without_rewriting_history
         str(RunEvent.RECOVERY_VERIFICATION_RESULT),
         str(RunEvent.RECOVERY_RETRY_FINISHED),
     ]
+
+
+def test_confirmation_rechecks_hold_after_concurrent_release(ready: LinkEstate, monkeypatch):
+    change = into_recovery(ready)
+    original = ready.changes._require_path_evidence
+
+    def release_after_admission(*args, **kwargs):
+        result = original(*args, **kwargs)
+        ready.changes.recovery_resolve(
+            change, acknowledge=True, operator_statement="eth0", object_name="eth0",
+            note=None, expected_recovery_reason=None)
+        return result
+
+    monkeypatch.setattr(ready.changes, "_require_path_evidence", release_after_admission)
+    with pytest.raises(RunRefused) as raised:
+        authorise(ready, change)
+    assert raised.value.code == "recovery_already_resolved"
+    assert ready.changes.recovery_confirmation_for(change) is None
+
+
+def test_replaced_grant_and_stale_revision_cannot_authorize_retry(ready: LinkEstate):
+    change = into_recovery(ready)
+    before = ready.changes.recovery_revision(change)
+    first = authorise(ready, change)
+    with pytest.raises(RunRefused) as stale:
+        ready.changes.recovery_assess(change, ready.management_path, before)
+    assert stale.value.code == "recovery_revision_mismatch"
+    original = ready.kernel.mutate
+    ready.kernel.mutate = lambda frame: netlink_ack(_sequence(frame), errno=1)
+    try:
+        ready.changes.recovery_retry(change, ready.management_path, confirmation_id=first.confirmation_id)
+    finally:
+        ready.kernel.mutate = original
+    second = authorise(ready, change)
+    revision = ready.changes.recovery_revision(change)
+    before_writes = list(ready.kernel.mutations)
+    with pytest.raises(RunRefused) as wrong:
+        ready.changes.recovery_retry(change, ready.management_path,
+            recovery_revision=revision, confirmation_id=first.confirmation_id)
+    assert wrong.value.code == "recovery_confirmation_mismatch"
+    assert ready.changes.recovery_confirmation_for(change).confirmation_id == second.confirmation_id
+    assert ready.kernel.mutations == before_writes
 
 
 def test_one_recovery_authority_covers_one_attempt_and_no_more(ready: LinkEstate):

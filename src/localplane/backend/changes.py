@@ -989,21 +989,25 @@ class ChangeService:
                 raise RunRefused("run_not_appliable",
                                  "this run is not in a state that can be applied",
                                  {"run_id": current.run_id, "state": current.state})
-            if self.locks.for_run(current.run_id) is None:
-                aspect = _lock_aspect(current)
-                taken = self.locks.acquire(
+            if self.locks.for_run(current.run_id) is not None:
+                raise RunRefused(
+                    "object_write_locked",
+                    "this run already has an execution holding its write lock",
+                    {"run_id": current.run_id, "held_by_run_id": current.run_id})
+            aspect = _lock_aspect(current)
+            taken = self.locks.acquire(
+                host_id=current.host_id, object_id=current.object_id,
+                field=aspect, run_id=current.run_id, now=_now())
+            if not taken:
+                other = self.locks.held(
                     host_id=current.host_id, object_id=current.object_id,
-                    field=aspect, run_id=current.run_id, now=_now())
-                if not taken:
-                    other = self.locks.held(
-                        host_id=current.host_id, object_id=current.object_id,
-                        field=aspect)
-                    raise RunRefused(
-                        "object_write_locked",
-                        "another run is already mutating this object's controlled field",
-                        {"object_id": current.object_id, "field": aspect,
-                         "held_by_run_id": other.run_id if other else None,
-                         "acquired_at": other.acquired_at if other else None})
+                    field=aspect)
+                raise RunRefused(
+                    "object_write_locked",
+                    "another run is already mutating this object's controlled field",
+                    {"object_id": current.object_id, "field": aspect,
+                     "held_by_run_id": other.run_id if other else None,
+                     "acquired_at": other.acquired_at if other else None})
             return current
 
     def _consume_confirmation(self, run: RunRecord, attempt_id: str) -> RunRecord:
@@ -1830,6 +1834,15 @@ class ChangeService:
         return self.confirmations.outstanding(
             change.run_id, CONFIRMATION_PURPOSE_RECOVERY_RETRY)
 
+    def recovery_revision(self, change: ChangeRecord) -> int:
+        return max((event.sequence for event in self.transcript(change.run_id)
+                    if event.event.startswith("recovery_")), default=0)
+
+    def _check_recovery_revision(self, change: ChangeRecord, expected: int | None) -> None:
+        if expected is not None and expected != self.recovery_revision(change):
+            raise RunRefused("recovery_revision_mismatch", "recovery state has changed",
+                             {"expected": expected, "current": self.recovery_revision(change)})
+
     # -------------------------------------------------------------- recovery: confirmation
 
     def recovery_confirm(
@@ -1837,6 +1850,8 @@ class ChangeService:
         change: ChangeRecord,
         *,
         acknowledge: bool,
+        acknowledge_object: str | None = None,
+        recovery_revision: int | None = None,
         expected_recovery_reason: str | None,
         management_path: ManagementPathVerdict,
     ) -> ConfirmationRecord:
@@ -1874,18 +1889,28 @@ class ChangeService:
         self._require_path_evidence(run, definition, management_path)
 
         required = ConfirmationMethod(run.preview.confirmation_method)
-        if required is not ConfirmationMethod.ACKNOWLEDGE:
+        if required not in (ConfirmationMethod.ACKNOWLEDGE, ConfirmationMethod.TYPED):
             raise RunRefused("confirmation_method_unsupported",
                              "this plan requires a confirmation method this build does not accept",
-                             {"required_method": str(required),
-                              "accepted": str(ConfirmationMethod.ACKNOWLEDGE)})
+                              {"required_method": str(required),
+                               "accepted": [str(ConfirmationMethod.ACKNOWLEDGE),
+                                            str(ConfirmationMethod.TYPED)]})
         if not acknowledge:
             raise RunRefused("confirmation_not_acknowledged",
                              "the confirmation was not acknowledged, so nothing was recorded",
+                              {"change_id": change.change_id})
+        if required is ConfirmationMethod.TYPED:
+            if acknowledge_object != self._require_target(run).display_name:
+                raise RunRefused("confirmation_object_mismatch", "type the object's exact name",
+                                 {"change_id": change.change_id})
+        elif acknowledge_object is not None:
+            raise RunRefused("confirmation_object_not_required", "typed confirmation is not required",
                              {"change_id": change.change_id})
 
         confirmation_id = f"cnf_{uuid.uuid4().hex}"
         with self._db.transaction():
+            self._require_open_hold_locked(change, run)
+            self._check_recovery_revision(change, recovery_revision)
             outstanding = self.confirmations.outstanding(
                 run.run_id, CONFIRMATION_PURPOSE_RECOVERY_RETRY)
             if outstanding is not None:
@@ -1902,12 +1927,8 @@ class ChangeService:
                 "preview_digest": run.preview.preview_digest,
                 "digest_version": run.preview.digest_version,
                 "required_method": str(required),
-                "method": str(ConfirmationMethod.ACKNOWLEDGE),
-                # A recovery grant is an acknowledgement and carries no typed statement.
-                # The typed method belongs to a guarded *apply*, where what an operator
-                # writes is evidence about the object they looked at; a retry re-attempts an
-                # end state the Change already records and has no second object to name.
-                "typed_statement": None,
+                "method": str(required),
+                "typed_statement": acknowledge_object,
                 "policy": run.preview.confirmation_policy,
                 "source": CONFIRMATION_SOURCE_AUTHENTICATED,
                 "satisfied_at": _now(),
@@ -1916,7 +1937,7 @@ class ChangeService:
                          change_id=change.change_id,
                          detail={"confirmation_id": confirmation_id,
                                  "recovery_reason": change.recovery_reason,
-                                 "method": str(ConfirmationMethod.ACKNOWLEDGE),
+                                 "method": str(required),
                                  "source": CONFIRMATION_SOURCE_AUTHENTICATED,
                                  "host_effect": "none"})
             stored = self.confirmations.outstanding(
@@ -1930,11 +1951,44 @@ class ChangeService:
 
     # --------------------------------------------------------------------- recovery: retry
 
+    def recovery_assess(self, change: ChangeRecord, management_path: ManagementPathVerdict,
+                        recovery_revision: int | None = None) -> RecoveryOutcome:
+        """Observe the original expectation only; this path cannot construct a mutation."""
+        run = self._recovery_run(change)
+        self._require_open_hold(change, run)
+        executor = self._executor(run)
+        definition = self._runs.definition(OperationType(run.operation))
+        relation = self._require_path_evidence(run, definition, management_path)
+        attempt = self._open_recovery_attempt(change, run, RecoveryActionKind.RETRY, relation,
+                                              management_path, recovery_revision=recovery_revision,
+                                              assessment_only=True)
+        try:
+            self._guard_systemd_handlers(run, change, executor)
+        except RunRefused as refusal:
+            self._refuse_recovery(run, change, attempt, refusal)
+            return self._recovery_outcome(change, attempt.attempt_id)
+        read = self._read_back(run, change, executor, _applied_expectation(change))
+        attempt = self._recovery_evidence(run, change, attempt, read)
+        try:
+            self._guard_systemd_observation(run, read.observation_id)
+        except RunRefused as refusal:
+            self._refuse_recovery(run, change, attempt, refusal)
+            return self._recovery_outcome(change, attempt.attempt_id)
+        if read.outcome.proved:
+            return self._complete_recovery(run, change, attempt, RecoveryAttemptOutcome.PROVEN,
+                                           {"proved_without_mutation": True, "assessment_only": True,
+                                            "observation_id": read.observation_id})
+        self._refuse_recovery(run, change, attempt,
+                              RunRefused("assessment_inconclusive", "original end state not proven", {}))
+        return self._recovery_outcome(change, attempt.attempt_id)
+
     def recovery_retry(
         self,
         change: ChangeRecord,
         management_path: ManagementPathVerdict,
         systemd_lifecycle_context: SystemdLifecycleContext | None = None,
+        recovery_revision: int | None = None,
+        confirmation_id: str | None = None,
     ) -> RecoveryOutcome:
         """Try again to reach the end state the original Change wanted. Operator-initiated.
 
@@ -1971,11 +2025,21 @@ class ChangeService:
         relation = self._require_path_evidence(run, definition, management_path)
 
         attempt = self._open_recovery_attempt(
-            change, run, RecoveryActionKind.RETRY, relation, management_path)
+            change, run, RecoveryActionKind.RETRY, relation, management_path,
+            recovery_revision=recovery_revision, confirmation_id=confirmation_id)
 
+        # Earlier handlers must be unable to dispatch before this reading is taken.
+        try:
+            self._guard_systemd_handlers(run, change, executor)
+        except RunRefused as refusal:
+            raise self._refuse_recovery(run, change, attempt, refusal) from None
         # 1 — what does the target hold now, and does the operation call that proof?
         read = self._read_back(run, change, executor, _applied_expectation(change))
         attempt = self._recovery_evidence(run, change, attempt, read)
+        try:
+            self._guard_systemd_observation(run, read.observation_id)
+        except RunRefused as refusal:
+            raise self._refuse_recovery(run, change, attempt, refusal) from None
         if read.outcome.proved:
             return self._complete_recovery(
                 run, change, attempt, RecoveryAttemptOutcome.PROVEN,
@@ -1998,7 +2062,7 @@ class ChangeService:
                 run, record, management_path, change,
                 systemd_lifecycle_context=systemd_lifecycle_context)
             request = self._recovery_request(run, change, record, executor, read, plan)
-            self._recovery_dispatch_marker(run, change, attempt, request)
+            self._recovery_dispatch_marker(run, change, attempt, request, plan, confirmation_id)
         except RunRefused as refusal:
             raise self._refuse_recovery(run, change, attempt, refusal) from None
 
@@ -2011,9 +2075,14 @@ class ChangeService:
                 run, change, attempt,
                 recovery_outcome_for(report.outcome, VerificationOutcome.NOT_ATTEMPTED))
 
-        verified = self._read_back(
-            run, change, executor,
-            _applied_expectation(change, dict(request.correlation)))
+        try:
+            self._guard_systemd_handlers(run, change, executor)
+            verified = self._read_back(
+                run, change, executor,
+                _applied_expectation(change, dict(request.correlation)))
+            self._guard_systemd_observation(run, verified.observation_id)
+        except RunRefused as refusal:
+            verified = _ReadBack(VerificationOutcome.VALUE_UNREADABLE, reason=refusal.code)
         attempt = self._recovery_verification(run, change, attempt, verified)
         outcome = recovery_outcome_for(MutationOutcome.WRITTEN, verified.outcome)
         if outcome is RecoveryAttemptOutcome.VERIFIED:
@@ -2035,6 +2104,7 @@ class ChangeService:
         object_name: str,
         note: str | None,
         expected_recovery_reason: str | None,
+        recovery_revision: int | None = None,
     ) -> RecoveryOutcome:
         """A person says they have handled this, and LocalPlane gives the object back.
 
@@ -2077,13 +2147,20 @@ class ChangeService:
                 "type the object's name to record that you have dealt with this yourself",
                 {"change_id": change.change_id, "object_id": change.object_id})
 
+        # Reject any recovery state change that occurs while the observation is in flight.
+        admitted_revision = self.recovery_revision(change)
+        self._check_recovery_revision(change, recovery_revision)
+        executor = self._executor(run)
+        self._guard_systemd_handlers(run, change, executor)
         # A read, never a write. It may fail, and a failure is recorded as one.
         read = self._observe_for_recovery(run, change)
+        self._guard_systemd_observation(run, read.observation_id)
 
         attempt_id = f"rcv_{uuid.uuid4().hex}"
         now = _now()
         with self._db.transaction():
             self._require_open_hold_locked(change, run)
+            self._check_recovery_revision(change, admitted_revision)
             row = {
                 "attempt_id": attempt_id,
                 **_recovery_identity(change, run,
@@ -2205,6 +2282,45 @@ class ChangeService:
 
     # ------------------------------------------------------------------ recovery: internals
 
+    def _guard_systemd_observation(self, run: RunRecord, observation_id: str | None) -> None:
+        if run.operation not in {str(OperationType.SYSTEMD_SERVICE_START),
+                                 str(OperationType.SYSTEMD_SERVICE_STOP),
+                                 str(OperationType.SYSTEMD_SERVICE_RESTART)}:
+            return
+        record = self._runs.objects.get(run.object_id)
+        if (observation_id is None or not record or not record.observation
+                or record.observation.observation_id != observation_id
+                or record.observation.capability != run.preview.verification_capability
+                or record.observation.provider != run.preview.verification_provider):
+            raise RunRefused("recovery_systemd_observation_unavailable",
+                             "a fresh systemd observation is required", {})
+        facts = record.observation.facts if record and record.observation else {}
+        if facts.get("current_job_state") != "none":
+            raise RunRefused("recovery_systemd_job_unsettled", "systemd job state is not proven idle", {})
+
+    def _guard_systemd_handlers(self, run: RunRecord, change: ChangeRecord, executor: Any) -> None:
+        if run.operation not in {str(OperationType.SYSTEMD_SERVICE_START),
+                                 str(OperationType.SYSTEMD_SERVICE_STOP),
+                                 str(OperationType.SYSTEMD_SERVICE_RESTART)}:
+            return
+        candidates = []
+        if change.dispatch_began_at:
+            candidates.append((change.apply_attempt_id, change.execution_correlation, change.mutation_detail))
+        for attempt in self.recovery_history(change):
+            if attempt.dispatch_began_at:
+                candidates.append((attempt.mutation_attempt_id, attempt.execution_correlation, attempt.mutation_detail))
+        for attempt_id, correlation, detail in candidates:
+            correlation = correlation or {}
+            # A well-formed provider result is emitted only after the dispatch handler returned.
+            trusted_reply = (detail.get("handler_reply_validated") is True
+                             and detail.get("agent_instance_id") == correlation.get("agent_instance_id")
+                             and isinstance(detail.get("agent_instance_id"), str)
+                             and detail.get("action") == change.action
+                             and detail.get("unit_id") == correlation.get("unit_id"))
+            if not trusted_reply and (not attempt_id or not executor.lifecycle_attempt_completed(attempt_id, correlation)):
+                raise RunRefused("recovery_executor_completion_unknown",
+                                 "a prior lifecycle handler is active or its completion is unknown", {})
+
     def _recovery_run(self, change: ChangeRecord) -> RunRecord:
         run = self._runs.runs.get(change.run_id)
         if run is None:
@@ -2314,6 +2430,9 @@ class ChangeService:
         kind: RecoveryActionKind,
         relation: ManagementPathRelation,
         management_path: ManagementPathVerdict,
+        recovery_revision: int | None = None,
+        confirmation_id: str | None = None,
+        assessment_only: bool = False,
     ) -> RecoveryAttemptRecord:
         """Record that a recovery attempt is under way, before it can do anything.
 
@@ -2329,6 +2448,11 @@ class ChangeService:
         try:
             with self._db.transaction():
                 self._require_open_hold_locked(change, run)
+                self._check_recovery_revision(change, recovery_revision)
+                if confirmation_id is not None:
+                    outstanding = self.confirmations.outstanding(run.run_id, CONFIRMATION_PURPOSE_RECOVERY_RETRY)
+                    if outstanding is None or outstanding.confirmation_id != confirmation_id:
+                        raise RunRefused("recovery_confirmation_mismatch", "recovery authority changed", {})
                 self.recovery_attempts.insert({
                     "attempt_id": attempt_id,
                     **_recovery_identity(
@@ -2344,6 +2468,7 @@ class ChangeService:
                                      "recovery_reason": change.recovery_reason,
                                      "management_path": str(relation),
                                      "protection_evidence_id": management_path.evidence_id,
+                                     "assessment_only": assessment_only,
                                      "host_effect": "none"})
         except sqlite3.IntegrityError as exc:
             raise RunRefused(
@@ -2407,14 +2532,14 @@ class ChangeService:
                              {"run_id": run.run_id,
                               "blockers": list(replanned.execution.blockers),
                               "availability": str(replanned.execution.availability)})
-        if replanned.confirmation.method is not ConfirmationMethod.ACKNOWLEDGE:
-            # Today's policy asks for more than any authority this build can record. The
-            # grant made earlier cannot be stretched to cover it.
+        if replanned.confirmation.method not in (ConfirmationMethod.ACKNOWLEDGE, ConfirmationMethod.TYPED):
+            # An unknown method cannot be covered by any grant this build can record.
             raise RunRefused(
                 "confirmation_method_unsupported",
                 "current policy requires a confirmation method this build does not accept",
                 {"required_method": str(replanned.confirmation.method),
-                 "accepted": str(ConfirmationMethod.ACKNOWLEDGE)})
+                 "accepted": [str(ConfirmationMethod.ACKNOWLEDGE),
+                              str(ConfirmationMethod.TYPED)]})
         return replanned
 
     def _recovery_request(
@@ -2464,7 +2589,7 @@ class ChangeService:
 
     def _recovery_dispatch_marker(
         self, run: RunRecord, change: ChangeRecord, attempt: RecoveryAttemptRecord,
-        request: MutationRequest,
+        request: MutationRequest, plan: RunPlan, confirmation_id: str | None = None,
     ) -> None:
         """Consume the authority and mark the dispatch durably. Then, and only then, send it.
 
@@ -2483,7 +2608,13 @@ class ChangeService:
                     "a retry that must write again needs authority nobody has granted yet; "
                     "the confirmation that authorised the original attempt is not reusable",
                     {"change_id": change.change_id, "run_id": run.run_id,
-                     "method": run.preview.confirmation_method})
+                      "method": run.preview.confirmation_method})
+            if confirmation_id is not None and confirmation.confirmation_id != confirmation_id:
+                raise RunRefused("recovery_confirmation_mismatch", "recovery authority changed", {})
+            if (plan.confirmation.method is ConfirmationMethod.TYPED
+                    and confirmation.method != str(ConfirmationMethod.TYPED)):
+                raise RunRefused("recovery_confirmation_too_weak",
+                                 "current policy requires typed confirmation", {})
             if not self.confirmations.consume(
                 confirmation_id=confirmation.confirmation_id,
                 attempt_id=request.attempt_id, now=now,

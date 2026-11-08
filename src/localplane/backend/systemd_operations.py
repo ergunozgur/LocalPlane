@@ -26,6 +26,7 @@ seen instead.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -351,6 +352,11 @@ CORRELATION_SUB_STATE = "sub_state"
 _RUNNING_SUB_STATES = frozenset({"running", "exited"})
 
 
+def _valid_invocation_id(value: Any) -> bool:
+    return (isinstance(value, str) and re.fullmatch(r"[0-9a-f]{32}", value) is not None
+            and value != "0" * 32)
+
+
 class SystemdLifecycleExecutor:
     """The execution half of the three systemd lifecycle operations.
 
@@ -405,7 +411,7 @@ class SystemdLifecycleExecutor:
                  "observed_canonical_id": canonical},
             )
         invocation = observation.facts.get(CORRELATION_INVOCATION_ID)
-        if self._action is SystemdServiceAction.RESTART and not isinstance(invocation, str):
+        if self._action is SystemdServiceAction.RESTART and not _valid_invocation_id(invocation):
             # A restart with no baseline could never be proven afterwards, and dispatching a
             # change whose result is unverifiable by construction is not something to start.
             raise ExecutionRefused(
@@ -413,8 +419,18 @@ class SystemdLifecycleExecutor:
                 {"object_id": record.object_id,
                  "observation_id": observation.observation_id},
             )
+        try:
+            agent_instance_id = self._client.hello()["agent"]["agent_instance_id"]
+            status = self._client.systemd_service_lifecycle_status(
+                attempt_id="capability-check", unit_id=canonical,
+                action=str(self._action), agent_instance_id=agent_instance_id)
+            if not isinstance(status, dict) or status.get("agent_instance_id") != agent_instance_id or status.get("status") != "unknown":
+                raise ValueError("incompatible receipt response")
+        except (AgentError, KeyError, TypeError, ValueError) as exc:
+            raise ExecutionRefused("lifecycle_receipt_unavailable", {"reason": str(exc)}) from exc
         return {
             CORRELATION_UNIT: canonical,
+            "agent_instance_id": agent_instance_id,
             CORRELATION_INVOCATION_ID: invocation if isinstance(invocation, str) else None,
             CORRELATION_ACTIVE_STATE: observation.facts.get("active_state"),
             CORRELATION_SUB_STATE: observation.facts.get("sub_state"),
@@ -422,6 +438,21 @@ class SystemdLifecycleExecutor:
         }
 
     # -------------------------------------------------------------------------- mutate
+
+    def lifecycle_attempt_completed(self, attempt_id: str, correlation: Mapping[str, Any]) -> bool:
+        unit = correlation.get(CORRELATION_UNIT)
+        instance = correlation.get("agent_instance_id")
+        if not isinstance(unit, str) or not isinstance(instance, str):
+            return False
+        try:
+            answer = self._client.systemd_service_lifecycle_status(
+                attempt_id=attempt_id, unit_id=unit, action=str(self._action),
+                agent_instance_id=instance)
+        except AgentError:
+            return False
+        return answer == {"agent_instance_id": instance, "attempt_id": attempt_id,
+                          "unit_id": unit, "action": str(self._action),
+                          "status": "completed"}
 
     def mutate(self, request: MutationRequest) -> MutationReport:
         """Ask the system manager to carry out this operation's verb. Never raises.
@@ -449,7 +480,8 @@ class SystemdLifecycleExecutor:
             )
         try:
             answer = self._client.systemd_service_lifecycle(
-                attempt_id=request.attempt_id, unit_id=unit_id, action=str(self._action)
+                attempt_id=request.attempt_id, unit_id=unit_id, action=str(self._action),
+                agent_instance_id=request.correlation.get("agent_instance_id"),
             )
         except AgentError as exc:
             # The branch that carries the whole distinction: the request either had not left
@@ -467,10 +499,17 @@ class SystemdLifecycleExecutor:
                         "unit_id": unit_id},
             )
 
-        mutation = answer.get("mutation") or {}
+        mutation = answer.get("mutation") if isinstance(answer, dict) else None
+        if (not isinstance(mutation, dict) or mutation.get("attempt_id") != request.attempt_id
+                or mutation.get("action") != str(self._action)
+                or mutation.get("unit_id") != unit_id
+                or answer.get("agent_instance_id") != request.correlation.get("agent_instance_id")):
+            return MutationReport(outcome=MutationOutcome.WRITE_UNKNOWN,
+                                  reason="unreadable_mutation_response",
+                                  attempt_id=request.attempt_id, detail={"unit_id": unit_id})
         try:
             outcome = MutationOutcome(mutation.get("outcome"))
-        except ValueError:
+        except (ValueError, TypeError):
             # The agent answered with something this build cannot read. The request was
             # certainly dispatched, so the honest reading of an unintelligible answer is that
             # the manager may have acted on it.
@@ -495,6 +534,7 @@ class SystemdLifecycleExecutor:
                 "invocation_id_at_dispatch": mutation.get("invocation_id"),
                 "manager_detail": mutation.get("detail") or {},
                 "agent_instance_id": answer.get("agent_instance_id"),
+                "handler_reply_validated": True,
             },
         )
 
@@ -515,6 +555,14 @@ class SystemdLifecycleExecutor:
         generation is compared with the one read at dispatch, and a restart is proven only if
         it moved. That is the manager's own record of the event, not an inference.
         """
+        expected_unit = expectation.correlation.get(CORRELATION_UNIT)
+        if (not isinstance(expected_unit, str) or not expected_unit
+                or facts.get("canonical_id") != expected_unit):
+            return ProofOfState(VerificationOutcome.VALUE_UNREADABLE,
+                                reason="execution_identity_unreadable")
+        if facts.get("current_job_state") != "none":
+            return ProofOfState(VerificationOutcome.VALUE_UNREADABLE,
+                                reason="systemd_job_not_proven_idle")
         state = facts.get("active_state")
         if not isinstance(state, str) or not state:
             return ProofOfState(
@@ -539,12 +587,17 @@ class SystemdLifecycleExecutor:
             return ProofOfState(VerificationOutcome.VERIFIED, state=state)
 
         observed = facts.get(CORRELATION_INVOCATION_ID)
-        if not isinstance(observed, str) or not observed:
+        if not _valid_invocation_id(observed):
             return ProofOfState(
                 VerificationOutcome.VALUE_UNREADABLE, state=state,
                 reason="invocation_id_unreadable",
             )
         baseline = expectation.correlation.get(CORRELATION_INVOCATION_ID)
+        if not _valid_invocation_id(baseline):
+            return ProofOfState(
+                VerificationOutcome.VALUE_UNREADABLE, state=state,
+                reason="restart_baseline_invocation_id_missing",
+            )
         if observed == baseline:
             return ProofOfState(
                 VerificationOutcome.MISMATCH, state=state,
@@ -567,22 +620,30 @@ class SystemdLifecycleExecutor:
             return ObservationAttempt(
                 record=None, failure="observation_unavailable", detail=exc.as_dict()
             )
+        detail = {"object_id": record.object_id, "sweep_id": result.sweep_id}
+        if (result.status != "ok" or result.host_id != record.host_id
+                or result.detail.get("scope") != "targeted"
+                or result.detail.get("requested_unit") != record.identity_value
+                or len(result.providers) != 1
+                or not isinstance(result.providers[0], dict)
+                or result.providers[0].get("provider") != PROVIDER_SYSTEMD
+                or result.providers[0].get("status") != "ok"):
+            return ObservationAttempt(record=None, failure="observation_unavailable", detail=detail)
         fresh = self._objects.get(record.object_id)
-        if fresh is None or fresh.observation is None:
-            return ObservationAttempt(
-                record=None, failure="target_absent", detail={"object_id": record.object_id}
-            )
-        if fresh.observation.sweep_id != result.sweep_id:
-            # The targeted read ran and did not see this unit — it was unloaded while the
-            # change was in flight. Handing back its previous observation would let a
-            # verification "prove" a state nobody has looked at since, which is precisely how
-            # a unit that vanished mid-change would be reported as fine.
-            return ObservationAttempt(
-                record=None,
-                failure="target_absent",
-                detail={"object_id": record.object_id, "sweep_id": result.sweep_id,
-                        "newest_observation_sweep_id": fresh.observation.sweep_id},
-            )
+        if (fresh is None or fresh.observation is None
+                or fresh.observation.sweep_id != result.sweep_id):
+            # Only an explicit absent result for the exact target proves loaded-unit absence.
+            # A failed, incomplete, or incompatible read must never reuse the previous sweep.
+            absent = (result.missing == [record.identity_value]
+                      and result.observation_count == 0 and result.object_count == 0)
+            return ObservationAttempt(record=None,
+                failure="target_absent" if absent else "observation_unavailable", detail=detail)
+        if (result.missing or fresh.host_id != record.host_id
+                or fresh.identity_value != record.identity_value
+                or fresh.observation.facts.get("canonical_id") != record.identity_value
+                or fresh.observation.provider != PROVIDER_SYSTEMD
+                or fresh.observation.capability != CAPABILITY_SYSTEMD_UNITS_OBSERVE):
+            return ObservationAttempt(record=None, failure="observation_unavailable", detail=detail)
         return ObservationAttempt(record=fresh)
 
     # ---------------------------------------------------------------- connection guard
@@ -641,4 +702,3 @@ def _parse(raw: str) -> datetime | None:
         return datetime.fromisoformat(raw)
     except (TypeError, ValueError):
         return None
-

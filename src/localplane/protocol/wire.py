@@ -89,6 +89,7 @@ class Method(StrEnum):
     SYSTEMD_RESOLVE_AGENT_UNIT = "systemd.resolve_agent_unit"
     SYSTEMD_OBSERVE_LIFECYCLE_CONTEXT = "systemd.observe_lifecycle_context"
     SYSTEMD_SERVICE_LIFECYCLE = "systemd.service_lifecycle"
+    SYSTEMD_SERVICE_LIFECYCLE_STATUS = "systemd.service_lifecycle_status"
 
 
 METHODS: Final[frozenset[str]] = frozenset(m.value for m in Method)

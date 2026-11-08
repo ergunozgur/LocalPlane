@@ -250,7 +250,7 @@ class AgentClient:
         )
 
     def systemd_service_lifecycle(
-        self, *, attempt_id: str, unit_id: str, action: str
+        self, *, attempt_id: str, unit_id: str, action: str, agent_instance_id: str | None = None
     ) -> dict[str, Any]:
         """One of the calls on this client that can change the host. Transport only.
 
@@ -271,9 +271,18 @@ class AgentClient:
         """
         return self.call(
             Method.SYSTEMD_SERVICE_LIFECYCLE,
-            {"attempt_id": attempt_id, "unit_id": unit_id, "action": action},
+            {"attempt_id": attempt_id, "unit_id": unit_id, "action": action,
+             **({"agent_instance_id": agent_instance_id} if agent_instance_id else {})},
             timeout_s=SYSTEMD_LIFECYCLE_CLIENT_TIMEOUT_S,
         )
+
+    def systemd_service_lifecycle_status(
+        self, *, attempt_id: str, unit_id: str, action: str, agent_instance_id: str
+    ) -> dict[str, Any]:
+        return self.call(Method.SYSTEMD_SERVICE_LIFECYCLE_STATUS, {
+            "attempt_id": attempt_id, "unit_id": unit_id, "action": action,
+            "agent_instance_id": agent_instance_id,
+        })
 
     # ------------------------------------------------------------------------ transport
 

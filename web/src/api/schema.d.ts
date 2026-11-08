@@ -1289,6 +1289,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/changes/{change_id}/recovery/assess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assess Change Recovery */
+        post: operations["assess_change_recovery_api_v1_changes__change_id__recovery_assess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/changes/{change_id}/recovery/retry": {
         parameters: {
             query?: never;
@@ -1717,6 +1734,9 @@ export interface components {
         ChangeRecovery: {
             /** Required */
             required: boolean;
+            /** Revision */
+            revision: number;
+            confirmation_requirement: components["schemas"]["RecoveryConfirmationRequirement"];
             /**
              * State
              * @description not_required | unresolved | resolved. `resolved` means the hold was released — by a retry that proved the end state, or by a person. It never means the change succeeded, and `result` is left saying exactly what it said.
@@ -1748,7 +1768,7 @@ export interface components {
             released_at: string | null;
             /**
              * Released By
-             * @description retry | resolve, or null while it is held.
+             * @description assess | retry | resolve, or null while held.
              */
             released_by: string | null;
             /** Released By Attempt Id */
@@ -1769,7 +1789,7 @@ export interface components {
             authority: components["schemas"]["RecoveryAuthority"] | null;
             /**
              * Available Actions
-             * @description What the operator can do next: `retry` re-attempts the original end state and looks before it writes; `confirm_retry` grants the authority a retry needs if it must write again; `resolve` releases the hold and claims nothing.
+             * @description Current controls, not a guarantee of dispatch eligibility: `assess` only reads; `retry` re-attempts the original end state and looks before it writes; `confirm_retry` grants the authority a retry needs if it must write again; `resolve` releases the hold and claims nothing.
              */
             available_actions: string[];
         };
@@ -4312,7 +4332,7 @@ export interface components {
         ReconciliationState: "in_sync" | "drifted" | "applying" | "unknown";
         /**
          * RecoveryAttemptView
-         * @description One recovery action against a Change: a retry, or a person releasing the hold.
+         * @description One assessment, retry, or manual hold release against a Change.
          *
          *     A **later, separate event**. Nothing here is a correction to the Change it belongs to —
          *     that record goes on saying what happened to it, and this says what somebody did about it
@@ -4325,7 +4345,7 @@ export interface components {
             sequence: number;
             /**
              * Kind
-             * @description retry | resolve.
+             * @description assess | retry | resolve.
              */
             kind: string;
             /**
@@ -4420,14 +4440,25 @@ export interface components {
         RecoveryConfirmRequest: {
             /**
              * Acknowledge
-             * @description Must be true. The same acknowledge method the original plan required.
+             * @description Must be true; typed plans also require the exact object name.
              */
             acknowledge: boolean;
+            /** Acknowledge Object */
+            acknowledge_object?: string | null;
             /**
              * Expected Recovery Reason
              * @description Optional cross-check. When given it must equal the change's recovery reason, so authority cannot be granted against a situation the caller has not seen.
              */
             expected_recovery_reason?: string | null;
+        };
+        /** RecoveryConfirmationRequirement */
+        RecoveryConfirmationRequirement: {
+            /** Method */
+            method: string;
+            /** Object Name */
+            object_name: string;
+            /** Policy */
+            policy: string;
         };
         /**
          * RecoveryHolds
@@ -5614,6 +5645,12 @@ export interface components {
             /** Template */
             template: string | null;
             current_job: components["schemas"]["SystemdJob"] | null;
+            /**
+             * Current Job State
+             * @default unreadable
+             * @enum {string}
+             */
+            current_job_state: "none" | "pending" | "unreadable";
             /**
              * Invocation Id
              * @description Execution-instance evidence. Never part of object identity.
@@ -8000,7 +8037,9 @@ export interface operations {
     confirm_change_recovery_api_v1_changes__change_id__recovery_confirm_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "If-Recovery-Revision"?: number | null;
+            };
             path: {
                 change_id: string;
             };
@@ -8050,10 +8089,64 @@ export interface operations {
             };
         };
     };
+    assess_change_recovery_api_v1_changes__change_id__recovery_assess_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Recovery-Revision"?: number | null;
+            };
+            path: {
+                change_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Change"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     retry_change_recovery_api_v1_changes__change_id__recovery_retry_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "If-Recovery-Revision"?: number | null;
+                "If-Recovery-Confirmation"?: string | null;
+            };
             path: {
                 change_id: string;
             };
@@ -8102,7 +8195,9 @@ export interface operations {
     resolve_change_recovery_api_v1_changes__change_id__recovery_resolve_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "If-Recovery-Revision"?: number | null;
+            };
             path: {
                 change_id: string;
             };

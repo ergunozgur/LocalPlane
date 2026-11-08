@@ -22,7 +22,8 @@ What these tests are mostly about is the difference between a job and a result:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -32,11 +33,12 @@ import pytest
 from localplane.agent.providers.systemd import SystemdProvider
 from localplane.agent.server import AgentServer
 from localplane.agent.service import AgentService
-from localplane.backend.agent_client import AgentClient
+from localplane.backend.agent_client import AgentClient, AgentError
 from localplane.backend.changes import ChangeService
 from localplane.backend.db.repositories import ObjectRecord
 from localplane.backend.domain.changes import (
     ChangeResult,
+    Expectation,
     HostEffect,
     MutationOutcome,
     RecoveryReason,
@@ -60,6 +62,7 @@ from localplane.backend.management import ManagementService
 from localplane.backend.operations import OPERATIONS, build_executors
 from localplane.backend.provenance import ProvenanceService
 from localplane.backend.runs import RunRefused, RunService
+from localplane.backend.systemd_operations import SystemdLifecycleExecutor
 from tests.test_systemd import _service, _unit
 from tests.test_systemd_dispatch import DispatchConnection, DispatchState
 
@@ -82,6 +85,7 @@ class Estate:
     ingestor: Ingestor
     runs: RunService
     changes: ChangeService
+    agent_service: AgentService
     host_id: str = ""
 
     # ----------------------------------------------------------------------- shortcuts
@@ -222,6 +226,7 @@ def estate(database, fake_root: Path, populated_sysfs: Path, working_runner, abs
         changes=ChangeService(
             database, runs, build_executors(client, coordinator, ingestor.objects)
         ),
+        agent_service=service,
     )
     estate.observe()
     try:
@@ -279,6 +284,381 @@ def test_a_restart_is_proven_only_by_a_new_execution_generation(estate: Estate):
     assert outcome.change.verification_outcome == str(VerificationOutcome.VERIFIED)
     assert outcome.change.verification_observed_state == "active"
     assert outcome.run.state == str(RunState.SUCCEEDED)
+
+
+def test_lost_reply_while_handler_is_active_blocks_recovery_until_completion(estate: Estate, monkeypatch):
+    entered, resume = threading.Event(), threading.Event()
+    original_dispatch = DispatchConnection.unit_lifecycle
+    original_call = estate.client.systemd_service_lifecycle
+    threads = []
+
+    def paused(connection, *args, **kwargs):
+        entered.set()
+        assert resume.wait(15)
+        return original_dispatch(connection, *args, **kwargs)
+
+    def lost_reply(**kwargs):
+        thread = threading.Thread(target=lambda: original_call(**kwargs))
+        threads.append(thread)
+        thread.start()
+        assert entered.wait(10)
+        raise AgentError("timeout", "response lost", dispatched=True)
+
+    monkeypatch.setattr(DispatchConnection, "unit_lifecycle", paused)
+    monkeypatch.setattr(estate.client, "systemd_service_lifecycle", lost_reply)
+    estate.state.on_dispatch = _restarted
+    try:
+        outcome = estate.run_through(SystemdServiceAction.RESTART)
+        change = outcome.change
+        assert change.mutation_outcome == "write_unknown"
+        assess = estate.changes.recovery_assess(change, estate.path())
+        assert assess.attempt.refusal_code == "recovery_executor_completion_unknown"
+        with pytest.raises(RunRefused, match="prior lifecycle handler"):
+            estate.changes.recovery_resolve(change, acknowledge=True, operator_statement=TARGET,
+                                            object_name=TARGET, note=None, expected_recovery_reason=None)
+        with pytest.raises(RunRefused, match="prior lifecycle handler"):
+            estate.changes.recovery_retry(change, estate.path(),
+                systemd_lifecycle_context=estate.context(SystemdServiceAction.RESTART))
+        assert estate.changes.lock_for(change.run_id) is not None
+    finally:
+        resume.set()
+        for thread in threads:
+            thread.join(15)
+    assert not threads[0].is_alive()
+    previous_instance = estate.agent_service._instance_id
+    estate.agent_service._instance_id = "agent_restarted"
+    try:
+        unknown = estate.changes.recovery_assess(change, estate.path())
+        assert unknown.attempt.refusal_code == "recovery_executor_completion_unknown"
+        assert unknown.hold.object_write_locked
+    finally:
+        estate.agent_service._instance_id = previous_instance
+    assessed = estate.changes.recovery_assess(change, estate.path())
+    assert assessed.attempt.outcome == "proven"
+    assert assessed.change.mutation_outcome == "write_unknown"
+    assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 1
+
+
+@pytest.mark.parametrize("action", ["assess", "retry", "resolve"])
+def test_prior_handler_completion_precedes_recovery_observation(estate: Estate, monkeypatch, action):
+    """A delayed handler cannot turn an earlier idle reading into a release or retry."""
+    entered, resume = threading.Event(), threading.Event()
+    original_dispatch = DispatchConnection.unit_lifecycle
+    original_call = estate.client.systemd_service_lifecycle
+    threads = []
+    estate.state.units[TARGET].update({"ActiveState": "inactive", "SubState": "dead"})
+    estate.observe()
+
+    def paused(connection, *args, **kwargs):
+        entered.set()
+        assert resume.wait(15)
+        return original_dispatch(connection, *args, **kwargs)
+
+    def lost_reply(**kwargs):
+        thread = threading.Thread(target=lambda: original_call(**kwargs))
+        threads.append(thread)
+        thread.start()
+        assert entered.wait(10)
+        raise AgentError("timeout", "response lost", dispatched=True)
+
+    monkeypatch.setattr(DispatchConnection, "unit_lifecycle", paused)
+    monkeypatch.setattr(estate.client, "systemd_service_lifecycle", lost_reply)
+    # The delayed start returns the service to a failed state after the tempting reading.
+    estate.state.on_dispatch = _stopped
+    try:
+        change = estate.run_through(SystemdServiceAction.START).change
+        grant = estate.changes.recovery_confirm(change, acknowledge=True,
+            acknowledge_object=TARGET, expected_recovery_reason=None, management_path=estate.path())
+        estate.state.units[TARGET].update({"ActiveState": "active", "SubState": "running"})
+        executor = estate.changes._executor(estate.runs.get(change.run_id))
+        original_observe = executor.observe
+        observed = []
+
+        def reading_then_dispatch(record):
+            reading = original_observe(record)
+            observed.append(True)
+            resume.set()
+            threads[0].join(15)
+            assert not threads[0].is_alive()
+            return reading
+
+        monkeypatch.setattr(executor, "observe", reading_then_dispatch)
+        if action == "assess":
+            result = estate.changes.recovery_assess(change, estate.path())
+            assert result.attempt.refusal_code == "recovery_executor_completion_unknown"
+            assert result.attempt.mutation_attempt_id is None
+        elif action == "retry":
+            with pytest.raises(RunRefused) as raised:
+                estate.changes.recovery_retry(change, estate.path(),
+                    systemd_lifecycle_context=estate.context(SystemdServiceAction.START),
+                    confirmation_id=grant.confirmation_id)
+            assert raised.value.code == "recovery_executor_completion_unknown"
+        else:
+            with pytest.raises(RunRefused) as raised:
+                estate.changes.recovery_resolve(change, acknowledge=True,
+                    operator_statement=TARGET, object_name=TARGET, note=None,
+                    expected_recovery_reason=None)
+            assert raised.value.code == "recovery_executor_completion_unknown"
+        assert observed == [], "an observation was taken while a prior handler could still dispatch"
+        assert estate.changes.lock_for(change.run_id) is not None
+        assert estate.changes.recovery_confirmation_for(change).confirmation_id == grant.confirmation_id
+        assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 0
+    finally:
+        resume.set()
+        for thread in threads:
+            thread.join(15)
+    assert not threads[0].is_alive()
+    monkeypatch.setattr(executor, "observe", original_observe)
+    fresh = estate.changes.recovery_assess(change, estate.path())
+    assert fresh.attempt.outcome == "refused"
+    assert fresh.hold.object_write_locked
+    assert estate.changes.recovery_confirmation_for(change).confirmation_id == grant.confirmation_id
+    assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 1
+
+
+@pytest.mark.parametrize("unit", [None, "other.service"])
+def test_mutation_reply_requires_exact_canonical_unit(estate: Estate, monkeypatch, unit):
+    original_call = estate.client.systemd_service_lifecycle
+
+    def altered_reply(**kwargs):
+        answer = original_call(**kwargs)
+        if unit is None:
+            answer["mutation"].pop("unit_id", None)
+        else:
+            answer["mutation"]["unit_id"] = unit
+        return answer
+
+    monkeypatch.setattr(estate.client, "systemd_service_lifecycle", altered_reply)
+    estate.state.on_dispatch = _stopped
+    outcome = estate.run_through(SystemdServiceAction.STOP)
+    change = estate.changes.get_change(outcome.change.change_id)
+    assert change.mutation_outcome == "write_unknown"
+    assert change.mutation_reason == "unreadable_mutation_response"
+    assert change.mutation_detail.get("handler_reply_validated") is not True
+    assert change.result == "recovery_required"
+    assert estate.changes.lock_for(change.run_id) is not None
+
+
+@pytest.mark.parametrize("action", ["assess", "retry", "resolve"])
+def test_handler_completing_during_status_query_requires_later_job_read(estate: Estate, monkeypatch, action):
+    entered, resume = threading.Event(), threading.Event()
+    original_dispatch = DispatchConnection.unit_lifecycle
+    original_call = estate.client.systemd_service_lifecycle
+    original_status = estate.client.systemd_service_lifecycle_status
+    threads = []
+    estate.state.units[TARGET].update({"ActiveState": "inactive", "SubState": "dead"})
+    estate.observe()
+
+    def paused(connection, *args, **kwargs):
+        entered.set()
+        assert resume.wait(15)
+        return original_dispatch(connection, *args, **kwargs)
+
+    def lost_reply(**kwargs):
+        thread = threading.Thread(target=lambda: original_call(**kwargs))
+        threads.append(thread)
+        thread.start()
+        assert entered.wait(10)
+        raise AgentError("timeout", "response lost", dispatched=True)
+
+    monkeypatch.setattr(DispatchConnection, "unit_lifecycle", paused)
+    monkeypatch.setattr(estate.client, "systemd_service_lifecycle", lost_reply)
+    estate.state.on_dispatch = _stopped
+    try:
+        change = estate.run_through(SystemdServiceAction.START).change
+        grant = estate.changes.recovery_confirm(change, acknowledge=True,
+            acknowledge_object=TARGET, expected_recovery_reason=None, management_path=estate.path())
+        estate.state.units[TARGET].update({"ActiveState": "active", "SubState": "running"})
+
+        def complete_during_status(**kwargs):
+            resume.set()
+            threads[0].join(15)
+            assert not threads[0].is_alive()
+            estate.state.units[TARGET]["Job"] = (7, "/org/freedesktop/systemd1/job/7")
+            return original_status(**kwargs)
+
+        monkeypatch.setattr(estate.client, "systemd_service_lifecycle_status", complete_during_status)
+        if action == "assess":
+            result = estate.changes.recovery_assess(change, estate.path())
+            assert result.attempt.refusal_code == "recovery_systemd_job_unsettled"
+        elif action == "retry":
+            with pytest.raises(RunRefused) as raised:
+                estate.changes.recovery_retry(change, estate.path(),
+                    systemd_lifecycle_context=estate.context(SystemdServiceAction.START),
+                    confirmation_id=grant.confirmation_id)
+            assert raised.value.code == "recovery_systemd_job_unsettled"
+        else:
+            with pytest.raises(RunRefused) as raised:
+                estate.changes.recovery_resolve(change, acknowledge=True,
+                    operator_statement=TARGET, object_name=TARGET, note=None,
+                    expected_recovery_reason=None)
+            assert raised.value.code == "recovery_systemd_job_unsettled"
+        assert estate.changes.lock_for(change.run_id) is not None
+        assert estate.changes.recovery_confirmation_for(change).confirmation_id == grant.confirmation_id
+        assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 1
+        monkeypatch.setattr(estate.client, "systemd_service_lifecycle_status", original_status)
+        estate.state.units[TARGET].update({"Job": (0, "/"), "ActiveState": "active", "SubState": "running"})
+        fresh = estate.changes.recovery_assess(change, estate.path())
+        assert fresh.attempt.outcome == "proven"
+        assert fresh.change.mutation_outcome == "write_unknown"
+        assert estate.changes.recovery_confirmation_for(change).confirmation_id == grant.confirmation_id
+        assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 1
+    finally:
+        resume.set()
+        for thread in threads:
+            thread.join(15)
+
+
+def test_receipts_bind_attempt_and_refuse_duplicates_and_exhaustion(estate: Estate):
+    instance = estate.agent_service.instance_id
+    args = {"attempt_id": "att_test", "unit_id": TARGET, "action": "restart",
+            "agent_instance_id": instance}
+    estate.client.systemd_service_lifecycle(**args)
+    assert estate.client.systemd_service_lifecycle_status(**args)["status"] == "completed"
+    assert estate.client.systemd_service_lifecycle_status(**{**args, "agent_instance_id": "old"})["status"] == "unknown"
+    assert estate.client.systemd_service_lifecycle_status(**{**args, "unit_id": "other.service"})["status"] == "unknown"
+    with pytest.raises(AgentError):
+        estate.client.systemd_service_lifecycle(**args)
+    estate.agent_service._lifecycle_receipts.update(
+        {f"filled-{i}": (TARGET, "restart", "completed") for i in range(4095)})
+    refusal = estate.client.systemd_service_lifecycle(**{**args, "attempt_id": "overflow"})
+    assert refusal["agent_instance_id"] == instance
+    assert refusal["mutation"]["outcome"] == "not_written"
+    assert refusal["mutation"]["reason"] == "lifecycle_receipt_capacity_exhausted"
+    assert refusal["mutation"]["attempt_id"] == "overflow"
+    assert refusal["mutation"]["unit_id"] == TARGET
+    assert refusal["mutation"]["action"] == "restart"
+    assert estate.client.systemd_service_lifecycle_status(
+        **{**args, "attempt_id": "overflow"})["status"] == "unknown"
+    assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 1
+
+
+def _fill_lifecycle_receipts(estate: Estate) -> None:
+    receipts = estate.agent_service._lifecycle_receipts
+    for index in range(4096 - len(receipts)):
+        receipts[f"filled-{index}"] = (TARGET, "restart", "completed")
+    assert len(receipts) == 4096
+
+
+def test_capacity_refusal_on_apply_is_not_written_and_does_not_hold(estate: Estate):
+    _fill_lifecycle_receipts(estate)
+    outcome = estate.run_through(SystemdServiceAction.RESTART)
+    assert outcome.change.mutation_outcome == "not_written"
+    assert outcome.change.mutation_reason == "lifecycle_receipt_capacity_exhausted"
+    assert outcome.change.mutation_detail["handler_reply_validated"] is True
+    assert outcome.change.result == "failed"
+    assert estate.changes.lock_for(outcome.run.run_id) is None
+    assert estate.changes.confirmation_for(outcome.run.run_id).consumed is True
+    assert not [c for c in estate.state.calls if c[0] == "unit_lifecycle"]
+    assert len(estate.agent_service._lifecycle_receipts) == 4096
+
+
+@pytest.mark.parametrize("disposition", ["assess", "resolve"])
+def test_capacity_refusal_on_recovery_retry_keeps_hold_recoverable(estate: Estate, disposition):
+    estate.state.withhold_result = True
+    change = estate.run_through(SystemdServiceAction.RESTART).change
+    assert change.mutation_outcome == "write_unknown"
+    original_detail = dict(change.mutation_detail)
+    _fill_lifecycle_receipts(estate)
+    grant = estate.changes.recovery_confirm(change, acknowledge=True, acknowledge_object=TARGET,
+        expected_recovery_reason=None, management_path=estate.path())
+    result = estate.changes.recovery_retry(change, estate.path(),
+        systemd_lifecycle_context=estate.context(SystemdServiceAction.RESTART),
+        confirmation_id=grant.confirmation_id)
+    assert result.attempt.outcome == "not_written"
+    assert result.attempt.mutation_reason == "lifecycle_receipt_capacity_exhausted"
+    assert result.attempt.mutation_detail["handler_reply_validated"] is True
+    assert result.attempt.confirmation_id == grant.confirmation_id
+    assert estate.changes.recovery_confirmation_for(change) is None
+    assert result.hold.object_write_locked
+    assert result.change.mutation_outcome == "write_unknown"
+    assert result.change.mutation_detail == original_detail
+    assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 1
+
+    if disposition == "assess":
+        estate.state.units[TARGET]["InvocationID"] = NEW_INVOCATION
+        completed = estate.changes.recovery_assess(change, estate.path())
+        assert completed.attempt.outcome == "proven"
+    else:
+        completed = estate.changes.recovery_resolve(change, acknowledge=True,
+            operator_statement=TARGET, object_name=TARGET, note=None, expected_recovery_reason=None)
+        assert completed.attempt.outcome == "resolved"
+    assert not completed.hold.object_write_locked
+    assert completed.change.mutation_outcome == "write_unknown"
+    assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 1
+    assert len(estate.agent_service._lifecycle_receipts) == 4096
+
+
+@pytest.mark.parametrize("damage", ["attempt", "unit", "action", "instance", "missing", "outcome", "lost", "error"])
+def test_capacity_reply_requires_exact_correlation_and_delivery(estate: Estate, monkeypatch, damage):
+    _fill_lifecycle_receipts(estate)
+    original_call = estate.client.systemd_service_lifecycle
+
+    def damaged_reply(**kwargs):
+        answer = original_call(**kwargs)
+        if damage == "lost":
+            raise AgentError("timeout", "response lost", dispatched=True)
+        if damage == "error":
+            raise AgentError("capability_unavailable", "capacity", dispatched=True)
+        if damage == "missing":
+            return {"agent_instance_id": answer["agent_instance_id"]}
+        if damage == "instance":
+            answer["agent_instance_id"] = "agent_other"
+        elif damage == "outcome":
+            answer["mutation"]["outcome"] = "unreadable"
+        else:
+            answer["mutation"][{"attempt": "attempt_id", "unit": "unit_id", "action": "action"}[damage]] = "wrong"
+        return answer
+
+    monkeypatch.setattr(estate.client, "systemd_service_lifecycle", damaged_reply)
+    outcome = estate.run_through(SystemdServiceAction.RESTART)
+    assert outcome.change.mutation_outcome == "write_unknown"
+    assert outcome.change.mutation_detail.get("handler_reply_validated") is not True
+    assert outcome.change.result == "recovery_required"
+    assert estate.changes.lock_for(outcome.run.run_id) is not None
+    assessed = estate.changes.recovery_assess(outcome.change, estate.path())
+    assert assessed.attempt.refusal_code == "recovery_executor_completion_unknown"
+    assert assessed.hold.object_write_locked
+    assert not [c for c in estate.state.calls if c[0] == "unit_lifecycle"]
+
+
+@pytest.mark.parametrize("damage", ["lost", "unit"])
+def test_ambiguous_capacity_retry_keeps_hold_without_trusting_missing_receipt(estate: Estate, monkeypatch, damage):
+    estate.state.withhold_result = True
+    change = estate.run_through(SystemdServiceAction.RESTART).change
+    _fill_lifecycle_receipts(estate)
+    grant = estate.changes.recovery_confirm(change, acknowledge=True, acknowledge_object=TARGET,
+        expected_recovery_reason=None, management_path=estate.path())
+    original_call = estate.client.systemd_service_lifecycle
+
+    def damaged_reply(**kwargs):
+        answer = original_call(**kwargs)
+        if damage == "lost":
+            raise AgentError("timeout", "response lost", dispatched=True)
+        answer["mutation"]["unit_id"] = "other.service"
+        return answer
+
+    monkeypatch.setattr(estate.client, "systemd_service_lifecycle", damaged_reply)
+    retry = estate.changes.recovery_retry(change, estate.path(),
+        systemd_lifecycle_context=estate.context(SystemdServiceAction.RESTART),
+        confirmation_id=grant.confirmation_id)
+    assert retry.attempt.outcome == "write_unknown"
+    assert retry.attempt.mutation_detail.get("handler_reply_validated") is not True
+    assessed = estate.changes.recovery_assess(change, estate.path())
+    assert assessed.attempt.refusal_code == "recovery_executor_completion_unknown"
+    assert assessed.hold.object_write_locked
+    assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 1
+
+
+@pytest.mark.parametrize("baseline", [None, "", "garbage", "0" * 32])
+def test_restart_proof_requires_a_valid_original_generation(baseline):
+    executor = SystemdLifecycleExecutor(SystemdServiceAction.RESTART, None, None, None)
+    proof = executor.prove(
+        {"canonical_id": TARGET, "current_job_state": "none", "active_state": "active", "sub_state": "running", "invocation_id": "02" * 16},
+        Expectation(kind="state", state="active", correlation={"unit_id": TARGET, "invocation_id": baseline}),
+    )
+    assert proof.outcome == VerificationOutcome.VALUE_UNREADABLE
+    assert proof.reason == "restart_baseline_invocation_id_missing"
 
 
 def test_a_restart_that_did_not_restart_is_not_verified(estate: Estate):
@@ -420,6 +800,86 @@ def test_a_unit_that_vanished_mid_change_cannot_be_verified_from_a_stale_reading
     assert outcome.change.recovery_reason == str(
         RecoveryReason.TARGET_ABSENT_AFTER_MUTATION
     )
+
+
+def test_failed_targeted_read_is_unavailable_not_absent(estate: Estate, monkeypatch):
+    original = estate.client.observe_systemd_unit
+
+    def failed_read(unit_id):
+        payload = original(unit_id)
+        payload["observation"].update({"status": "failed", "unit": None,
+                                      "reason": "targeted_unit_read_failed"})
+        return payload
+
+    monkeypatch.setattr(estate.client, "observe_systemd_unit", failed_read)
+    estate.state.on_dispatch = _stopped
+    outcome = estate.run_through(SystemdServiceAction.STOP)
+    assert outcome.change.mutation_outcome == "written"
+    assert outcome.change.verification_outcome == "observation_unavailable"
+    assert outcome.change.recovery_reason == "action_verification_unavailable"
+    assert estate.changes.lock_for(outcome.run.run_id) is not None
+
+
+def test_failed_recovery_read_keeps_hold_without_claiming_absence(estate: Estate, monkeypatch):
+    estate.state.withhold_result = True
+    change = estate.run_through(SystemdServiceAction.RESTART).change
+    original = estate.client.observe_systemd_unit
+
+    def failed_read(unit_id):
+        payload = original(unit_id)
+        payload["observation"].update({"status": "failed", "unit": None,
+                                      "reason": "targeted_unit_read_failed"})
+        return payload
+
+    monkeypatch.setattr(estate.client, "observe_systemd_unit", failed_read)
+    result = estate.changes.recovery_assess(change, estate.path())
+    assert result.attempt.evidence_outcome == "observation_unavailable"
+    assert result.attempt.refusal_code == "recovery_systemd_observation_unavailable"
+    assert result.hold.object_write_locked
+    assert result.change.mutation_outcome == "write_unknown"
+
+
+@pytest.mark.parametrize("corruption", ["failed", "wrong_host", "wrong_scope", "wrong_target", "wrong_provider", "malformed_provider", "no_evidence"])
+def test_incompatible_targeted_sweep_cannot_prove_or_claim_absence(estate: Estate, monkeypatch, corruption):
+    original = estate.coordinator.refresh_systemd_unit
+    executor = estate.changes._executor(estate.runs.get(estate.plan(SystemdServiceAction.STOP).run.run_id))
+
+    def incompatible(unit_id):
+        result = original(unit_id)
+        if corruption == "failed":
+            return replace(result, status="failed")
+        if corruption == "wrong_host":
+            return replace(result, host_id="other")
+        if corruption == "wrong_scope":
+            return replace(result, detail={**result.detail, "scope": "inventory"})
+        if corruption == "wrong_target":
+            return replace(result, detail={**result.detail, "requested_unit": "other.service"})
+        if corruption == "wrong_provider":
+            return replace(result, providers=[{"provider": "other", "status": "ok"}])
+        if corruption == "malformed_provider":
+            return replace(result, providers=[None])
+        return replace(result, sweep_id="missing-sweep", missing=[])
+
+    monkeypatch.setattr(estate.coordinator, "refresh_systemd_unit", incompatible)
+    attempt = executor.observe(estate.target())
+    assert attempt.record is None
+    assert attempt.failure == "observation_unavailable"
+
+
+def test_different_canonical_unit_cannot_replace_target_observation(estate: Estate, monkeypatch):
+    original = estate.client.observe_systemd_unit
+    run = estate.plan(SystemdServiceAction.STOP).run
+    executor = estate.changes._executor(run)
+
+    def other_unit(unit_id):
+        payload = original(unit_id)
+        payload["observation"]["unit"]["facts"]["canonical_id"] = "other.service"
+        return payload
+
+    monkeypatch.setattr(estate.client, "observe_systemd_unit", other_unit)
+    result = executor.observe(estate.target())
+    assert result.record is None
+    assert result.failure == "observation_unavailable"
 
 
 # ------------------------------------------------------------- the plan and its authority
@@ -568,7 +1028,7 @@ def test_a_restart_that_did_happen_is_proven_by_recovery_without_writing_again(
     """The backend returned. A fresh reading settles it, and no second job is dispatched.
 
     The comparison is against the **original** pre-dispatch generation, which is what makes
-    this a proof that *this* restart happened rather than that some restart did.
+    this proof of the required end state rather than attribution to the original attempt.
     """
     estate.state.on_dispatch = _restarted
     estate.state.withhold_result = True
@@ -596,10 +1056,8 @@ def test_a_restart_that_did_not_happen_cannot_be_retried_into_a_second_write(
     """The generation is the one from before, so nothing is proven — and nothing is retried.
 
     A retry that would dispatch a *new* mutation needs authority this build can record, and
-    what a systemd lifecycle plan requires is the typed method. Recovery accepts only an
-    acknowledgement, so the honest ending is a refusal that wrote nothing rather than a
-    second job nobody authorised. The hold stays, and a person settles it — by looking, or
-    by resolving it.
+    what a systemd lifecycle plan requires is the typed method. Without that separate grant
+    the honest ending is a refusal rather than a second job nobody authorised.
     """
     estate.state.withhold_result = True
     outcome = estate.run_through(SystemdServiceAction.RESTART)
@@ -612,10 +1070,49 @@ def test_a_restart_that_did_not_happen_cannot_be_retried_into_a_second_write(
             systemd_lifecycle_context=estate.context(SystemdServiceAction.RESTART),
         )
 
-    assert raised.value.code == "confirmation_method_unsupported"
+    assert raised.value.code == "recovery_confirmation_required"
     # Nothing was dispatched a second time, and the hold is still held.
     assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == dispatches
     assert estate.changes.lock_for(outcome.run.run_id) is not None
+
+
+def test_typed_recovery_grant_authorizes_one_retry(estate: Estate):
+    estate.state.withhold_result = True
+    outcome = estate.run_through(SystemdServiceAction.RESTART)
+    change = outcome.change
+    with pytest.raises(RunRefused):
+        estate.changes.recovery_confirm(change, acknowledge=True, acknowledge_object="wrong",
+            expected_recovery_reason=None, management_path=estate.path())
+    grant = estate.changes.recovery_confirm(change, acknowledge=True, acknowledge_object=TARGET,
+        expected_recovery_reason=None, management_path=estate.path())
+    assert grant.method == "typed"
+    estate.state.withhold_result = False
+    estate.state.on_dispatch = _restarted
+    revision = estate.changes.recovery_revision(change)
+    result = estate.changes.recovery_retry(change, estate.path(),
+        systemd_lifecycle_context=estate.context(SystemdServiceAction.RESTART),
+        recovery_revision=revision, confirmation_id=grant.confirmation_id)
+    assert result.attempt.outcome == "verified"
+    assert result.attempt.confirmation_id == grant.confirmation_id
+    assert len([c for c in estate.state.calls if c[0] == "unit_lifecycle"]) == 2
+
+
+@pytest.mark.parametrize("job", [(7, "/org/freedesktop/systemd1/job/7"), None, (0, "/bad")])
+def test_recovery_cannot_release_while_job_is_pending_or_unreadable(estate: Estate, job):
+    estate.state.withhold_result = True
+    estate.state.on_dispatch = _restarted
+    change = estate.run_through(SystemdServiceAction.RESTART).change
+    if job is None:
+        del estate.state.units[TARGET]["Job"]
+    else:
+        estate.state.units[TARGET]["Job"] = job
+    result = estate.changes.recovery_assess(change, estate.path())
+    assert result.attempt.refusal_code == "recovery_systemd_job_unsettled"
+    with pytest.raises(RunRefused) as raised:
+        estate.changes.recovery_resolve(change, acknowledge=True, operator_statement=TARGET,
+            object_name=TARGET, note=None, expected_recovery_reason=None)
+    assert raised.value.code == "recovery_systemd_job_unsettled"
+    assert estate.changes.lock_for(change.run_id) is not None
 
 
 # ------------------------------------------------------------------- the closed surface

@@ -31,12 +31,12 @@ export function RunComposer({ run, controller }: { run: Run; controller: Control
   const ordinary = buildOffersControl(run.operation) && preWrite && valid && supportedMethod && gate.state === 'executable' && gate.mayOfferControl && !controller.applyAttempted;
   const confirmed = !confirmation.required || (confirmation.satisfied && run.confirmation?.preview_id === preview.preview_id && run.confirmation.preview_digest === preview.preview_digest && run.confirmation.method === confirmation.method && !run.confirmation.consumed);
   useEffect(() => {
-    if (!focusAfterConfirm.current || controller.pending) return;
+    if (!focusAfterConfirm.current || controller.pending || controller.reading) return;
     focusAfterConfirm.current = false;
     // Do not pull focus away if the operator moved to another control during the request.
     if (confirmed && document.activeElement === document.body) applyRef.current?.focus();
-  }, [confirmed, controller.pending]);
-  const canConfirm = ordinary && idle && confirmation.required && !confirmation.satisfied && acknowledged && (confirmation.method !== 'typed' || typed === preview.what.object_name);
+  }, [confirmed, controller.pending, controller.reading]);
+  const canConfirm = ordinary && idle && !controller.confirmationAttempted && confirmation.required && !confirmation.satisfied && acknowledged && (confirmation.method !== 'typed' || typed === preview.what.object_name);
   const confirm = (): void => {
     if (!canConfirm) return;
     focusAfterConfirm.current = true;
@@ -45,7 +45,7 @@ export function RunComposer({ run, controller }: { run: Run; controller: Control
       expected_preview_digest: preview.preview_digest,
       acknowledge: true,
       ...(confirmation.method === 'typed' ? { acknowledge_object: typed } : {}),
-    }));
+    }), `Confirming:${preview.preview_id}:${preview.preview_digest}`);
   };
   return <Plate className={styles.composer} aria-label="Change Composer">
     <PlateHead title="Change Composer" meta={`${preview.risk.tier} risk`} />
@@ -61,6 +61,8 @@ export function RunComposer({ run, controller }: { run: Run; controller: Control
       {preWrite && !ordinary && !controller.applyAttempted ? <p className={styles.note}>Ordinary apply is unavailable. Read the execution, protection, validity and confirmation evidence below.{!supportedMethod ? ' This confirmation method is not supported here.' : ''}</p> : null}
       {loopbackTransportGap ? <p className={styles.connectionHelp} role="note">This connection cannot establish management-path protection. Use the supported direct HTTPS Operator Console; HTTPS, sign-in, or agent capability does not clear the published gate, and other protection, containment, effect, or OS-authorization blockers may remain.</p> : null}
       {controller.applyAttempted ? <p className={styles.note}>An apply request was attempted from this tab. It will not be repeated here. Refresh this Run and inspect its Change for the recorded outcome.</p> : null}
+      {controller.confirmationAttempted && !confirmed ? <p className={styles.note}>A confirmation request was attempted. Read this same Run to reconcile its delivery; an absent confirmation does not authorize replay.</p> : null}
+      {controller.watchStopped ? <p className={styles.note}>Automatic read budget reached. Refresh this same Run manually to continue.</p> : null}
       <div role="status" aria-live="polite">
         {controller.pending ? `${controller.pending}… The backend owns this Run.` : controller.reading ? 'Reading the Run…' : `Recorded state: ${run.state}; host effect: ${run.host_effect}.`}
       </div>
@@ -69,12 +71,12 @@ export function RunComposer({ run, controller }: { run: Run; controller: Control
         <p>{run.change.mutation.reason} {run.change.recovery.reason}</p>
       </div> : null}
       {controller.actionError ? <RequestFailure error={controller.actionError} /> : null}
-      {controller.readError ? <RequestFailure error={controller.readError} /> : null}
+      {controller.readError ? <><p className={styles.note}>Retained Run data may be stale; current recorded status could not be read.</p><RequestFailure error={controller.readError} /></> : null}
       <div className={styles.actions}>
         {ordinary && confirmation.required && !confirmation.satisfied ? <button type="button" className={`${styles.button} ${styles.primary}`} disabled={!canConfirm} onClick={confirm}>Confirm preview</button> : null}
         {buildOffersControl(run.operation) && preWrite ? <button ref={applyRef} type="button" className={`${styles.button} ${styles.primary}`} disabled={!ordinary || !confirmed || !idle} onClick={() => { if (ordinary && confirmed && idle) void controller.act('Applying', () => endpoints.applyRun(run.run_id)); }}>Apply approved preview</button> : null}
         {buildOffersControl(run.operation) && preWrite && !controller.applyAttempted ? <button type="button" className={styles.button} disabled={!idle} onClick={() => { if (idle) void controller.act('Cancelling', () => endpoints.cancelRun(run.run_id)); }}>Cancel before write</button> : null}
-        <button type="button" className={styles.button} disabled={!!controller.pending || controller.reading} onClick={controller.refresh}>Refresh Run</button>
+        <button type="button" className={styles.button} disabled={controller.reading} onClick={controller.refresh}>Refresh Run</button>
         <Link to="/operations?tab=runs">Close Composer</Link>
         {run.change_id ? <Link to={`/operations/changes/${encodeURIComponent(run.change_id)}`}>Inspect Change outcome and verification</Link> : null}
       </div>

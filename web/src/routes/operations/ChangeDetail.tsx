@@ -11,25 +11,23 @@
  * reading the value back — that answers what the host holds now, which is a different
  * question from whether this write occurred.
  */
-import { useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { endpoints } from '@/api/endpoints';
-import { useResource } from '@/hooks/useResource';
+import { useRecovery } from '@/hooks/useRecovery';
+import { RecoveryPanel } from '@/components/composer/RecoveryPanel';
+import { RequestFailure } from '@/components/composer/RunComposer';
 import { Plate, PlateBody, PlateHead } from '@/components/primitives/Plate';
 import { KeyValue, KeyValueList } from '@/components/primitives/KeyValue';
 import { DataTable } from '@/components/primitives/DataTable';
 import { Tag } from '@/components/primitives/Chip';
 import { StatusPill } from '@/components/semantic/StatusPill';
 import { Value } from '@/components/semantic/UnknownValue';
-import { Conclusion, Gaps, RawEvidence, Disclosure } from '@/components/semantic/Evidence';
-import { ResourceView } from '@/components/states/ResourceView';
+import { Conclusion } from '@/components/semantic/Evidence';
 import { Empty } from '@/components/states/SurfaceState';
 import { PageHeader } from '../PageHeader';
 import {
   changeResult,
   hostEffect,
   mutationOutcome,
-  recoveryState,
   verificationOutcome,
 } from '@/domain/vocabulary';
 import { formatTimestamp, formatTypedValue } from '@/domain/format';
@@ -37,14 +35,11 @@ import styles from './ChangeDetail.module.css';
 
 export function ChangeDetail(): JSX.Element {
   const { changeId = '' } = useParams();
-  const { resource } = useResource(
-    `change:${changeId}`,
-    useCallback((signal) => endpoints.change(changeId, { signal }), [changeId]),
-  );
+  const controller = useRecovery(changeId);
+  const change = controller.change;
+  if (!change) return <><PageHeader title="Change" back={{ to: '/operations', label: 'Operations' }} />{controller.readError ? <RequestFailure error={controller.readError} /> : <p role="status">Reading change…</p>}<button type="button" onClick={controller.refresh}>Refresh recorded status</button></>;
 
   return (
-    <ResourceView resource={resource} what="change" loadingLabel="Reading change…">
-      {(change) => (
         <>
           <PageHeader
             title={<span className="mono">{change.operation}</span>}
@@ -54,6 +49,8 @@ export function ChangeDetail(): JSX.Element {
             <StatusPill semantic={changeResult(change.result)} token={change.result} />
             <StatusPill semantic={hostEffect(change.host_effect)} />
           </PageHeader>
+
+          <RecoveryPanel key={change.change_id} change={change} controller={controller} />
 
           {/* The ladder. Four questions, asked in order, never merged. */}
           <Plate className={styles.ladder}>
@@ -208,53 +205,6 @@ export function ChangeDetail(): JSX.Element {
             </div>
 
             <div className={styles.column}>
-              <Plate tone={change.recovery.required ? 'attention' : undefined}>
-                <PlateHead title="Recovery" level={3} />
-                <PlateBody>
-                  <Conclusion
-                    semantic={recoveryState(change.recovery.state)}
-                    token={change.recovery.state}
-                    why={change.recovery.reason}
-                  />
-                  <KeyValueList>
-                    <KeyValue label="Required">{change.recovery.required ? 'yes' : 'no'}</KeyValue>
-                    <KeyValue
-                      label="Object write locked"
-                      hint={change.recovery.object_write_locked ? 'held until somebody looks' : undefined}
-                    >
-                      {change.recovery.object_write_locked ? 'yes' : 'no'}
-                    </KeyValue>
-                    <KeyValue label="Released"><Value value={formatTimestamp(change.recovery.released_at)} /></KeyValue>
-                    <KeyValue label="Released by"><Value value={change.recovery.released_by} mono /></KeyValue>
-                    <KeyValue label="Attempts">{change.recovery.attempts.length}</KeyValue>
-                  </KeyValueList>
-
-                  <Gaps items={change.recovery.unknown} label="What is not established" />
-
-                  {change.recovery.available_actions.length > 0 ? (
-                    <div className={styles.actions}>
-                      <div className="label">Actions the backend would accept</div>
-                      <ul className={styles.actionList}>
-                        {change.recovery.available_actions.map((action) => (
-                          <li key={action}><Tag>{action}</Tag></li>
-                        ))}
-                      </ul>
-                      <p className={styles.actionNote}>
-                        Listed as record, not offered as controls. Retry reads first; a fresh write
-                        may need explicit authority. Human release is no host mutation and no
-                        retrospective verification.
-                      </p>
-                    </div>
-                  ) : null}
-
-                  {Object.keys(change.recovery.known).length > 0 ? (
-                    <Disclosure summary="What is established">
-                      <RawEvidence value={change.recovery.known} maxChars={4000} />
-                    </Disclosure>
-                  ) : null}
-                </PlateBody>
-              </Plate>
-
               <Plate>
                 <PlateHead title="Rollback" level={3} />
                 <PlateBody>
@@ -281,8 +231,6 @@ export function ChangeDetail(): JSX.Element {
             </div>
           </div>
         </>
-      )}
-    </ResourceView>
   );
 }
 

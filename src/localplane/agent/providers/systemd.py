@@ -2544,6 +2544,7 @@ def _normalise_unit(
         "drop_in_paths": drop_ins,
         "transient": _bool_or_none(optional(unit, "Transient", "unit")),
         "current_job": _job_or_none(optional(unit, "Job", "unit")),
+        "current_job_state": _reactivation_job_state(unit.get("Job")),
         "invocation_id": _invocation_id(optional(unit, "InvocationID", "unit")),
         "timestamps": {
             _snake(name): _timestamp_or_none(optional(unit, name, "unit"))

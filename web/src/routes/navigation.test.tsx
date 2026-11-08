@@ -292,19 +292,20 @@ describe('change detail — the five outcomes stay five', () => {
   it('presents recovery_required as a truthful ending holding a lock', async () => {
     stubBackend();
     renderAt('/operations/changes/chg_1');
-    await screen.findByText('Recovery');
+    const recovery = await screen.findByRole('region', { name: 'Recovery console' });
     expect(screen.getAllByText('recovery required').length).toBeGreaterThan(0);
-    const locked = screen.getByText('Object write locked').closest('div') as HTMLElement;
-    expect(within(locked).getByText('yes')).toBeInTheDocument();
+    const locked = within(recovery).getByText('Current object write lock').closest('div') as HTMLElement;
+    expect(within(locked).getByText('Held')).toBeInTheDocument();
+    expect(within(recovery).getByText('This object only, not the whole host.')).toBeInTheDocument();
   });
 
-  it('lists recovery actions as record without offering them as controls', async () => {
+  it('offers read-only recovery visibility without promoting unsupported MTU or Docker controls', async () => {
     stubBackend();
     renderAt('/operations/changes/chg_1');
-    await screen.findByText('retry');
-    expect(screen.getByText('resolve')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^retry$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^resolve$/i })).not.toBeInTheDocument();
+    const recovery = await screen.findByRole('region', { name: 'Recovery console' });
+    expect(recovery).toHaveTextContent('network.interface.reconcile_mtu');
+    expect(within(recovery).getByRole('button', { name: 'Refresh recorded status' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /assess|grant|retry|release|apply|confirm|reconcile|adopt|start|stop|restart/i })).not.toBeInTheDocument();
   });
 });
 

@@ -306,6 +306,10 @@ def test_lifecycle_uses_a_fixed_typed_budget_without_changing_other_calls(monkey
     monkeypatch.setattr(ipc, "call", record)
     client = AgentClient("unused.sock", timeout_s=0.001)
     client.systemd_service_lifecycle(attempt_id="a", unit_id="alpha.service", action="start")
+    client.systemd_service_lifecycle(attempt_id="a", unit_id="alpha.service", action="start",
+                                     agent_instance_id="agent_1")
+    client.systemd_service_lifecycle_status(attempt_id="a", unit_id="alpha.service",
+                                            action="start", agent_instance_id="agent_1")
     client.hello()
     client.container_lifecycle(attempt_id="a", container_id="b", action="start")
     assert SYSTEMD_LIFECYCLE_CLIENT_TIMEOUT_S == 150.0
@@ -315,12 +319,21 @@ def test_lifecycle_uses_a_fixed_typed_budget_without_changing_other_calls(monkey
     assert calls == [
         ("systemd.service_lifecycle", 150.0,
          {"attempt_id": "a", "unit_id": "alpha.service", "action": "start"}),
+        ("systemd.service_lifecycle", 150.0,
+         {"attempt_id": "a", "unit_id": "alpha.service", "action": "start",
+          "agent_instance_id": "agent_1"}),
+        ("systemd.service_lifecycle_status", 0.001,
+         {"attempt_id": "a", "unit_id": "alpha.service", "action": "start",
+          "agent_instance_id": "agent_1"}),
         ("agent.hello", 0.001, None),
         ("docker.container_lifecycle", 0.001,
          {"attempt_id": "a", "container_id": "b", "action": "start"}),
     ]
     assert list(inspect.signature(client.systemd_service_lifecycle).parameters) == [
-        "attempt_id", "unit_id", "action",
+        "attempt_id", "unit_id", "action", "agent_instance_id",
+    ]
+    assert list(inspect.signature(client.systemd_service_lifecycle_status).parameters) == [
+        "attempt_id", "unit_id", "action", "agent_instance_id",
     ]
 
 

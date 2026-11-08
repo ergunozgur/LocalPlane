@@ -77,6 +77,39 @@ def into_recovery(planned: _Wired) -> dict:
 # ------------------------------------------------------------------------------ the surface
 
 
+def test_assessment_revision_and_embedded_change_agree(planned: _Wired):
+    change = into_recovery(planned)
+    base = f"{API}/changes/{change['change_id']}"
+    initial = planned.client.get(base).json()
+    revision = initial["recovery"]["revision"]
+    grant = planned.client.post(f"{base}/recovery/confirm", json={"acknowledge": True},
+                                headers={"If-Recovery-Revision": str(revision)})
+    assert grant.status_code == 200
+    confirmation = grant.json()["recovery"]["authority"]["confirmation_id"]
+    stale = planned.client.post(f"{base}/recovery/assess",
+                                headers={"If-Recovery-Revision": str(revision)})
+    assert stale.status_code == 409
+    revision = grant.json()["recovery"]["revision"]
+    wrong = planned.client.post(f"{base}/recovery/retry", headers={
+        "If-Recovery-Revision": str(revision), "If-Recovery-Confirmation": "cnf_wrong"})
+    assert wrong.status_code == 409
+    assessed = planned.client.post(f"{base}/recovery/assess",
+                                   headers={"If-Recovery-Revision": str(revision)})
+    assert assessed.status_code == 200
+    direct = assessed.json()
+    assert direct["recovery"]["authority"]["confirmation_id"] == confirmation
+    assert direct["recovery"]["attempts"][-1]["kind"] == "assess"
+    embedded = planned.client.get(f"{API}/runs/{change['run_id']}").json()["change"]
+    assert embedded["recovery"] == direct["recovery"]
+    (planned.sysfs / "eth0" / "mtu").write_text("1500\n")
+    planned.kernel.links[2] = ("eth0", 1500)
+    resolved = planned.client.post(f"{base}/recovery/assess", headers={
+        "If-Recovery-Revision": str(direct["recovery"]["revision"])})
+    assert resolved.status_code == 200
+    assert resolved.json()["recovery"]["released_by"] == "assess"
+    assert resolved.json()["recovery"]["authority"]["confirmation_id"] == confirmation
+
+
 def test_retry_takes_no_body_and_there_is_nothing_to_smuggle_into_one(planned: _Wired):
     """Sixteen endpoints are not a `GET` and this is one of the two that can write.
 
@@ -187,7 +220,7 @@ def test_the_change_publishes_everything_a_ui_needs_to_act_on_a_hold(planned: _W
     assert recovery["attempts"] == []
     assert recovery["last_observed"] == {}
     assert recovery["authority"] is None
-    assert recovery["available_actions"] == ["retry", "confirm_retry", "resolve"]
+    assert recovery["available_actions"] == ["assess", "retry", "confirm_retry", "resolve"]
 
     # What the original operation was, in the shape it actually had.
     assert body["change_kind"] == "field"
@@ -211,7 +244,7 @@ def test_granting_authority_shows_up_and_changes_what_may_be_done_next(planned: 
     recovery = answer.json()["recovery"]
     assert recovery["authority"]["method"] == "acknowledge"
     assert recovery["authority"]["source"] == "authenticated_request"
-    assert recovery["available_actions"] == ["retry", "resolve"]
+    assert recovery["available_actions"] == ["assess", "retry", "resolve"]
     assert recovery["state"] == "unresolved"
     # No token comes back that a caller could present anywhere else.
     assert "token" not in json.dumps(recovery)

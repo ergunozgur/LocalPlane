@@ -29,6 +29,7 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -1439,6 +1440,44 @@ def _apply_with_competing_writer(estate: Estate, run: Any) -> Any:
 
 
 # ------------------------------------------------------------ concurrency and idempotency
+
+
+def test_same_run_competing_apply_cannot_release_winners_lock(ready: Estate, monkeypatch):
+    run = ready.plan("eth0").run
+    ready.confirm(run)
+    entered = threading.Event()
+    resume = threading.Event()
+    original = ready.changes._plan_now
+    results = []
+
+    def paused(*args, **kwargs):
+        entered.set()
+        assert resume.wait(10)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(ready.changes, "_plan_now", paused)
+
+    def winner():
+        try:
+            results.append(ready.apply(run))
+        except Exception as exc:
+            results.append(exc)
+
+    thread = threading.Thread(target=winner)
+    thread.start()
+    try:
+        assert entered.wait(10)
+        with pytest.raises(RunRefused) as raised:
+            ready.apply(run)
+        assert raised.value.code == "object_write_locked"
+        assert ready.changes.lock_for(run.run_id) is not None
+        assert ready.kernel.mutations == []
+    finally:
+        resume.set()
+        thread.join(15)
+    assert not thread.is_alive()
+    assert len(results) == 1 and not isinstance(results[0], Exception)
+    assert ready.kernel.mutations == [(2, 1500)]
 
 
 def test_only_one_mutating_run_may_hold_an_object_and_field(ready: Estate):

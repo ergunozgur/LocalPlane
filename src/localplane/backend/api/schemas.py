@@ -1036,6 +1036,7 @@ class SystemdUnit(Model):
     transient: bool | None
     template: str | None
     current_job: SystemdJob | None
+    current_job_state: Literal["none", "pending", "unreadable"] = "unreadable"
     invocation_id: str | None = Field(
         description="Execution-instance evidence. Never part of object identity."
     )
@@ -2681,7 +2682,7 @@ class ChangeRollback(Model):
 
 
 class RecoveryAttemptView(Model):
-    """One recovery action against a Change: a retry, or a person releasing the hold.
+    """One assessment, retry, or manual hold release against a Change.
 
     A **later, separate event**. Nothing here is a correction to the Change it belongs to —
     that record goes on saying what happened to it, and this says what somebody did about it
@@ -2690,7 +2691,7 @@ class RecoveryAttemptView(Model):
 
     attempt_id: str
     sequence: int
-    kind: str = Field(description="retry | resolve.")
+    kind: str = Field(description="assess | retry | resolve.")
     started_at: datetime
     finished_at: datetime | None
     outcome: str = Field(
@@ -2751,6 +2752,12 @@ class RecoveryAuthority(Model):
     satisfied_at: datetime
 
 
+class RecoveryConfirmationRequirement(Model):
+    method: str
+    object_name: str
+    policy: str
+
+
 class ChangeRecovery(Model):
     """What LocalPlane knows and does not know when it could not prove a safe end state.
 
@@ -2760,6 +2767,8 @@ class ChangeRecovery(Model):
     """
 
     required: bool
+    revision: int
+    confirmation_requirement: RecoveryConfirmationRequirement
     state: str = Field(
         description=(
             "not_required | unresolved | resolved. `resolved` means the hold was released — "
@@ -2782,7 +2791,7 @@ class ChangeRecovery(Model):
         )
     )
     released_at: datetime | None
-    released_by: str | None = Field(description="retry | resolve, or null while it is held.")
+    released_by: str | None = Field(description="assess | retry | resolve, or null while held.")
     released_by_attempt_id: str | None
     last_observed: dict[str, Any] = Field(
         description=(
@@ -2798,7 +2807,8 @@ class ChangeRecovery(Model):
     )
     available_actions: list[str] = Field(
         description=(
-            "What the operator can do next: `retry` re-attempts the original end state and "
+            "Current controls, not a guarantee of dispatch eligibility: `assess` only reads; "
+            "`retry` re-attempts the original end state and "
             "looks before it writes; `confirm_retry` grants the authority a retry needs if "
             "it must write again; `resolve` releases the hold and claims nothing."
         )
@@ -2946,8 +2956,9 @@ class RecoveryConfirmRequest(Model):
     """
 
     acknowledge: bool = Field(
-        description="Must be true. The same acknowledge method the original plan required."
+        description="Must be true; typed plans also require the exact object name."
     )
+    acknowledge_object: str | None = None
     expected_recovery_reason: str | None = Field(
         default=None,
         description=(

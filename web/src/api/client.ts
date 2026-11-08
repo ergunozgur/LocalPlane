@@ -81,6 +81,8 @@ export interface RequestOptions {
   bearer?: string | undefined;
   query?: Record<string, string | number | undefined> | undefined;
   body?: unknown;
+  /** Exact recovery revision / single-use authority preconditions. */
+  headers?: Record<string, string>;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -124,7 +126,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   let response: Response;
   try {
-    const headers: Record<string, string> = { accept: 'application/json' };
+    const headers: Record<string, string> = { ...options.headers, accept: 'application/json' };
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (bearer !== undefined) headers.authorization = `Bearer ${bearer}`;
     response = await fetch(url, {

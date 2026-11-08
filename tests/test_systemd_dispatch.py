@@ -202,6 +202,9 @@ def _members(state: DispatchState) -> list[tuple[Any, ...]]:
 def test_the_protocol_gains_exactly_one_mutating_method():
     assert Method.SYSTEMD_SERVICE_LIFECYCLE.value == "systemd.service_lifecycle"
     assert Method.SYSTEMD_SERVICE_LIFECYCLE.value in METHODS
+    assert Method.SYSTEMD_SERVICE_LIFECYCLE_STATUS.value == "systemd.service_lifecycle_status"
+    assert Method.SYSTEMD_SERVICE_LIFECYCLE_STATUS.value in METHODS
+    assert Method.SYSTEMD_SERVICE_LIFECYCLE_STATUS.value not in MUTATING_METHODS
     assert MUTATING_METHODS == {
         "network.set_interface_mtu",
         "network.arm_mtu_guard",

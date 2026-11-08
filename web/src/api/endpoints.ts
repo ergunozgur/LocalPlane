@@ -6,8 +6,9 @@
  * knowing. Nothing here interprets a response — that is the domain layer's job — and nothing
  * here invents a value when a request fails.
  *
- * Run controls bind only systemd service planning, confirmation, apply and pre-write cancel.
- * All other managed mutation surfaces remain unbound.
+ * Run controls bind systemd service planning, confirmation, apply and pre-write cancel.
+ * Recovery uses separate assessment, grant, exact retry and manual-release endpoints.
+ * Other managed mutation surfaces remain unbound.
  */
 import { request, type RequestOptions } from './client';
 import type * as T from './types';
@@ -116,6 +117,14 @@ export const endpoints = {
     request<T.ChangeList>('/changes', { ...o, ...(params ? { query: params } : {}) }),
   change: (id: string, o?: Opts) => request<T.Change>(`/changes/${encodeURIComponent(id)}`, o),
   recoveryHolds: (o?: Opts) => request<T.RecoveryHolds>('/changes/recovery-holds', o),
+  assessRecovery: (id: string, revision: number) =>
+    request<T.Change>(`/changes/${encodeURIComponent(id)}/recovery/assess`, { method: 'POST', headers: { 'If-Recovery-Revision': String(revision) } }),
+  confirmRecovery: (id: string, revision: number, body: T.RecoveryConfirmRequest) =>
+    request<T.Change>(`/changes/${encodeURIComponent(id)}/recovery/confirm`, { method: 'POST', body, headers: { 'If-Recovery-Revision': String(revision) } }),
+  retryRecovery: (id: string, revision: number, confirmation: string) =>
+    request<T.Change>(`/changes/${encodeURIComponent(id)}/recovery/retry`, { method: 'POST', headers: { 'If-Recovery-Revision': String(revision), 'If-Recovery-Confirmation': confirmation } }),
+  resolveRecovery: (id: string, revision: number, body: T.RecoveryResolveRequest) =>
+    request<T.Change>(`/changes/${encodeURIComponent(id)}/recovery/resolve`, { method: 'POST', body, headers: { 'If-Recovery-Revision': String(revision) } }),
 
   /* --------------------------------------------------------------- explicit observations */
   refreshNetwork: (o?: Opts) =>
