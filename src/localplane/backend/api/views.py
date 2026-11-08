@@ -136,7 +136,15 @@ def capability_view_from_payload(payload: dict[str, Any]) -> schemas.Capability:
     )
 
 
-def sweep_view(record: SweepRecord) -> schemas.Sweep:
+def sweep_view(record: SweepRecord, ttl_s: float) -> schemas.Sweep:
+    """One sweep, with its own completed_at judged under the configured TTL.
+
+    Freshness belongs to the sweep boundary itself. It is intentionally not inferred from
+    an object row or from a later targeted observation: an old inventory sweep stays stale
+    even when some object in the retained estate has newer evidence.
+    """
+    completed_at = _parse(record.completed_at)
+    freshness, age_seconds = derive_freshness(completed_at, ttl_s)
     return schemas.Sweep(
         sweep_id=record.sweep_id,
         capability=record.capability,
@@ -145,13 +153,109 @@ def sweep_view(record: SweepRecord) -> schemas.Sweep:
         provider_version=record.provider_version,
         status=record.status,
         started_at=_parse(record.started_at),
-        completed_at=_parse(record.completed_at),
+        completed_at=completed_at,
         received_at=_parse(record.received_at),
         object_count=record.object_count,
         missing=record.missing,
         issues=[schemas.ProviderIssue(**issue) for issue in record.issues],
         agent_instance_id=record.agent_instance_id,
+        freshness=freshness,
+        age_seconds=age_seconds,
     )
+
+
+_LIFETIME_STATES = frozenset({"unknown", "finite", "infinite"})
+_FINITE_LIFETIME_MAX_S = 0xFFFFFFFE
+_INFINITE_LIFETIME_SENTINEL = 0xFFFFFFFF
+_MISSING = object()
+
+
+def address_view(address: dict[str, Any]) -> schemas.Address:
+    """Translate one stored address, normalizing legacy records without inventing infinity.
+
+    New evidence carries both the nullable seconds and the state that explains them.
+    Rows stored before that field existed have only the seconds: a finite number can be
+    read back as ``finite``, while ``null`` is irreducibly ``unknown`` — the old value
+    deliberately erased the forever sentinel, so nothing in it can prove ``infinite``.
+    """
+    valid_s, valid_state = _lifetime_view(
+        address, "valid_lifetime_s", "valid_lifetime_state"
+    )
+    preferred_s, preferred_state = _lifetime_view(
+        address, "preferred_lifetime_s", "preferred_lifetime_state"
+    )
+    return schemas.Address(
+        family=address["family"],
+        address=address["address"],
+        prefix_length=address["prefix_length"],
+        scope=address.get("scope"),
+        dynamic=address.get("dynamic"),
+        valid_lifetime_s=valid_s,
+        preferred_lifetime_s=preferred_s,
+        valid_lifetime_state=valid_state,
+        preferred_lifetime_state=preferred_state,
+    )
+
+
+def _lifetime_view(
+    address: dict[str, Any], seconds_key: str, state_key: str
+) -> tuple[int | None, str]:
+    """Validate one stored lifetime pair without trusting a malformed row.
+
+    The raw forever sentinel is the only proof of ``infinite`` and outranks a
+    contradictory state. Otherwise explicit state and seconds must agree: a valid
+    ``infinite`` pairs with absent/null seconds, a valid ``finite`` pairs with a finite
+    integer, and everything else is ``unknown``. A state field that is absent is the
+    legacy shape and may be inferred from seconds; a present but malformed state never
+    falls back to that inference.
+    """
+    raw_seconds = address.get(seconds_key)
+    raw_state = address.get(state_key, _MISSING)
+
+    # A real numeric sentinel is kernel evidence, even if the stored state disagrees.
+    if isinstance(raw_seconds, int) and not isinstance(raw_seconds, bool):
+        if raw_seconds == _INFINITE_LIFETIME_SENTINEL:
+            return None, "infinite"
+        finite_seconds = (
+            raw_seconds if 0 <= raw_seconds <= _FINITE_LIFETIME_MAX_S else None
+        )
+    else:
+        finite_seconds = None
+
+    # Present-but-not-a-lifetime values (bool, string, float, negative, oversized) are
+    # malformed. They cannot be promoted to finite, and must not let an explicit
+    # ``infinite`` through beside them.
+    if raw_seconds is not None and finite_seconds is None:
+        return None, "unknown"
+
+    if raw_state is _MISSING:
+        legacy_state = _MISSING
+    elif isinstance(raw_state, str):
+        legacy_state = raw_state
+    else:
+        # A dict/list/int stored where a state belongs is malformed. Check the type before
+        # set membership so an unhashable value cannot raise out of a read path.
+        return None, "unknown"
+
+    if legacy_state is not _MISSING and legacy_state not in _LIFETIME_STATES:
+        return None, "unknown"
+
+    if legacy_state is _MISSING:
+        # Legacy row: no additive state field. A finite number can only be finite; null
+        # stays unknown because the old normalization already discarded the sentinel.
+        if finite_seconds is not None:
+            return finite_seconds, "finite"
+        return None, "unknown"
+
+    if legacy_state == "infinite":
+        if raw_seconds is None:
+            return None, "infinite"
+        return None, "unknown"
+    if legacy_state == "finite":
+        if finite_seconds is not None:
+            return finite_seconds, "finite"
+        return None, "unknown"
+    return None, "unknown"
 
 
 def interface_view(
@@ -227,7 +331,7 @@ def interface_view(
         observation=observation_view,
         observed_in_latest_sweep=observed_in_latest_sweep,
         link=_link_view(facts) if observation is not None else None,
-        addresses=None if addresses is None else [schemas.Address(**a) for a in addresses],
+        addresses=None if addresses is None else [address_view(a) for a in addresses],
         statistics=None if statistics is None else schemas.Statistics(**statistics),
         first_seen_at=_parse(record.first_seen_at),
         last_seen_at=_parse(record.last_seen_at),
@@ -475,14 +579,12 @@ def systemd_reference_context(
         row.source_canonical_id, row.source_object_id,
         row.relationship.kind, row.relationship.target_unit,
     ))
-    inventory = sweep_view(sweep) if sweep else None
+    inventory = sweep_view(sweep, ttl_s) if sweep else None
     return schemas.SystemdReferenceContext(
         host_id=target.host_id,
         excluded_ambiguous_count=excluded_ambiguous,
         last_inventory_sweep=inventory,
-        inventory_freshness=(
-            derive_freshness(inventory.completed_at, ttl_s)[0] if inventory else "unknown"
-        ),
+        inventory_freshness=(inventory.freshness if inventory else "unknown"),
         references=references,
     )
 

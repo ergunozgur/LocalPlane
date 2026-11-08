@@ -8,12 +8,11 @@
  */
 import { useCallback, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { endpoints } from '@/api/endpoints';
-import { useResource } from '@/hooks/useResource';
 import { Plate, PlateBody, PlateHead } from '@/components/primitives/Plate';
 import { DataTable } from '@/components/primitives/DataTable';
 import { StatusMark, StatusPill } from '@/components/semantic/StatusPill';
 import { ManagementChip } from '@/components/semantic/SemanticGlyph';
+import { ObservationOutcome } from '@/components/semantic/ObservationOutcome';
 import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty, Degraded } from '@/components/states/SurfaceState';
@@ -22,6 +21,7 @@ import { ScopeBar } from '@/components/layout/ScopeBar';
 import { useHostName } from '@/hooks/useEstateCounts';
 import { activeSince } from '@/domain/systemd';
 import { SweepCaveat, SweepFoot } from '@/dashboard/widgets/shared';
+import { inventoryMembership, membershipCounts } from '@/domain/inventory';
 import {
   capabilityStatus,
   unitActiveState,
@@ -29,6 +29,7 @@ import {
   unitLoadState,
 } from '@/domain/vocabulary';
 import styles from './SystemList.module.css';
+import { useSystemdObservation } from './useSystemdObservation';
 
 const UNIT_TYPES = ['service', 'socket', 'timer', 'target', 'mount', 'path'] as const;
 const RECOGNIZED_TYPES: Set<string> = new Set(UNIT_TYPES);
@@ -41,15 +42,19 @@ function effectiveType(params: URLSearchParams): string {
 }
 
 export function SystemList(): JSX.Element {
-  const { resource } = useResource(
-    'systemd-units',
-    useCallback((signal) => endpoints.systemdUnits({ signal }), []),
-  );
+  const {
+    resource,
+    outcome,
+    storedReadError,
+    refreshInventory,
+    retryStoredRead,
+  } = useSystemdObservation();
   const hostName = useHostName();
   const [params, setParams] = useSearchParams();
   const type = effectiveType(params);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState<string>('');
+  const refreshPending = outcome?.phase === 'observing' || outcome?.phase === 'reading';
 
   const setType = useCallback(
     (value: string) => {
@@ -61,53 +66,91 @@ export function SystemList(): JSX.Element {
     [params, setParams],
   );
 
+  const listCount = resource.status === 'success' ? resource.data.count : undefined;
+
   return (
-    <ResourceView resource={resource} what="unit list" loadingLabel="Reading units…">
-      {(list, meta) => {
-        const needle = query.trim().toLowerCase();
-        const managed = list.units.filter((u) => u.management.state === 'managed').length;
-        const failed = list.units.filter((u) => u.active_state === 'failed').length;
-        const units = list.units.filter((unit) => {
-          if (type && unit.unit_type !== type) return false;
-          if (active && unit.active_state !== active) return false;
-          if (!needle) return true;
-          return (
-            unit.canonical_id.toLowerCase().includes(needle) ||
-            (unit.description ?? '').toLowerCase().includes(needle)
-          );
-        });
+    <>
+      <PageHeader
+        title="System"
+        count={listCount}
+        annotation="The system manager's bounded loaded-unit estate, read through the official D-Bus API. LocalPlane never loads a unit to look at it, so a unit systemd has not loaded does not appear here. Stored records stay visible until an explicit observation and a successful stored-record reread."
+      >
+        <button
+          type="button"
+          className="btn"
+          onClick={refreshInventory}
+          disabled={refreshPending}
+        >
+          {refreshPending ? 'Observing units…' : 'Observe units'}
+        </button>
+      </PageHeader>
 
-        return (
+      <ObservationOutcome
+        outcome={outcome}
+        subject="Systemd units"
+        resultSummary={(result) => (
           <>
-            <ScopeBar
-              crumbs={[{ label: hostName, to: '/' }, { label: 'system' }]}
-              tabs={[
-                {
-                  to: '/system',
-                  label: 'Units',
-                  count: list.count,
-                  end: true,
-                  current: type !== 'service',
-                },
-                {
-                  to: '/system?type=service',
-                  label: 'Services',
-                  count: list.units.filter((u) => u.unit_type === 'service').length,
-                  current: type === 'service',
-                },
-              ]}
-              observedAt={meta.fetchedAt}
-            />
+            {' '}Agent returned status <code>{result.status}</code> · {result.unit_count} unit{result.unit_count === 1 ? '' : 's'} · sweep <code>{result.sweep_id}</code>.
+            {result.inventory_complete === false || result.truncated ? ' The loaded-unit inventory was bounded or truncated.' : ''}
+            {result.issues.length > 0 ? ` ${result.issues.length} issue${result.issues.length === 1 ? '' : 's'} reported.` : ''}
+          </>
+        )}
+        onRefresh={refreshInventory}
+        onRetryStoredRead={retryStoredRead}
+      />
+      {storedReadError && outcome?.phase !== 'reread_failed' ? (
+        <div role="alert" style={{ marginBottom: 14 }}>
+          <Degraded tone="unknown" title="Stored unit records could not be re-read">
+            The last visible records remain on screen.{' '}
+            <button type="button" className="btn sm" onClick={retryStoredRead}>Re-read stored records</button>
+          </Degraded>
+        </div>
+      ) : null}
 
-            <PageHeader
-              title="System"
-              count={list.count}
-              annotation="The system manager's bounded loaded-unit estate, read through the official D-Bus API. LocalPlane never loads a unit to look at it, so a unit systemd has not loaded does not appear here."
-            />
+      <ResourceView resource={resource} what="unit list" loadingLabel="Reading units…">
+        {(list, meta) => {
+          const needle = query.trim().toLowerCase();
+          const managed = list.units.filter((u) => u.management.state === 'managed').length;
+          const failedUnits = list.units.filter((u) => u.active_state === 'failed');
+          const failedLatest = failedUnits.filter((u) => u.observed_in_latest_sweep === true).length;
+          const failedRetained = failedUnits.filter((u) => u.observed_in_latest_sweep === false).length;
+          const failedUnknown = failedUnits.length - failedLatest - failedRetained;
+          const membership = membershipCounts(list.units);
+          const units = list.units.filter((unit) => {
+            if (type && unit.unit_type !== type) return false;
+            if (active && unit.active_state !== active) return false;
+            if (!needle) return true;
+            return (
+              unit.canonical_id.toLowerCase().includes(needle) ||
+              (unit.description ?? '').toLowerCase().includes(needle)
+            );
+          });
 
-            {/* The unit list is the one envelope carrying its capability. An unavailable
-                capability and an empty estate are indistinguishable without it. */}
-            {list.capability && list.capability.status !== 'available' ? (
+          return (
+            <>
+              <ScopeBar
+                crumbs={[{ label: hostName, to: '/' }, { label: 'system' }]}
+                tabs={[
+                  {
+                    to: '/system',
+                    label: 'Units',
+                    count: list.count,
+                    end: true,
+                    current: type !== 'service',
+                  },
+                  {
+                    to: '/system?type=service',
+                    label: 'Services',
+                    count: list.units.filter((u) => u.unit_type === 'service').length,
+                    current: type === 'service',
+                  },
+                ]}
+                observedAt={meta.fetchedAt}
+              />
+
+              {/* The unit list is the one envelope carrying its capability. An unavailable
+                  capability and an empty estate are indistinguishable without it. */}
+              {list.capability && list.capability.status !== 'available' ? (
               <div className={styles.capabilityNotice}>
                 <Degraded title="The systemd observation capability is not fully available">
                   <StatusPill
@@ -123,19 +166,45 @@ export function SystemList(): JSX.Element {
             <Plate quiet>
               <PlateHead
                 title="Units"
-                meta="every unit the system manager has loaded"
+                meta="stored loaded-unit observations, including retained history"
                 asOf={meta.fetchedAt.toLocaleTimeString()}
                 chips={
                   <>
                     <span className={styles.chip}>
                       <b>{managed}</b> managed
                     </span>
-                    <span className={styles.chip}>
-                      <b>{list.count - managed}</b> observed
+                    <span className={styles.chip} title="retained stored records returned">
+                      <b>{list.count}</b> stored
                     </span>
-                    {failed > 0 ? (
+                    <span className={styles.chip}>
+                      <b>{membership.latestSighted}</b>{' '}
+                      latest-sighted
+                    </span>
+                    {membership.retainedNotSeen > 0 ? (
+                      <span className={styles.chip}>
+                        <b>{membership.retainedNotSeen}</b>{' '}
+                        retained
+                      </span>
+                    ) : null}
+                    {membership.membershipUnknown > 0 ? (
+                      <span className={styles.chip}>
+                        <b>{membership.membershipUnknown}</b>{' '}
+                        membership unknown
+                      </span>
+                    ) : null}
+                    {failedLatest > 0 ? (
                       <span className={`${styles.chip} ${styles.chipBad}`}>
-                        <b>{failed}</b> failed
+                        <b>{failedLatest}</b> latest-sighted reported failed
+                      </span>
+                    ) : null}
+                    {failedRetained > 0 ? (
+                      <span className={styles.chip}>
+                        <b>{failedRetained}</b> retained historical failure{failedRetained === 1 ? '' : 's'}
+                      </span>
+                    ) : null}
+                    {failedUnknown > 0 ? (
+                      <span className={styles.chip}>
+                        <b>{failedUnknown}</b> reported failed, membership unknown
                       </span>
                     ) : null}
                   </>
@@ -254,6 +323,13 @@ export function SystemList(): JSX.Element {
                     render: (row) => <ManagementChip state={row.management.state} />,
                   },
                   {
+                    key: 'membership',
+                    header: 'Latest inventory',
+                    render: (row) => (
+                      <StatusPill semantic={inventoryMembership(row.observed_in_latest_sweep)} size="sm" />
+                    ),
+                  },
+                  {
                     key: 'since',
                     header: 'Since',
                     render: (row) => (
@@ -271,5 +347,6 @@ export function SystemList(): JSX.Element {
         );
       }}
     </ResourceView>
+  </>
   );
 }

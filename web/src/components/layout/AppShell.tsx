@@ -60,14 +60,16 @@ function DOMAINS(counts: ReturnType<typeof useEstateCounts>): readonly Domain[] 
       to: '/network',
       priority: 2,
       count: counts.interfaces,
+      countDescription: 'stored interface records, including retained history',
       entries: [
         {
           to: '/network',
           label: 'Interfaces',
           root: true,
           count: counts.interfaces,
+          countDescription: 'stored interface records, including retained history',
           description:
-            'Ports, bridges and tunnels — what each is, who configures it, and what it is attached to',
+            'Stored ports, bridges and tunnels, including retained history and latest-inventory membership',
         },
       ],
     },
@@ -77,14 +79,16 @@ function DOMAINS(counts: ReturnType<typeof useEstateCounts>): readonly Domain[] 
       to: '/workloads',
       priority: 3,
       count: counts.containers,
+      countDescription: 'stored container records, including retained history',
       entries: [
         {
           to: '/workloads',
           label: 'Container groups',
           root: true,
           count: counts.containerGroups,
+          countDescription: 'groups of stored container records, including retained history',
           description:
-            'Compose-label project groups and standalone containers observed through Docker',
+            'Compose-label groups and standalone containers from stored Docker records, including retained history',
         },
         {
           to: '/workloads/runtime',
@@ -100,20 +104,23 @@ function DOMAINS(counts: ReturnType<typeof useEstateCounts>): readonly Domain[] 
       to: '/system',
       priority: 4,
       count: counts.units,
+      countDescription: 'stored unit records, including retained history',
       entries: [
         {
           to: '/system',
           label: 'Units',
           root: true,
           count: counts.units,
+          countDescription: 'stored unit records, including retained history',
           description:
-            'The system manager’s loaded estate — services, sockets, timers, mounts and targets',
+            'Stored loaded-unit observations — services, sockets, timers, mounts and targets, including retained history',
         },
         {
           to: '/system?type=service',
           label: 'Services',
           count: counts.services,
-          description: 'Just the service units',
+          countDescription: 'stored service records, including retained history',
+          description: 'Stored service-unit observations, including retained history',
         },
       ],
     },

@@ -7,7 +7,7 @@
  */
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import type { Sweep } from '@/api/types';
+import type { ProviderIssue, ProviderReadingSummary, Sweep } from '@/api/types';
 import { StatusPill } from '@/components/semantic/StatusPill';
 import { PlateFoot } from '@/components/primitives/Plate';
 import { sweepStatus } from '@/domain/vocabulary';
@@ -73,4 +73,44 @@ export function SweepCaveat({ sweep }: { sweep: Sweep | null }): ReactNode {
 export function Remainder({ count }: { count: number }): JSX.Element | null {
   if (count <= 0) return null;
   return <span className={styles.remainder}>and {count} more</span>;
+}
+
+/** A collapsible list of provider issues shared by observation outcome banners. */
+export function IssueList({ issues, label }: { issues: ProviderIssue[]; label: string }): JSX.Element | null {
+  if (issues.length === 0) return null;
+  const visible = issues.slice(0, 3);
+  return (
+    <details className={styles.issues}>
+      <summary>{label} ({issues.length})</summary>
+      <ul>
+        {visible.map((issue, index) => (
+          <li key={`${issue.source}-${issue.code}-${index}`}>
+            <code>{issue.source}/{issue.code}</code> {issue.message}
+          </li>
+        ))}
+      </ul>
+      {issues.length > visible.length ? <span>Only the first {visible.length} issues are shown.</span> : null}
+    </details>
+  );
+}
+
+/** A collapsible list of provider-read summaries, so ownership provider failures are visible. */
+export function ProviderList({ providers, label }: { providers: ProviderReadingSummary[] | undefined; label: string }): JSX.Element | null {
+  if (!providers || providers.length === 0) return null;
+  const visible = providers.slice(0, 5);
+  return (
+    <details className={styles.issues}>
+      <summary>{label} ({providers.length})</summary>
+      <ul>
+        {visible.map((provider, index) => (
+          <li key={`${provider.provider}-${provider.source}-${index}`}>
+            <code>{provider.provider}</code> · {provider.source} ·{' '}
+            <span className={provider.status === 'ok' ? styles.okProvider : styles.badProvider}>{provider.status}</span>
+            {provider.reason ? ` — ${provider.reason}` : ''}
+          </li>
+        ))}
+      </ul>
+      {providers.length > visible.length ? <span>Only the first {visible.length} providers are shown.</span> : null}
+    </details>
+  );
 }

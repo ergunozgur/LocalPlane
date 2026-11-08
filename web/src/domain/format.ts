@@ -101,6 +101,56 @@ export function formatTypedValue(
   return String(value);
 }
 
+const MAX_FINITE_LIFETIME = 4294967294;
+
+function isValidFiniteLifetime(seconds: number | null | undefined): seconds is number {
+  return typeof seconds === 'number'
+    && Number.isInteger(seconds)
+    && seconds >= 0
+    && seconds <= MAX_FINITE_LIFETIME;
+}
+
+/**
+ * Normalise a lifetime state, trusting the explicit state only when it is consistent.
+ *
+ * Only the explicit `infinite` state establishes infinity. A finite state must be backed by
+ * a valid integer seconds value; without one it is unknown, not a numeric fallback. A missing
+ * state with a valid finite integer seconds value is treated as finite (historical fallback).
+ * Everything else — missing/null state with no seconds, non-numeric, non-integer, negative,
+ * out-of-range values, or malformed states — is unknown.
+ */
+export function addressLifetimeState(
+  state: string | null | undefined,
+  seconds: number | null | undefined,
+): 'unknown' | 'finite' | 'infinite' {
+  if (state === 'infinite') return seconds === null || seconds === undefined ? 'infinite' : 'unknown';
+  if (state === 'finite') return isValidFiniteLifetime(seconds) ? 'finite' : 'unknown';
+  if (state === 'unknown') return 'unknown';
+  // Historical fixtures may omit the state entirely; a valid seconds value is then finite.
+  // Any other explicit state is treated as published and must be one of the known three.
+  if (state === null || state === undefined) {
+    return isValidFiniteLifetime(seconds) ? 'finite' : 'unknown';
+  }
+  return 'unknown';
+}
+
+/**
+ * Render a lifetime state without truthiness loss.
+ *
+ *   infinite -> forever
+ *   unknown  -> unknown
+ *   finite   -> formatted seconds, including 0s
+ */
+export function formatAddressLifetime(
+  state: 'unknown' | 'finite' | 'infinite',
+  seconds: number | null | undefined,
+): string {
+  if (state === 'infinite') return seconds === null || seconds === undefined ? 'forever' : 'unknown';
+  if (state === 'unknown') return 'unknown';
+  if (isValidFiniteLifetime(seconds)) return formatDuration(seconds) ?? 'unknown';
+  return 'unknown';
+}
+
 /** Trim a long identifier for display while keeping both ends, which are what differ. */
 export function abbreviateId(value: string, keep = 8): string {
   if (value.length <= keep * 2 + 1) return value;

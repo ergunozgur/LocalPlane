@@ -112,6 +112,11 @@
   background: var(--inset);
 }
 
+.degradedBad {
+  border-color: var(--crimson-line);
+  background: var(--crimson-soft);
+}
+
 .degradedTitle { font-size: 12px; font-weight: 600; color: var(--ink); }
 
 .degradedBody {

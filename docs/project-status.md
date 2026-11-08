@@ -26,7 +26,7 @@ and questions that remain unresolved.
 | systemd | **CURRENT** | Bounded loaded-unit observation, readable service execution/restart context, explicit consent-gated bounded current-boot service journal reads, and eligible service start/stop/restart through D-Bus; incomplete potential-effect evidence blocks rather than clearing protection |
 | Storage pressure | **CURRENT** | Transient mounted filesystem byte/inode availability, exact mount evidence and immediate kernel block backing; ext4/xfs only in the agent mount namespace |
 | Runs and Changes | **CURRENT** | Immutable previews, confirmation, typed apply, fresh verification, and durable recovery holds |
-| Operator Console | **CURRENT** | Observation, cross-domain search, evidence-backed Relationships tabs, and a limited authenticated systemd service Composer |
+| Operator Console | **CURRENT** | Scoped attention including unresolved holds, explicit inventory observation with stored-reread recovery, membership-qualified summaries/relationships, cross-domain search, and a limited authenticated systemd service Composer |
 | OpenAPI integration | **CURRENT** | The committed snapshot and generated TypeScript types reflect this integrated backend tree |
 | Relationship model | **CURRENT** | Object-scoped Relationships tabs on network interfaces and Docker containers show only identifier-backed Docker network, container, master-interface and guarded management-path joins; unread streams and unresolved targets stay explicit |
 | Host explorer breadth | **FOUNDATION** | Object workspaces and provider seams exist; files, broader storage management/topology, packages, users, processes, and general logs are not implemented |
@@ -58,11 +58,30 @@ message text and neither is treated as an empty journal result.
 Journal access does not determine whether Start or Restart is eligible: those actions remain in
 Lifecycle and use the existing immutable preview, confirmation, durable Run and verification path.
 
+## Inventory truth and refresh
+
+Overview distinguishes unresolved recovery holds, open Findings, and reported failed-service
+evidence. An incomplete or stale assessment is not an all-clear, and zero Findings is not
+proof that nothing needs attention. Holds link to their existing Change records; this workflow
+does not release or retry them.
+
+Network, System and Docker explicitly collect provider evidence, show the provider result,
+then reread stored snapshots. Stored rereads can be retried independently after collection;
+failed collection leaves prior facts with their original observation age. Counts identify
+latest recorded membership versus retained or unknown membership, not live presence. Fresh
+host identity or an answering agent does not make the inventories current. Retained objects
+and historical relationships remain available for investigation.
+
+The global record reread does not collect inventories, resample filesystems/container usage,
+reprobe the agent, or read log/journal content. Those controls are separate and explicit.
+Address lifetimes preserve unknown, finite (including zero), and explicitly infinite values;
+ambiguous historical nulls remain unknown.
+
 ## Mounted filesystem pressure
 
 Storage answers which listed mount has little or no usable byte or inode capacity, with
 independent available percentages, sorting/filtering, exact counters, reserved-space accounting
-and immediate backing-device evidence. It samples on entry and explicit refresh through the
+and immediate backing-device evidence. It samples only on explicit request through the
 authenticated read-only `POST /api/v1/storage/filesystems/observe`; cookie Origin checks still
 apply. The agent method is `storage.observe_filesystems`. Neither accepts caller paths.
 

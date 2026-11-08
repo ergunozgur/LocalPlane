@@ -87,6 +87,8 @@ const SWEEP = {
   missing: [],
   issues: [],
   agent_instance_id: 'agent_936af1be',
+  freshness: 'current',
+  age_seconds: 0,
 };
 
 const ROUTES: Record<string, unknown> = {
@@ -140,7 +142,12 @@ const ROUTES: Record<string, unknown> = {
           adoption: { eligible: false, reason: 'externally_configured' },
         },
         health: { state: 'healthy', reason: 'up' },
-        observation: null,
+        observation: {
+          observation_id: 'obs_1', sweep_id: 'swp_1', observed_at: '2026-08-27T21:47:01Z',
+          received_at: '2026-08-27T21:47:01Z', freshness: 'current', age_seconds: 3,
+          provider: 'linux_network', provider_version: '1', method: 'rtnetlink',
+          capability: 'network.observe', fidelity: 'complete', gaps: [],
+        },
         observed_in_latest_sweep: true,
         link: { mtu: 1500, operstate: 'up', ifindex: 2, mac_address: null, mac_is_permanent: null,
                 admin_up: true, carrier: true, speed_mbps: 1000, duplex: 'full', link_kind: null,
@@ -162,6 +169,9 @@ const ROUTES: Record<string, unknown> = {
   '/api/v1/findings': { host_id: 'host_d68ecb94', status: 'open', count: 0, findings: [] },
   '/api/v1/runs': { host_id: 'host_d68ecb94', state: null, count: 0, runs: [] },
   '/api/v1/changes': { host_id: 'host_d68ecb94', count: 0, changes: [] },
+  '/api/v1/changes/recovery-holds': {
+    host_id: 'host_d68ecb94', total_count: 0, count: 0, limit: 50, truncated: false, changes: [],
+  },
 };
 
 /** jsdom has no ResizeObserver; without one the plane never measures and draws one column. */
@@ -274,7 +284,7 @@ describe('Overview', () => {
       expect(screen.getByText(column)).toBeInTheDocument();
     }
     for (const title of ['Observation', 'Workloads', 'Network', 'Services', 'Recent runs', 'Recent changes']) {
-      expect(screen.getByText(title)).toBeInTheDocument();
+      expect(screen.getAllByText(title).length).toBeGreaterThan(0);
     }
   });
 
@@ -322,7 +332,7 @@ describe('Overview', () => {
 
     // The only interface is `observed`, so drift is not merely absent — it is inapplicable,
     // and the rail's quiet line has to say so rather than reporting a clean estate.
-    expect(await screen.findByText(/Nothing needs attention/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No attention in these checks/i)).toBeInTheDocument();
     expect(screen.getByText(/none managed, so nothing can drift/i)).toBeInTheDocument();
   });
 
@@ -343,7 +353,7 @@ describe('Overview', () => {
     stubBackendWithInterfaces([managedInterface('obj_managed', 'in_sync')]);
     renderOverview();
 
-    expect(await screen.findByText(/Nothing needs attention/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No attention in these checks/i)).toBeInTheDocument();
     expect(screen.getByText(/1 managed, all in sync/i)).toBeInTheDocument();
   });
 

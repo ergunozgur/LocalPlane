@@ -386,7 +386,7 @@
           "agent"
         ],
         "summary": "Get Agent Capabilities",
-        "description": "What the agent can actually do, re-probed if it is answering.\n\nA capability absent from this list is not available. A capability listed\n``unavailable`` is not available either, and ``reason`` says why.",
+        "description": "The capability snapshot the agent reports in its hello.\n\nThe agent caches this snapshot for its running instance; this endpoint asks for the\nhello and does not request a fresh provider rediscovery. A capability absent from\nthis list is not available. A capability listed ``unavailable`` is not available\neither, and ``reason`` says why. If the agent is not answering, the last recorded\nhello snapshot is returned with ``source`` saying it is recorded, not live.",
         "operationId": "get_agent_capabilities_api_v1_agent_capabilities_get",
         "responses": {
           "200": {
@@ -3100,6 +3100,82 @@
         }
       }
     },
+    "/api/v1/changes/recovery-holds": {
+      "get": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "List Recovery Holds",
+        "description": "Every unresolved recovery hold, with an accurate total and a bounded list.\n\nA hold is unresolved while its Change says ``recovery_required`` and no append-only\nrelease marker has resolved it. Resolved history still says ``recovery_required``,\nso it is excluded here rather than presented as attention a second time.\n\n``total_count`` is counted over the whole authoritative store and is not limited by\n``limit`` or by the newest general Change history. The list is newest first and\ncapped so a backlog cannot make one response unbounded. Pure: reading holds contacts\nno agent, collects no provider evidence and writes nothing. There is no control to\nretry, confirm or release from this endpoint; those stay on the exact Change.",
+        "operationId": "list_recovery_holds_api_v1_changes_recovery_holds_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Maximum holds to return. total_count is never bounded by it.",
+              "default": 12,
+              "title": "Limit"
+            },
+            "description": "Maximum holds to return. total_count is never bounded by it."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryHolds"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/changes/{change_id}": {
       "get": {
         "tags": [
@@ -3452,7 +3528,8 @@
                 "type": "null"
               }
             ],
-            "title": "Valid Lifetime S"
+            "title": "Valid Lifetime S",
+            "description": "Seconds remaining, or null. Null alone cannot distinguish 'not reported' from 'forever'; read the state beside it."
           },
           "preferred_lifetime_s": {
             "anyOf": [
@@ -3463,7 +3540,30 @@
                 "type": "null"
               }
             ],
-            "title": "Preferred Lifetime S"
+            "title": "Preferred Lifetime S",
+            "description": "Seconds remaining, or null. Null alone cannot distinguish 'not reported' from 'forever'; read the state beside it."
+          },
+          "valid_lifetime_state": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "finite",
+              "infinite"
+            ],
+            "title": "Valid Lifetime State",
+            "description": "How the valid lifetime is known: unknown when the source was absent or malformed, finite when seconds is the kernel's value (including 0), infinite only when the kernel gave its explicit forever sentinel. The state and the nullable seconds describe the same fact and are normalized together. Defaults to unknown for older typed fixtures; API views always supply the normalized value.",
+            "default": "unknown"
+          },
+          "preferred_lifetime_state": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "finite",
+              "infinite"
+            ],
+            "title": "Preferred Lifetime State",
+            "description": "How the preferred lifetime is known: unknown when the source was absent or malformed, finite when seconds is the kernel's value (including 0), infinite only when the kernel gave its explicit forever sentinel. The state and the nullable seconds describe the same fact and are normalized together. Defaults to unknown for older typed fixtures; API views always supply the normalized value.",
+            "default": "unknown"
           }
         },
         "additionalProperties": false,
@@ -3682,12 +3782,14 @@
           },
           "source": {
             "type": "string",
-            "title": "Source"
+            "title": "Source",
+            "description": "live — the agent answered the hello for this request and its own cached capability snapshot is returned; recorded — the agent could not be reached and the last recorded hello snapshot is returned."
           },
           "as_of": {
             "type": "string",
             "format": "date-time",
-            "title": "As Of"
+            "title": "As Of",
+            "description": "When this response was assembled. It is not the moment the agent discovered capabilities; the snapshot belongs to the agent instance that reported it."
           },
           "agent_instance_id": {
             "anyOf": [
@@ -3727,7 +3829,8 @@
           "agent_instance_id",
           "capabilities"
         ],
-        "title": "Capabilities"
+        "title": "Capabilities",
+        "description": "The capability snapshot the agent reports in its hello.\n\nThis is the hello the agent cached for its running instance, not a fresh provider\nrediscovery performed for this request. LocalPlane does not ask the agent to re-probe\ncapabilities here; the list says what the agent said it can do when that instance\nanswered. A capability being present is therefore a claim about the agent, not proof\nthat every provider was re-examined just now."
       },
       "Capability": {
         "properties": {
@@ -5894,11 +5997,12 @@
                 "type": "null"
               }
             ],
-            "description": "The sweep these containers were last re-read by. An empty list with a failed sweep means nobody could look; an empty list with no sweep means nobody has."
+            "description": "The latest Docker inventory sweep recorded, not a guarantee that every listed container was present in it. The list retains containers from earlier sweeps too; check each container's observed_in_latest_sweep and observation freshness. An empty list with a failed sweep means nobody could look; an empty list with no sweep means nobody has."
           },
           "count": {
             "type": "integer",
-            "title": "Count"
+            "title": "Count",
+            "description": "Number of retained stored containers returned, not the size of the latest inventory sweep."
           },
           "containers": {
             "items": {
@@ -7689,11 +7793,12 @@
                 "type": "null"
               }
             ],
-            "description": "The sweep these objects were last re-read by. An empty list with a failed sweep means nobody could look; an empty list with no sweep means nobody has."
+            "description": "The latest inventory sweep recorded for this capability, not a guarantee that every listed object was present in it. The list retains objects from earlier sweeps too; check each object's observed_in_latest_sweep and observation freshness. An empty list with a failed sweep means nobody could look; an empty list with no sweep means nobody has."
           },
           "count": {
             "type": "integer",
-            "title": "Count"
+            "title": "Count",
+            "description": "Number of retained stored interfaces returned, not the size of the latest inventory sweep."
           },
           "interfaces": {
             "items": {
@@ -10134,6 +10239,54 @@
         "title": "RecoveryConfirmRequest",
         "description": "Authorise one recovery retry to dispatch a *new* mutation.\n\nThe confirmation the original apply consumed authorises nothing here. It authorised an\nattempt; that attempt happened. This is a second, separate grant — recorded in the same\ntable, under the same single-use rule — and at most one may be outstanding at a time.\n\n**A retry does not need this to begin.** A retry first asks whether a fresh reading\nalready proves the end state, and one that does completes without writing and without\nconsuming anything. This exists for the case where it does not.\n\nNothing else is accepted. There is no field here for a value, a verb, a target, a\nprovider or a command, and ``extra`` is forbidden on every model in this file."
       },
+      "RecoveryHolds": {
+        "properties": {
+          "host_id": {
+            "type": "string",
+            "title": "Host Id"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Every unresolved recovery hold on this host, independent of limit."
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "Number of holds returned in changes."
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "The bound that was applied to changes."
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "True when total_count is greater than count, so more holds exist."
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeSummary"
+            },
+            "type": "array",
+            "title": "Changes",
+            "description": "Newest first, at most limit. Each carries recovery_state=unresolved."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "host_id",
+          "total_count",
+          "count",
+          "limit",
+          "truncated",
+          "changes"
+        ],
+        "title": "RecoveryHolds",
+        "description": "Unresolved recovery holds: the full count, and a bounded page of them.\n\nA hold is unresolved while its Change says ``recovery_required`` and no append-only\nrelease marker has resolved it. Resolved history keeps saying ``recovery_required``,\nso it is deliberately excluded here. ``total_count`` is the whole authoritative count\nand never shrinks to fit ``limit`` or the newest general Change history."
+      },
       "RecoveryResolveRequest": {
         "properties": {
           "acknowledge": {
@@ -11975,6 +12128,23 @@
               }
             ],
             "title": "Agent Instance Id"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness",
+            "description": "Currency of this sweep's own completed_at under the backend's configured freshness TTL: current | stale | never_observed. It qualifies the sweep, not the retained objects listed elsewhere; a targeted observation cannot make an older inventory sweep current. Defaulted only for older typed fixtures.",
+            "default": "never_observed"
+          },
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds",
+            "description": "Seconds since completed_at, derived with the same backend clock and TTL as freshness. Null only when no completed_at is available; older typed fixtures default to null."
           }
         },
         "additionalProperties": false,
@@ -13784,11 +13954,13 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The latest systemd inventory sweep recorded, not a guarantee that every listed unit was present in it. The list retains units from earlier sweeps too; check each unit's observed_in_latest_sweep and observation freshness."
           },
           "count": {
             "type": "integer",
-            "title": "Count"
+            "title": "Count",
+            "description": "Number of retained stored units returned, not the size of the latest inventory sweep."
           },
           "units": {
             "items": {

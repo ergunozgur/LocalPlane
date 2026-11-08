@@ -115,6 +115,13 @@ export const endpoints = {
   changes: (params?: { object_id?: string; result?: string; limit?: number }, o?: Opts) =>
     request<T.ChangeList>('/changes', { ...o, ...(params ? { query: params } : {}) }),
   change: (id: string, o?: Opts) => request<T.Change>(`/changes/${encodeURIComponent(id)}`, o),
+  recoveryHolds: (o?: Opts) => request<T.RecoveryHolds>('/changes/recovery-holds', o),
+
+  /* --------------------------------------------------------------- explicit observations */
+  refreshNetwork: (o?: Opts) =>
+    request<T.RefreshResult>('/network/observations/refresh', { ...o, method: 'POST' }),
+  refreshSystemd: (o?: Opts) =>
+    request<T.SystemdObservationResult>('/systemd/observations/refresh', { ...o, method: 'POST' }),
 
   findings: (params?: { status?: string; object_id?: string; limit?: number }, o?: Opts) =>
     request<T.FindingList>('/findings', { ...o, ...(params ? { query: params } : {}) }),

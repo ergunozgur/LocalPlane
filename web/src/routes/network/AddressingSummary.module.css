@@ -1,5 +1,14 @@
 .plate { margin-top: 14px; }
 
+.recordEvidence {
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+  min-width: 160px;
+  margin-top: 4px;
+  color: var(--dim);
+}
+
 .chip {
   font-family: var(--mono);
   font-size: 11px;
@@ -10,6 +19,8 @@
 }
 
 .forever { font-size: 11.5px; color: var(--dim); border-bottom: 1px dotted var(--rule); cursor: help; }
+
+.unknownLifetime { font-size: 11.5px; color: var(--amber); font-style: italic; }
 
 .unread {
   font-family: var(--serif);

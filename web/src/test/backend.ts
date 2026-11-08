@@ -14,6 +14,7 @@ const SWEEP = {
   started_at: '2026-08-27T21:47:00Z', completed_at: '2026-08-27T21:47:01Z',
   received_at: '2026-08-27T21:47:01Z', object_count: 1, missing: [], issues: [],
   agent_instance_id: 'agent_1',
+  freshness: 'current', age_seconds: 0,
 };
 
 const OBSERVATION = {
@@ -313,6 +314,23 @@ export const BACKEND: Record<string, unknown> = {
       recovery_reason: 'write_unknown_unverified', recovery_state: 'unresolved' },
   ] },
   '/api/v1/changes/chg_1': CHANGE,
+  '/api/v1/changes/recovery-holds': {
+    host_id: 'host_1',
+    total_count: 1,
+    count: 1,
+    limit: 50,
+    truncated: false,
+    changes: [
+      { change_id: 'chg_1', run_id: 'run_1', object_id: 'obj_if', object_name: 'enx020000000012',
+        operation: 'network.interface.reconcile_mtu', change_kind: 'field', field: 'mtu',
+        before_value: 1500, desired_value: 1400, action: null, expected_state: null,
+        created_at: '2026-08-27T21:50:00Z', finished_at: '2026-08-27T21:50:30Z',
+        host_effect: 'write_unknown', mutation_outcome: 'write_unknown',
+        verification_outcome: 'observation_unavailable', rollback_outcome: null,
+        result: 'recovery_required', recovery_required: true,
+        recovery_reason: 'write_unknown_unverified', recovery_state: 'unresolved' },
+    ],
+  },
 };
 
 /**
@@ -336,6 +354,9 @@ export function stubBackend(overrides: Record<string, unknown> = {}): void {
     vi.fn<typeof fetch>((input) => {
       const url = urlOf(input);
       const body = table[url];
+      if (body instanceof Response) {
+        return Promise.resolve(body);
+      }
       if (body === undefined) {
         return Promise.resolve(
           new Response(

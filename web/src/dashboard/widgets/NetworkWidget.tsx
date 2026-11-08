@@ -5,11 +5,12 @@ import { endpoints } from '@/api/endpoints';
 import { useResource } from '@/hooks/useResource';
 import { Plate, PlateBody, PlateHead } from '@/components/primitives/Plate';
 import { DataTable } from '@/components/primitives/DataTable';
-import { StatusMark } from '@/components/semantic/StatusPill';
+import { StatusMark, StatusPill } from '@/components/semantic/StatusPill';
 import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty } from '@/components/states/SurfaceState';
 import { health as healthOf } from '@/domain/vocabulary';
+import { inventoryMembership } from '@/domain/workloads';
 import { SweepCaveat, SweepFoot, WidgetAction } from './shared';
 
 const LIMIT = 8;
@@ -81,6 +82,13 @@ export function NetworkWidget(): JSX.Element {
                         mono
                         reason="no source attributed this interface"
                       />
+                    ),
+                  },
+                  {
+                    key: 'membership',
+                    header: 'Latest',
+                    render: (row) => (
+                      <StatusPill semantic={inventoryMembership(row.observed_in_latest_sweep)} size="sm" />
                     ),
                   },
                 ]}

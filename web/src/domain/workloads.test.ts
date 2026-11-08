@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   engineFacts,
   groupContainers,
-  inventoryMembershipCounts,
+  containerMembershipCounts as inventoryMembershipCounts,
   imagesInUse,
   runtimeRows,
   containerGroupOf,

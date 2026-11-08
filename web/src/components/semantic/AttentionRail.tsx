@@ -13,8 +13,7 @@
  * shows more rather than
  * scrolling more.
  *
- * The quiet line states what was checked. "Nothing needs attention" without that is a
- * reassurance; with it, it is a claim an operator can weigh.
+ * The quiet line limits its claim to the checks shown, not the whole machine's health.
  */
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -30,13 +29,20 @@ export interface AttentionItem {
 export function AttentionRail({
   drifted,
   findings,
+  holds,
+  serviceFailures,
   quietSummary,
   unresolved = false,
   unresolvedSummary,
   reviewTo = '/operations',
+  holdTotal = null,
+  holdTruncated = false,
+  retainedFailures = [],
 }: {
   drifted: readonly AttentionItem[];
   findings: readonly AttentionItem[];
+  holds: readonly AttentionItem[];
+  serviceFailures: readonly AttentionItem[];
   /** What was actually checked, when nothing needs attention. Never omitted. */
   quietSummary: ReactNode;
   /** The evidence needed for a complete assessment is unavailable or unsettled. */
@@ -44,10 +50,21 @@ export function AttentionRail({
   /** A precise reason assessment is incomplete. Defaults to failed supporting reads. */
   unresolvedSummary?: ReactNode;
   reviewTo?: string;
+  /** Authoritative unresolved hold count from the backend, independent of the page bound. */
+  holdTotal?: number | null;
+  /** True when total_count exceeds the returned page. */
+  holdTruncated?: boolean;
+  /** Failed units kept in stored records but not sighted in the latest inventory. */
+  retainedFailures?: readonly AttentionItem[];
 }): JSX.Element {
   // A rail that disappears when its reads fail is a rail that says "nothing needs attention"
   // by omission — the one thing it must never say without having looked.
-  const state = drifted.length > 0 ? 'drift' : findings.length > 0 ? 'finding' : 'quiet';
+  const state =
+    serviceFailures.length > 0 ? 'serviceFailure'
+    : drifted.length > 0 ? 'drift'
+    : findings.length > 0 ? 'finding'
+    : holds.length > 0 ? 'hold'
+    : 'quiet';
 
   if (unresolved && state === 'quiet') {
     return (
@@ -67,7 +84,7 @@ export function AttentionRail({
     return (
       <div className={styles.rail} data-state="quiet" aria-label="Attention">
         <span className={styles.quietMark} aria-hidden="true" />
-        <b className={styles.quietTitle}>Nothing needs attention</b>
+        <b className={styles.quietTitle}>No attention in these checks</b>
         <span className={styles.quietSummary}>{quietSummary}</span>
         <Link to={reviewTo} className={styles.end}>
           History ›
@@ -79,9 +96,31 @@ export function AttentionRail({
   return (
     <div className={styles.rail} data-state={state} aria-label="Attention">
       <div className={styles.segments}>
+        <Segment kind="serviceFailure" count={serviceFailures.length} word="reported failed" items={serviceFailures} />
         <Segment kind="drift" count={drifted.length} word="drifted" items={drifted} />
-        <Segment kind="finding" count={findings.length} word="findings" items={findings} />
+        <Segment kind="finding" count={findings.length} word="findings shown" items={findings} />
+        <Segment kind="hold" count={holdTotal ?? holds.length} word="holds" items={holds} />
       </div>
+      {retainedFailures.length > 0 ? (
+        <span className={styles.retainedNote}>
+          <b>{retainedFailures.length}</b> failed unit{retainedFailures.length === 1 ? '' : 's'} from
+          an earlier inventory {retainedFailures.length === 1 ? 'remains' : 'remain'} in stored records.{' '}
+          {retainedFailures.map((unit, index) => (
+            <span key={unit.id}>
+              {index > 0 ? ', ' : ''}
+              <Link to={unit.to ?? '/system'} className={styles.retainedLink}>
+                {unit.name}
+              </Link>
+            </span>
+          ))}
+        </span>
+      ) : null}
+      {holdTotal !== null && (holdTotal > holds.length || holdTruncated) ? (
+        <span className={styles.retainedNote}>
+          <b>{holdTotal}</b> unresolved hold{holdTotal === 1 ? '' : 's'} total
+          {holdTruncated ? ' (truncated)' : ''}.
+        </span>
+      ) : null}
       {unresolved ? (
         <span className={styles.incomplete}>
           <span className={styles.unknownMark} aria-hidden="true" />
@@ -104,7 +143,7 @@ function Segment({
   word,
   items,
 }: {
-  kind: 'drift' | 'finding';
+  kind: 'drift' | 'finding' | 'hold' | 'serviceFailure';
   count: number;
   word: string;
   items: readonly AttentionItem[];

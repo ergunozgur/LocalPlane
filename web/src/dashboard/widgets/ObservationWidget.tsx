@@ -40,18 +40,25 @@ export function ObservationWidget(): JSX.Element {
     'host',
     useCallback((signal) => endpoints.host({ signal }), []),
   );
-  const { resource: agent } = useResource(
+  const { resource: agent, refresh: refreshAgent } = useResource(
     'agent',
     useCallback((signal) => endpoints.agent({ signal }), []),
+    { kind: 'live' },
   );
   const { resource: sweeps } = useResource(
     'sweeps',
     useCallback((signal) => endpoints.sweeps(20, { signal }), []),
   );
-  const { resource: capabilities } = useResource(
+  const { resource: capabilities, refresh: refreshCapabilities } = useResource(
     'capabilities',
     useCallback((signal) => endpoints.capabilities({ signal }), []),
+    { kind: 'live' },
   );
+
+  const checkAgent = useCallback(() => {
+    refreshAgent();
+    refreshCapabilities();
+  }, [refreshAgent, refreshCapabilities]);
 
   const combined = combine(combine(host, agent), combine(sweeps, capabilities));
 
@@ -103,7 +110,7 @@ export function ObservationWidget(): JSX.Element {
 
             <PlateSection title="Agent">
               <KeyValueList>
-                <KeyValue label="Version" hint={agentData.source === 'live' ? 'probed now' : 'last known'}>
+                <KeyValue label="Version" hint={agentData.as_of ? `as of ${agentData.as_of}` : 'last known'}>
                   <Value value={agentData.agent?.agent_version} mono reason="the agent has not been reached" />
                 </KeyValue>
                 <KeyValue label="Privilege">
@@ -126,6 +133,9 @@ export function ObservationWidget(): JSX.Element {
                   />
                 </KeyValue>
               </KeyValueList>
+              <button type="button" className="btn" onClick={checkAgent}>
+                Check agent now
+              </button>
             </PlateSection>
 
             <PlateSection title="Resources">
@@ -174,7 +184,7 @@ export function ObservationWidget(): JSX.Element {
                       </span>
                     </KeyValue>
                   ))}
-                  <KeyValue label="Freshness">
+                  <KeyValue label="Identity freshness" hint="how fresh the host identity record is">
                     <StatusPill
                       semantic={freshnessOf(hostData.freshness)}
                       size="sm"
@@ -219,10 +229,9 @@ export function ObservationWidget(): JSX.Element {
             <PlateFoot
               source={
                 <>
-                  {sweepList.count} sweep{sweepList.count === 1 ? '' : 's'} recorded ·{' '}
-                  {capabilityList.source === 'live'
-                    ? 'capabilities probed for this request'
-                    : 'capabilities last recorded'}
+                  {sweepList.count} sweep{sweepList.count === 1 ? '' : 's'} recorded · capabilities
+                  cached as of {capabilityList.as_of ?? 'unknown'} · host identity freshness does not imply
+                  inventory freshness
                 </>
               }
             />

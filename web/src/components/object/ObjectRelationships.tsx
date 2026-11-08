@@ -12,6 +12,9 @@ import { Plate, PlateFoot, PlateHead } from '@/components/primitives/Plate';
 import { StatusPill } from '@/components/semantic/StatusPill';
 import { Degraded, Empty } from '@/components/states/SurfaceState';
 import { deriveRelationships, type ObjectRelationship } from '@/domain/relationships';
+import { inventoryMembership } from '@/domain/inventory';
+import { freshness } from '@/domain/vocabulary';
+import { formatRelative } from '@/domain/format';
 import styles from './ObjectRelationships.module.css';
 
 type Subject = NetworkInterface | DockerContainer;
@@ -35,6 +38,8 @@ export function ObjectRelationships({
     interfaces: interfaceData,
     containers: containerData,
     managementPath: pathData,
+    interfaceEnvelope: interfaces.status === 'success' ? interfaces.data : null,
+    containerEnvelope: containers.status === 'success' ? containers.data : null,
   });
   const notices = [
     ...streamState('interfaces', interfaces),
@@ -109,6 +114,22 @@ export function ObjectRelationships({
               ),
             },
             {
+              key: 'coverage',
+              header: 'Coverage',
+              width: '200px',
+              render: (row) => (
+                <EndpointCoverage
+                  subject={{
+                    observedInLatestSweep: row.subjectObservedInLatestSweep ?? null,
+                    freshness: row.subjectFreshness ?? null,
+                    sweepStatus: row.subjectSweepStatus ?? null,
+                    sweepFreshness: row.subjectSweepFreshness ?? null,
+                  }}
+                  counterpart={row.target}
+                />
+              ),
+            },
+            {
               key: 'evidence',
               header: 'Evidence',
               render: (row) => <span className={styles.evidence}>{row.evidence}</span>,
@@ -144,17 +165,87 @@ export function ObjectRelationships({
   );
 }
 
+interface EndpointCoverageProps {
+  subject: {
+    observedInLatestSweep?: boolean | null;
+    freshness?: string | null;
+    sweepStatus?: string | null;
+    sweepFreshness?: string | null;
+  };
+  counterpart: ObjectRelationship['target'];
+}
+
+function EndpointCoverage({ subject, counterpart }: EndpointCoverageProps): JSX.Element {
+  return (
+    <span className={styles.coverage}>
+      <span className={styles.coverageItem} data-testid="subject-coverage">
+        <span className={styles.coverageLabel}>subject</span>
+        <StatusPill
+          semantic={inventoryMembership(subject.observedInLatestSweep)}
+          size="sm"
+        />
+        {subject.freshness ? (
+          <StatusPill semantic={freshness(subject.freshness)} size="sm" />
+        ) : (
+          <span className={styles.notObserved}>not observed</span>
+        )}
+        <span className={styles.sweepStatus}>{sweepLabel(subject.sweepStatus, subject.sweepFreshness)}</span>
+      </span>
+      <span className={styles.coverageItem} data-testid="counterpart-coverage">
+        <span className={styles.coverageLabel}>counterpart</span>
+        {counterpart.freshness ? (
+          <StatusPill semantic={freshness(counterpart.freshness)} size="sm" />
+        ) : (
+          <span className={styles.notObserved}>{counterpart.kind === 'Docker network' ? 'not independently observed' : 'not observed'}</span>
+        )}
+        <span className={styles.sweepStatus}>
+          {counterpart.kind === 'Docker network' ? 'source inventory ' : ''}
+          {sweepLabel(counterpart.sweepStatus, counterpart.sweepFreshness)}
+        </span>
+      </span>
+    </span>
+  );
+}
+
+function sweepLabel(status: string | null | undefined, sweepFreshness: string | null | undefined): string {
+  if (status === null || status === undefined) return 'inventory not read';
+  const currency = sweepFreshness === null || sweepFreshness === undefined ? 'unknown currency' : sweepFreshness;
+  return `sweep ${status} · ${currency}`;
+}
+
 function Target({ target }: { target: ObjectRelationship['target'] }): JSX.Element {
+  const membership =
+    target.observedInLatestSweep === undefined ? null : (
+      <StatusPill semantic={inventoryMembership(target.observedInLatestSweep)} size="sm" />
+    );
+  const age = target.observedAt ? formatRelative(target.observedAt) : null;
+  const agePill = age ? <span className={styles.targetAge}>{age}</span> : null;
+  const retainedNote =
+    target.observedInLatestSweep === false ? (
+      <span className={styles.retainedNote} title="Retained from an earlier sweep, not sighted in the latest one.">
+        retained
+      </span>
+    ) : null;
   if (target.href) {
     return (
-      <Link to={target.href} className={styles.target}>
-        {target.name}
-      </Link>
+      <span className={styles.targetRow}>
+        <Link to={target.href} className={styles.target}>
+          {target.name}
+        </Link>
+        {membership}
+        {agePill}
+        {retainedNote}
+      </span>
     );
   }
   return (
-    <span className={target.unresolved ? styles.unresolved : styles.target}>
-      {target.name}
+    <span className={styles.targetRow}>
+      <span className={target.unresolved ? styles.unresolved : styles.target}>
+        {target.name}
+      </span>
+      {membership}
+      {agePill}
+      {retainedNote}
     </span>
   );
 }

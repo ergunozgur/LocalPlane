@@ -519,6 +519,8 @@ def _parse_addresses(entry: dict[str, Any] | None) -> tuple[InterfaceAddress, ..
         family = item.get("family")
         if not isinstance(local, str) or not isinstance(prefix, int) or not isinstance(family, str):
             continue
+        valid_s, valid_state = _lifetime(item.get("valid_life_time"))
+        preferred_s, preferred_state = _lifetime(item.get("preferred_life_time"))
         addresses.append(
             InterfaceAddress(
                 family=family,
@@ -526,18 +528,33 @@ def _parse_addresses(entry: dict[str, Any] | None) -> tuple[InterfaceAddress, ..
                 prefix_length=prefix,
                 scope=item.get("scope") if isinstance(item.get("scope"), str) else None,
                 dynamic=item.get("dynamic") if isinstance(item.get("dynamic"), bool) else None,
-                valid_lifetime_s=_lifetime(item.get("valid_life_time")),
-                preferred_lifetime_s=_lifetime(item.get("preferred_life_time")),
+                valid_lifetime_s=valid_s,
+                preferred_lifetime_s=preferred_s,
+                valid_lifetime_state=valid_state,
+                preferred_lifetime_state=preferred_state,
             )
         )
     return tuple(addresses)
 
 
-def _lifetime(value: Any) -> int | None:
-    """``0xffffffff`` is iproute2 for 'forever', which is an absence of a lifetime."""
-    if not isinstance(value, int) or value == 0xFFFFFFFF:
-        return None
-    return value
+def _lifetime(value: Any) -> tuple[int | None, str]:
+    """Normalize one rtnetlink lifetime into (seconds, state).
+
+    ``0xffffffff`` is iproute2's explicit "forever" sentinel. It is the *only* evidence
+    that justifies ``infinite``: a missing value is unknown, never infinity, and no
+    missing dynamic/static assignment is read as a lifetime at all.
+
+    Finite values keep the kernel's exact bound, including zero. Anything malformed —
+    a bool (which is an ``int`` in Python), a negative number, a value past the UINT32
+    space or a non-integer — is unknown rather than clamped into a plausible number.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None, "unknown"
+    if value == 0xFFFFFFFF:
+        return None, "infinite"
+    if 0 <= value <= 0xFFFFFFFE:
+        return value, "finite"
+    return None, "unknown"
 
 
 def _uevent_value(raw: str | None, key: str) -> str | None:

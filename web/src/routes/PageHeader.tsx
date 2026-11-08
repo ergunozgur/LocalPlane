@@ -11,7 +11,7 @@ export function PageHeader({
   back,
 }: {
   title: ReactNode;
-  count?: number;
+  count?: number | undefined;
   annotation?: ReactNode;
   children?: ReactNode;
   back?: { to: string; label: string };

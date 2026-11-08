@@ -19,7 +19,7 @@
  * A container with no project label is not forced into a group.
  */
 import type { DockerContainer, Sweep } from '@/api/types';
-import type { Semantic } from './vocabulary';
+import { inventoryMembership, membershipCounts } from './inventory';
 
 export const LABEL_PROJECT = 'com.docker.compose.project';
 export const LABEL_SERVICE = 'com.docker.compose.service';
@@ -47,31 +47,7 @@ export interface ContainerGroup {
   readonly networks: readonly string[];
 }
 
-/**
- * Membership is an inventory-coverage fact, not runtime state. In particular, a retained
- * record that was not seen can be an inspection gap; it does not establish deletion.
- */
-export function inventoryMembership(value: boolean | null | undefined): Semantic {
-  if (value === true) {
-    return {
-      tone: 'good',
-      label: 'seen in latest inventory',
-      description: 'This record was included in the latest recorded Docker inventory.',
-    };
-  }
-  if (value === false) {
-    return {
-      tone: 'warn',
-      label: 'not seen in latest inventory',
-      description: 'This retained record was not included in the latest inventory. This can include an unreadable inspection and does not prove deletion.',
-    };
-  }
-  return {
-    tone: 'unknown',
-    label: 'membership unknown',
-    description: 'No recorded inventory establishes whether this retained record was included.',
-  };
-}
+export { inventoryMembership };
 
 export interface InventoryMembershipCounts {
   readonly latestSighted: number;
@@ -81,15 +57,14 @@ export interface InventoryMembershipCounts {
 }
 
 /** Counts remain explicitly scoped to latest inventory membership. */
-export function inventoryMembershipCounts(
+export function containerMembershipCounts(
   containers: readonly DockerContainer[],
 ): InventoryMembershipCounts {
+  const base = membershipCounts(containers);
   const latestSighted = containers.filter((container) => container.observed_in_latest_sweep === true);
   return {
-    latestSighted: latestSighted.length,
+    ...base,
     reportedRunningLatestSighted: latestSighted.filter((container) => container.runtime.state === 'running').length,
-    retainedNotSeen: containers.filter((container) => container.observed_in_latest_sweep === false).length,
-    membershipUnknown: containers.filter((container) => container.observed_in_latest_sweep === null || container.observed_in_latest_sweep === undefined).length,
   };
 }
 
@@ -212,7 +187,7 @@ export interface EngineFacts {
  * render as though they had been looked for.
  */
 export function engineFacts(sweep: Sweep | null, containers: readonly DockerContainer[] | null): EngineFacts {
-  const counts = containers === null ? null : inventoryMembershipCounts(containers);
+  const counts = containers === null ? null : containerMembershipCounts(containers);
   return {
     provider: sweep?.provider ?? null,
     version: sweep?.provider_version ?? null,

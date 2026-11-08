@@ -133,10 +133,10 @@ export function Degraded({
 }: {
   title: ReactNode;
   children?: ReactNode;
-  tone?: 'warn' | 'unknown';
+  tone?: 'warn' | 'unknown' | 'bad';
 }): JSX.Element {
   return (
-    <div className={`${styles.degraded} ${tone === 'unknown' ? styles.degradedUnknown : ''}`}>
+    <div className={`${styles.degraded} ${tone === 'unknown' ? styles.degradedUnknown : ''} ${tone === 'bad' ? styles.degradedBad : ''}`}>
       <div className={styles.degradedTitle}>{title}</div>
       {children ? <div className={styles.degradedBody}>{children}</div> : null}
     </div>

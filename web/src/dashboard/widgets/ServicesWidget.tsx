@@ -18,6 +18,7 @@ import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Empty, Degraded } from '@/components/states/SurfaceState';
 import { capabilityStatus, unitActiveState } from '@/domain/vocabulary';
+import { inventoryMembership } from '@/domain/workloads';
 import { SweepCaveat, SweepFoot, WidgetAction } from './shared';
 
 const LIMIT = 8;
@@ -106,6 +107,13 @@ export function ServicesWidget(): JSX.Element {
                     key: 'file',
                     header: 'Unit file',
                     render: (row) => <Value value={row.unit_file_state} mono />,
+                  },
+                  {
+                    key: 'membership',
+                    header: 'Latest',
+                    render: (row) => (
+                      <StatusPill semantic={inventoryMembership(row.observed_in_latest_sweep)} size="sm" />
+                    ),
                   },
                 ]}
               />

@@ -6,9 +6,9 @@
  * pulsing "live" badge over a page that fetched once would be a decorative lie about how
  * current the numbers are.
  *
- * "Re-read" reloads this console's view of LocalPlane's records. It does **not** ask the host
- * to be observed again — that is `POST …/observations/refresh`, which writes observation
- * records, and this build crosses no write boundary of any kind.
+ * "Re-read" reloads this console's view of LocalPlane's stored records. It does **not** ask
+ * the host to be observed again — explicit observation controls on Network, System, Storage
+ * and Workloads start provider reads. This button only triggers stored-record reads.
  */
 import { useCallback } from 'react';
 import { endpoints } from '@/api/endpoints';
@@ -30,7 +30,7 @@ export function ReadStamp(): JSX.Element {
       type="button"
       className={styles.stamp}
       onClick={refreshAll}
-      title="Re-read LocalPlane's records. This does not ask the host to be observed again."
+      aria-label="Re-read stored records. This does not ask the host to be observed again."
       data-reachable={reachable}
     >
       <span className={styles.dot} aria-hidden="true" />

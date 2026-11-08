@@ -20,13 +20,18 @@ export function ResourceView<T>({
   what,
   loadingLabel,
   onRetry,
+  idle,
 }: {
   resource: Resource<T>;
   children: (data: T, meta: { refreshing: boolean; fetchedAt: Date }) => ReactNode;
   what?: string;
   loadingLabel?: string;
   onRetry?: () => void;
+  idle?: ReactNode;
 }): JSX.Element {
+  if (resource.status === 'idle') {
+    return <>{idle ?? <Loading {...(loadingLabel ? { label: loadingLabel } : {})} />}</>;
+  }
   if (resource.status === 'loading') {
     return <Loading {...(loadingLabel ? { label: loadingLabel } : {})} />;
   }

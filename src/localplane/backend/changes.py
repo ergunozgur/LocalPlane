@@ -218,6 +218,17 @@ class ChangeService:
     def list_changes(self, host_id: str, **filters: Any) -> list[ChangeRecord]:
         return self.changes.list_for_host(host_id, **filters)
 
+    def recovery_holds(self, host_id: str, *, limit: int) -> tuple[int, list[ChangeRecord]]:
+        """An accurate total and a bounded page of unresolved recovery holds.
+
+        Pure read over the same two records the per-Change view derives its answer from:
+        the Change's own result and the append-only release marker. It is not the
+        ordinary recent-history page, because a hold must not fall out of attention
+        merely because newer successful Changes were recorded. The display bound is
+        applied in the query, so the route never materializes all history to count it.
+        """
+        return self.changes.unresolved_recovery_required(host_id, limit=limit)
+
     def transcript(self, run_id: str) -> list[Any]:
         return self.events.for_run(run_id)
 

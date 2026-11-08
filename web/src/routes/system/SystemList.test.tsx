@@ -6,7 +6,7 @@
  * local search all agree, without issuing another unit-inventory request.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   MemoryRouter,
@@ -17,6 +17,7 @@ import {
 } from 'react-router-dom';
 import { SystemList } from './SystemList';
 import { BACKEND, stubBackend, urlOf } from '@/test/backend';
+import { refreshAll } from '@/hooks/useResource';
 import type { SystemdUnit, SystemdUnitList } from '@/api/types';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -63,6 +64,23 @@ function renderAt(path: string, overrides: Record<string, unknown> = {}): Return
     </MemoryRouter>,
   );
 }
+
+it('separates reported failures by latest, retained and unknown membership', async () => {
+  renderAt('/system', { '/api/v1/systemd/units': {
+    ...MIXED_LIST,
+    count: 3,
+    units: [true, false, null].map((membership, index) => ({
+      ...unitOf('service', `failure-${index}`, `failure-${index}.service`),
+      active_state: 'failed',
+      observed_in_latest_sweep: membership,
+    })),
+  } });
+  const exactChip = (text: string) => screen.findByText((_content, element) =>
+    element?.tagName === 'SPAN' && element.textContent === text);
+  expect(await exactChip('1 latest-sighted reported failed')).toBeInTheDocument();
+  expect(await exactChip('1 retained historical failure')).toBeInTheDocument();
+  expect(await exactChip('1 reported failed, membership unknown')).toBeInTheDocument();
+});
 
 function typeSelect(): HTMLSelectElement {
   return screen.getByRole('combobox', { name: /unit type/i });
@@ -337,5 +355,286 @@ describe('degraded capability', () => {
     await waitFor(() => expect(screen.getByText(/not fully available/i)).toBeInTheDocument());
     expect(screen.getByText(/partial read/i)).toBeInTheDocument();
     expectRow('ModemManager.service');
+  });
+});
+
+function response(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status });
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (reason?: unknown) => void } {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function unitListWith(units: SystemdUnit[], sweepId = 'swp_initial'): SystemdUnitList {
+  const base = BACKEND['/api/v1/systemd/units'] as SystemdUnitList;
+  return {
+    ...base,
+    count: units.length,
+    units,
+    last_sweep: {
+      ...(base.last_sweep as NonNullable<SystemdUnitList['last_sweep']>),
+      sweep_id: sweepId,
+      capability: 'systemd.units.observe',
+      status: 'ok',
+      issues: [],
+      object_count: units.length,
+    },
+  };
+}
+
+function renderSystem(): void {
+  render(
+    <MemoryRouter initialEntries={['/system']}>
+      <Routes><Route path="system" element={<SystemList />} /></Routes>
+    </MemoryRouter>,
+  );
+}
+
+function unitReads(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>) {
+  return fetchMock.mock.calls.filter(([input, init]) =>
+    urlOf(input) === '/api/v1/systemd/units' && (init?.method ?? 'GET') === 'GET');
+}
+
+function observationPosts(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>) {
+  return fetchMock.mock.calls.filter(([input, init]) =>
+    urlOf(input) === '/api/v1/systemd/observations/refresh' && init?.method === 'POST');
+}
+
+describe('explicit systemd observation', () => {
+  it('issues one POST on click and guards rapid activation', async () => {
+    const baseUnits = [unitOf('service', 'obj_svc', 'sshd.service')];
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = urlOf(input);
+      const method = init?.method ?? 'GET';
+      if (path === '/api/v1/systemd/observations/refresh' && method === 'POST') {
+        return Promise.resolve(response({ host_id: 'host_1', sweep_id: 'swp_obs', status: 'ok', unit_count: 1, issues: [], provider_version: '1', listed_count: 1, selected_count: 1, inventory_limit: null, inventory_complete: true, truncated: false, cap_reached: false, inventory_method: 'list', agent_unit_resolution: null }));
+      }
+      if (path === '/api/v1/systemd/units') {
+        return Promise.resolve(response(unitListWith(baseUnits, 'swp_obs')));
+      }
+      const body = BACKEND[path];
+      if (body !== undefined) return Promise.resolve(response(body));
+      return Promise.resolve(response({ error: { code: 'not_found', message: `${method} missing`, detail: {} } }, 404));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+
+    const button = await screen.findByRole('button', { name: 'Observe units' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    await screen.findByText('Systemd units observation completed');
+    expect(observationPosts(fetchMock)).toHaveLength(1);
+    expect(unitReads(fetchMock).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('keeps the observe button accessible when the initial list is empty', async () => {
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = urlOf(input);
+      const method = init?.method ?? 'GET';
+      if (path === '/api/v1/systemd/observations/refresh' && method === 'POST') {
+        return Promise.resolve(response({ host_id: 'host_1', sweep_id: 'swp_empty', status: 'ok', unit_count: 0, issues: [], provider_version: '1', listed_count: 0, selected_count: 0, inventory_limit: null, inventory_complete: true, truncated: false, cap_reached: false, inventory_method: 'list', agent_unit_resolution: null }));
+      }
+      if (path === '/api/v1/systemd/units') {
+        return Promise.resolve(response(unitListWith([], 'swp_empty')));
+      }
+      const body = BACKEND[path];
+      if (body !== undefined) return Promise.resolve(response(body));
+      return Promise.resolve(response({ error: { code: 'not_found', message: `${method} missing`, detail: {} } }, 404));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+
+    const button = await screen.findByRole('button', { name: 'Observe units' });
+    fireEvent.click(button);
+    await screen.findByText('Systemd units observation completed');
+    expect(observationPosts(fetchMock)).toHaveLength(1);
+  });
+
+  it('reports provider failure status separately from a lost request', async () => {
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = urlOf(input);
+      const method = init?.method ?? 'GET';
+      if (path === '/api/v1/systemd/observations/refresh' && method === 'POST') {
+        return Promise.resolve(response({ host_id: 'host_1', sweep_id: 'swp_fail', status: 'failed', unit_count: 0, issues: [{ source: 'systemd.units.observe', code: 'dbus_error', message: 'D-Bus returned an error', detail: {} }], provider_version: '1', listed_count: null, selected_count: null, inventory_limit: null, inventory_complete: null, truncated: null, cap_reached: null, inventory_method: null, agent_unit_resolution: null }));
+      }
+      if (path === '/api/v1/systemd/units') {
+        return Promise.resolve(response(unitListWith([], 'swp_before')));
+      }
+      const body = BACKEND[path];
+      if (body !== undefined) return Promise.resolve(response(body));
+      return Promise.resolve(response({ error: { code: 'not_found', message: `${method} missing`, detail: {} } }, 404));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Observe units' }));
+    expect(await screen.findByText('Systemd units observation reported provider failure')).toBeInTheDocument();
+    expect(screen.getByText(/D-Bus returned an error/)).toBeInTheDocument();
+  });
+
+  it('uses console-wide re-read as GET-only and never starts a provider observation', async () => {
+    const baseUnits = [unitOf('service', 'obj_svc', 'sshd.service')];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(unitListWith(baseUnits, 'swp_before'))));
+    renderSystem();
+
+    await screen.findByRole('button', { name: 'Observe units' });
+    act(() => refreshAll());
+    await waitFor(() => expect(screen.getByRole('link', { name: 'sshd.service' })).toBeInTheDocument());
+    expect(observationPosts(vi.mocked(fetch))).toHaveLength(0);
+  });
+
+  it('retains prior data when the POST fails and shows the error as uncertain', async () => {
+    const baseUnits = [unitOf('service', 'obj_svc', 'sshd.service')];
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = urlOf(input);
+      const method = init?.method ?? 'GET';
+      if (path === '/api/v1/systemd/observations/refresh' && method === 'POST') {
+        return Promise.resolve(response({ error: { code: 'agent_unavailable', message: 'Agent unavailable', detail: {} } }, 503));
+      }
+      if (path === '/api/v1/systemd/units') {
+        return Promise.resolve(response(unitListWith(baseUnits, 'swp_before')));
+      }
+      const body = BACKEND[path];
+      if (body !== undefined) return Promise.resolve(response(body));
+      return Promise.resolve(response({ error: { code: 'not_found', message: `${method} missing`, detail: {} } }, 404));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+
+    await screen.findByRole('link', { name: 'sshd.service' });
+    fireEvent.click(screen.getByRole('button', { name: 'Observe units' }));
+    expect(await screen.findByText(/Agent unavailable/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'sshd.service' })).toBeInTheDocument();
+  });
+
+  it('keeps a newer global stored GET when the POST fails late', async () => {
+    const baseUnits = [unitOf('service', 'obj_initial', 'initial.service')];
+    const newer = [unitOf('service', 'obj_global', 'global.service')];
+    const post = deferred<Response>();
+    let listCall = 0;
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = urlOf(input);
+      const method = init?.method ?? 'GET';
+      if (path === '/api/v1/systemd/observations/refresh' && method === 'POST') {
+        return post.promise;
+      }
+      if (path === '/api/v1/systemd/units') {
+        listCall += 1;
+        if (listCall === 1) return Promise.resolve(response(unitListWith(baseUnits, 'swp_initial')));
+        return Promise.resolve(response(unitListWith(newer, 'swp_global')));
+      }
+      const body = BACKEND[path];
+      if (body !== undefined) return Promise.resolve(response(body));
+      return Promise.resolve(response({ error: { code: 'not_found', message: `${method} missing`, detail: {} } }, 404));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+
+    await screen.findByRole('link', { name: 'initial.service' });
+    fireEvent.click(screen.getByRole('button', { name: 'Observe units' }));
+
+    // Global re-read arrives while the POST is still pending; the newer stored GET wins.
+    act(() => refreshAll());
+    await screen.findByRole('link', { name: 'global.service' });
+
+    await act(async () =>
+      post.resolve(response({ error: { code: 'agent_unavailable', message: 'Agent unavailable', detail: {} } }, 503))
+    );
+
+    expect(await screen.findByText(/Agent unavailable/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'global.service' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'initial.service' })).not.toBeInTheDocument();
+  });
+
+  it('recovers from a successful POST with a failed stored read by re-reading stored records only', async () => {
+    const fresh = [unitOf('service', 'obj_fresh', 'fresh.service')];
+    let getCall = 0;
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = urlOf(input);
+      const method = init?.method ?? 'GET';
+      if (path === '/api/v1/systemd/observations/refresh' && method === 'POST') {
+        return Promise.resolve(response({ host_id: 'host_1', sweep_id: 'swp_fresh', status: 'ok', unit_count: 1, issues: [], provider_version: '1', listed_count: 1, selected_count: 1, inventory_limit: null, inventory_complete: true, truncated: false, cap_reached: false, inventory_method: 'list', agent_unit_resolution: null }));
+      }
+      if (path === '/api/v1/systemd/units') {
+        getCall += 1;
+        if (getCall === 2) {
+          return Promise.resolve(response({ error: { code: 'store_busy', message: 'store busy', detail: {} } }, 503));
+        }
+        return Promise.resolve(response(getCall === 1 ? unitListWith([unitOf('service', 'obj_before', 'before.service')], 'swp_before') : unitListWith(fresh, 'swp_fresh')));
+      }
+      const body = BACKEND[path];
+      if (body !== undefined) return Promise.resolve(response(body));
+      return Promise.resolve(response({ error: { code: 'not_found', message: `${method} missing`, detail: {} } }, 404));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Observe units' }));
+    expect(await screen.findByText(/responded, but stored records could not be re-read/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Re-read stored records' }));
+    expect(await screen.findByRole('link', { name: 'fresh.service' })).toBeInTheDocument();
+    expect(observationPosts(fetchMock)).toHaveLength(1);
+  });
+
+  it('recovers from a global GET after a successful POST with a failed stored read', async () => {
+    const fresh = [unitOf('service', 'obj_fresh', 'global.service')];
+    let getCall = 0;
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = urlOf(input);
+      const method = init?.method ?? 'GET';
+      if (path === '/api/v1/systemd/observations/refresh' && method === 'POST') {
+        return Promise.resolve(response({ host_id: 'host_1', sweep_id: 'swp_fresh', status: 'ok', unit_count: 1, issues: [], provider_version: '1', listed_count: 1, selected_count: 1, inventory_limit: null, inventory_complete: true, truncated: false, cap_reached: false, inventory_method: 'list', agent_unit_resolution: null }));
+      }
+      if (path === '/api/v1/systemd/units') {
+        getCall += 1;
+        if (getCall === 2) {
+          return Promise.resolve(response({ error: { code: 'store_busy', message: 'store busy', detail: {} } }, 503));
+        }
+        return Promise.resolve(response(getCall === 1 ? unitListWith([unitOf('service', 'obj_before', 'before.service')], 'swp_before') : unitListWith(fresh, 'swp_fresh')));
+      }
+      const body = BACKEND[path];
+      if (body !== undefined) return Promise.resolve(response(body));
+      return Promise.resolve(response({ error: { code: 'not_found', message: `${method} missing`, detail: {} } }, 404));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Observe units' }));
+    expect(await screen.findByText(/responded, but stored records could not be re-read/)).toBeInTheDocument();
+
+    act(() => refreshAll());
+    expect(await screen.findByRole('link', { name: 'global.service' })).toBeInTheDocument();
+    expect(observationPosts(fetchMock)).toHaveLength(1);
+  });
+
+  it('reports a sweep mismatch explicitly', async () => {
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const path = urlOf(input);
+      const method = init?.method ?? 'GET';
+      if (path === '/api/v1/systemd/observations/refresh' && method === 'POST') {
+        return Promise.resolve(response({ host_id: 'host_1', sweep_id: 'swp_returned', status: 'ok', unit_count: 1, issues: [], provider_version: '1', listed_count: 1, selected_count: 1, inventory_limit: null, inventory_complete: true, truncated: false, cap_reached: false, inventory_method: 'list', agent_unit_resolution: null }));
+      }
+      if (path === '/api/v1/systemd/units') {
+        return Promise.resolve(response(unitListWith([unitOf('service', 'obj_svc', 'sshd.service')], 'swp_stored')));
+      }
+      const body = BACKEND[path];
+      if (body !== undefined) return Promise.resolve(response(body));
+      return Promise.resolve(response({ error: { code: 'not_found', message: `${method} missing`, detail: {} } }, 404));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Observe units' }));
+    expect(await screen.findByText('Systemd units observation completed')).toBeInTheDocument();
+    expect(screen.getByText(/latest sweep differs from this returned response/i)).toBeInTheDocument();
   });
 });

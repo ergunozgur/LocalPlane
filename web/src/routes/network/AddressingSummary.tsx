@@ -11,11 +11,15 @@
  * as permanent.
  */
 import type { NetworkInterface } from '@/api/types';
+import { Link } from 'react-router-dom';
 import { Plate, PlateFoot, PlateHead } from '@/components/primitives/Plate';
 import { DataTable } from '@/components/primitives/DataTable';
 import { Value } from '@/components/semantic/UnknownValue';
 import { Empty } from '@/components/states/SurfaceState';
-import { formatDuration } from '@/domain/format';
+import { addressLifetimeState, formatAddressLifetime, formatTimestamp } from '@/domain/format';
+import { inventoryMembership } from '@/domain/inventory';
+import { freshness as freshnessOf } from '@/domain/vocabulary';
+import { StatusPill } from '@/components/semantic/StatusPill';
 import styles from './AddressingSummary.module.css';
 
 interface Row {
@@ -23,11 +27,37 @@ interface Row {
   address: string;
   interfaceName: string;
   objectId: string;
+  membership: boolean | null;
+  observation: NetworkInterface['observation'];
   family: string;
   scope: string | null;
   source: string | null;
   dynamic: boolean | null;
-  valid: number | null;
+  validState: 'unknown' | 'finite' | 'infinite';
+  validSeconds: number | null;
+  preferredState: 'unknown' | 'finite' | 'infinite';
+  preferredSeconds: number | null;
+}
+
+function LifetimeCell({
+  state,
+  seconds,
+}: {
+  state: 'unknown' | 'finite' | 'infinite';
+  seconds: number | null;
+}): JSX.Element {
+  if (state === 'infinite') {
+    return (
+      <span className={styles.forever} title="The kernel reports this lifetime does not expire.">
+        forever
+      </span>
+    );
+  }
+  return (
+    <span className={state === 'unknown' ? styles.unknownLifetime : 'mono'}>
+      {formatAddressLifetime(state, seconds)}
+    </span>
+  );
 }
 
 export function AddressingSummary({
@@ -52,11 +82,16 @@ export function AddressingSummary({
         address: `${address.address}/${address.prefix_length}`,
         interfaceName: item.name,
         objectId: item.object_id,
+        membership: item.observed_in_latest_sweep,
+        observation: item.observation,
         family: address.family,
         scope: address.scope,
         source: item.ownership.configured_by?.owner.provider ?? null,
         dynamic: address.dynamic,
-        valid: address.valid_lifetime_s,
+        validState: addressLifetimeState(address.valid_lifetime_state, address.valid_lifetime_s),
+        validSeconds: address.valid_lifetime_s,
+        preferredState: addressLifetimeState(address.preferred_lifetime_state, address.preferred_lifetime_s),
+        preferredSeconds: address.preferred_lifetime_s,
       });
     }
   }
@@ -65,9 +100,9 @@ export function AddressingSummary({
     <Plate quiet className={styles.plate}>
       <PlateHead
         title="Addressing"
-        meta="every address this host holds, and what put it there"
+        meta="stored address records, including retained interfaces"
         asOf={observedAt.toLocaleTimeString()}
-        chips={<span className={styles.chip}>{rows.length}</span>}
+        chips={<span className={styles.chip}>{rows.length} stored addresses</span>}
       />
       <DataTable
         caption="Addressing summary"
@@ -75,11 +110,11 @@ export function AddressingSummary({
         rowKey={(row) => row.key}
         emptyState={
           <Empty
-            title={unread > 0 ? 'No address records reported' : 'No addresses'}
+            title={unread > 0 ? 'No address records reported' : 'No stored addresses'}
             explanation={
               unread > 0
                 ? 'Address sources were unavailable for some interfaces; their addresses are unknown, not absent.'
-                : 'No observed interface reports an address.'
+                : 'No stored interface record reports an address. This does not establish current absence.'
             }
           />
         }
@@ -92,7 +127,16 @@ export function AddressingSummary({
           {
             key: 'interface',
             header: 'Interface',
-            render: (row) => <span className="mono">{row.interfaceName}</span>,
+            render: (row) => (
+              <>
+                <Link className="mono" to={`/network/${encodeURIComponent(row.objectId)}`}>{row.interfaceName}</Link>
+                <div className={styles.recordEvidence}>
+                  <StatusPill semantic={inventoryMembership(row.membership)} size="sm" />
+                  <StatusPill semantic={freshnessOf(row.observation?.freshness ?? 'never_observed')} size="sm" />
+                  <span>{formatTimestamp(row.observation?.observed_at) ?? 'Observation time unknown'}</span>
+                </div>
+              </>
+            ),
           },
           { key: 'family', header: 'Family', render: (row) => <Value value={row.family} mono /> },
           { key: 'scope', header: 'Scope', render: (row) => <Value value={row.scope} mono /> },
@@ -119,20 +163,19 @@ export function AddressingSummary({
             ),
           },
           {
-            key: 'lifetime',
-            header: 'Lifetime',
-            render: (row) =>
-              row.valid === null ? (
-                <span className={styles.forever} title="The kernel reports no expiry.">
-                  forever
-                </span>
-              ) : (
-                <span className="mono">{formatDuration(row.valid)}</span>
-              ),
+            key: 'valid',
+            header: 'Valid lifetime',
+            render: (row) => <LifetimeCell state={row.validState} seconds={row.validSeconds} />,
+          },
+          {
+            key: 'preferred',
+            header: 'Preferred lifetime',
+            render: (row) => <LifetimeCell state={row.preferredState} seconds={row.preferredSeconds} />,
           },
         ]}
       />
       <PlateFoot source="rtnetlink address records, correlated with each interface's ownership">
+        <span>Lifetimes are reported at each interface observation, not a live countdown.</span>
         {unread > 0 ? (
           <span className={styles.unread}>
             {unread} interface{unread === 1 ? '' : 's'} had no address source available — their

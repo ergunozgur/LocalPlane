@@ -351,7 +351,8 @@ describe('explicit Docker inventory refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh Docker inventory' }));
     expect((await screen.findAllByText('second-group')).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /Container groups\s*2/ })).toBeInTheDocument();
-    expect(containerReads(fetchMock)).toHaveLength(2);
+    // Initial read + post-observation stored read + stored-only invalidation refresh.
+    expect(containerReads(fetchMock)).toHaveLength(3);
     expectOnlyInventoryPost(fetchMock);
   });
 

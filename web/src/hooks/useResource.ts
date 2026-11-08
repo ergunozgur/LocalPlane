@@ -111,6 +111,7 @@ function release(key: string, flight: Flight): void {
 }
 
 export type Resource<T> =
+  | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'success'; data: T; fetchedAt: Date; refreshing: boolean }
   | { status: 'failed'; error: ApiError; retry: () => void };
@@ -118,6 +119,22 @@ export type Resource<T> =
 export interface ResourceHandle<T> {
   resource: Resource<T>;
   refresh: () => void;
+}
+
+/**
+ * What a read is for, so the console-wide re-read only reaches the streams it should.
+ *
+ *   stored  — persisted backend records. Receives `refreshAll` and manual refresh.
+ *   live    — a reachability/probe read taken for this mount. Excluded from `refreshAll`;
+ *             manual refresh still works. Used for agent hello and consent-gated reads
+ *             whose mount is itself the operator action (e.g. opening a log panel).
+ *   consent — a read the operator must explicitly start. No mount fetch, no global fetch;
+ *             only manual refresh. Used for storage observation and container stats.
+ */
+export type ReadKind = 'stored' | 'live' | 'consent';
+
+export interface UseResourceOptions {
+  kind?: ReadKind;
 }
 
 function toApiError(cause: unknown, path: string): ApiError {
@@ -139,8 +156,12 @@ function toApiError(cause: unknown, path: string): ApiError {
 export function useResource<T>(
   key: string,
   fetcher: (signal: AbortSignal) => Promise<T>,
+  options: UseResourceOptions = {},
 ): ResourceHandle<T> {
-  const [resource, setResource] = useState<Resource<T>>({ status: 'loading' });
+  const { kind = 'stored' } = options;
+  const [resource, setResource] = useState<Resource<T>>(
+    kind === 'consent' ? { status: 'idle' } : { status: 'loading' },
+  );
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
@@ -149,9 +170,20 @@ export function useResource<T>(
   const [nonce, setNonce] = useState(0);
   const globalNonce = useRefreshVersion();
 
+  // Only stored reads follow the console-wide re-read signal. Live reads fetch on mount and
+  // manual refresh only; consent reads fetch on manual refresh only. A stable trigger for
+  // live/consent means a global refresh does not re-run this effect (and therefore does not
+  // abort any in-flight live/consent request through the normal cleanup path).
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
+  const globalTrigger = kind === 'stored' ? globalNonce : -1;
 
   useEffect(() => {
+    // Consent reads stay idle until an explicit refresh; live reads fetch on initial mount
+    // and on manual refresh.
+    if (kind === 'consent' && nonce === 0) {
+      return;
+    }
+
     let live = true;
 
     const held = dataRef.current;
@@ -168,8 +200,9 @@ export function useResource<T>(
     }
 
     // The nonce is part of the sharing key so a deliberate refresh always issues a new
-    // request rather than joining one that began before the operator asked.
-    const flightKey = `${key}#${nonce}#${globalNonce}`;
+    // request rather than joining one that began before the operator asked. For stored reads
+    // the console-wide refresh counter is also part of the key; for live/consent it is fixed.
+    const flightKey = `${key}#${nonce}#${globalTrigger}`;
     const flight = share(flightKey, (signal) => fetcherRef.current(signal));
 
     void (async () => {
@@ -193,7 +226,7 @@ export function useResource<T>(
       live = false;
       release(flightKey, flight);
     };
-  }, [key, nonce, globalNonce, refresh]);
+  }, [key, nonce, globalTrigger, refresh, kind]);
 
   return { resource, refresh };
 }
@@ -208,7 +241,9 @@ export function combine<A, B>(a: Resource<A>, b: Resource<B>): Resource<[A, B]> 
   // A failed resource carries no data, so it is already a `Resource` of any type.
   if (a.status === 'failed') return a;
   if (b.status === 'failed') return b;
-  if (a.status === 'loading' || b.status === 'loading') return { status: 'loading' };
+  if (a.status === 'idle' || b.status === 'idle' || a.status === 'loading' || b.status === 'loading') {
+    return { status: 'loading' };
+  }
   return {
     status: 'success',
     data: [a.data, b.data],
@@ -225,6 +260,7 @@ export function combine<A, B>(a: Resource<A>, b: Resource<B>): Resource<[A, B]> 
  * Anything other than a 404 stays a failure.
  */
 export function optional<T>(resource: Resource<T>): Resource<T | null> {
+  if (resource.status === 'idle') return resource;
   if (resource.status === 'failed' && resource.error.notFound) {
     return { status: 'success', data: null, fetchedAt: new Date(), refreshing: false };
   }
