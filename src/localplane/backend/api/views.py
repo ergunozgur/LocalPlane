@@ -669,6 +669,9 @@ def systemd_unit_view(
             if isinstance(facts.get("current_job"), dict)
             else None
         ),
+        current_job_state=(facts.get("current_job_state")
+                           if facts.get("current_job_state") in ("none", "pending", "unreadable")
+                           else "unreadable"),
         invocation_id=facts.get("invocation_id"),
         timestamps=dict(facts.get("timestamps") or {}),
         relationships=[
@@ -1062,6 +1065,7 @@ def run_view(
     checkpoint: CheckpointRecord | None = None,
     guard: RunGuardRecord | None = None,
     change: ChangeRecord | None = None,
+    change_representation: schemas.Change | None = None,
     events: Sequence[RunEventRecord] = (),
     write_locked: bool = False,
 ) -> schemas.Run:
@@ -1094,7 +1098,7 @@ def run_view(
         # The transcript is listed once, on the Run, and not again inside the embedded
         # Change: one representation of one history. `GET /changes/{id}` carries it there.
         change=(
-            change_view(change, object_name=object_name, write_locked=write_locked)
+            change_representation or change_view(change, object_name=object_name, write_locked=write_locked)
             if change
             else None
         ),
@@ -1553,7 +1557,7 @@ _RESOLVE = "resolve"
 
 
 def recovery_attempt_view(
-    record: RecoveryAttemptRecord, change: ChangeRecord
+    record: RecoveryAttemptRecord, change: ChangeRecord, *, assessment_only: bool = False
 ) -> schemas.RecoveryAttemptView:
     """One recovery action, with its two readings kept apart.
 
@@ -1565,7 +1569,7 @@ def recovery_attempt_view(
     return schemas.RecoveryAttemptView(
         attempt_id=record.attempt_id,
         sequence=record.sequence,
-        kind=record.kind,
+        kind="assess" if assessment_only else record.kind,
         started_at=_parse(record.started_at),
         finished_at=_parse(record.finished_at) if record.finished_at else None,
         outcome=record.outcome,
@@ -1621,13 +1625,12 @@ def _available_recovery_actions(
 ) -> list[str]:
     """What an operator may do about this hold right now.
 
-    ``retry`` is always offered while a hold is open, because the first thing it does is
-    look — and looking is often the whole answer. ``confirm_retry`` is offered only while no
-    authority is outstanding, because authority does not accumulate.
+    These are current controls, not a guarantee that dispatch will pass fresh safety gates.
+    ``confirm_retry`` is offered only while no authority is outstanding.
     """
     if hold.state is not RecoveryHoldState.UNRESOLVED:
         return []
-    actions = [_RETRY]
+    actions = ["assess", _RETRY]
     if authority is None:
         actions.append(_CONFIRM_RETRY)
     return [*actions, _RESOLVE]
@@ -1673,6 +1676,9 @@ def change_view(
     hold: RecoveryHold | None = None,
     attempts: Sequence[RecoveryAttemptRecord] = (),
     authority: ConfirmationRecord | None = None,
+    recovery_revision: int = 0,
+    confirmation_method: str = "acknowledge",
+    confirmation_policy: str = "",
 ) -> schemas.Change:
     """One Change, and everything that is known and not known about what it did."""
     hold = hold or RecoveryHold(
@@ -1743,6 +1749,9 @@ def change_view(
         ),
         recovery=schemas.ChangeRecovery(
             required=record.recovery_required,
+            revision=recovery_revision,
+            confirmation_requirement=schemas.RecoveryConfirmationRequirement(
+                method=confirmation_method, object_name=object_name, policy=confirmation_policy),
             state=str(hold.state),
             reason=record.recovery_reason,
             known={
@@ -1763,10 +1772,15 @@ def change_view(
             unknown=_UNKNOWN_BY_REASON.get(record.recovery_reason or "", []),
             object_write_locked=hold.object_write_locked,
             released_at=_parse(hold.released_at) if hold.released_at else None,
-            released_by=hold.released_by,
+            released_by=("assess" if hold.released_by_attempt_id and any(
+                event.detail.get("attempt_id") == hold.released_by_attempt_id
+                and event.detail.get("assessment_only") for event in events)
+                else hold.released_by),
             released_by_attempt_id=hold.released_by_attempt_id,
             last_observed=_last_observed(attempts),
-            attempts=[recovery_attempt_view(a, record) for a in attempts],
+            attempts=[recovery_attempt_view(a, record, assessment_only=any(
+                event.detail.get("attempt_id") == a.attempt_id and event.detail.get("assessment_only")
+                for event in events)) for a in attempts],
             authority=(
                 None if authority is None
                 else schemas.RecoveryAuthority(
@@ -1778,7 +1792,8 @@ def change_view(
                     satisfied_at=_parse(authority.satisfied_at),
                 )
             ),
-            available_actions=_available_recovery_actions(hold, authority),
+            available_actions=([] if any(a.finished_at is None for a in attempts)
+                               else _available_recovery_actions(hold, authority)),
         ),
         result=record.result,
         finished_at=_parse(record.finished_at) if record.finished_at else None,

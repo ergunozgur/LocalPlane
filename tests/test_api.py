@@ -536,13 +536,19 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
         "/api/v1/changes/recovery-holds",
         "/api/v1/changes/{change_id}",
         "/api/v1/changes/{change_id}/recovery/confirm",
+        "/api/v1/changes/{change_id}/recovery/assess",
         "/api/v1/changes/{change_id}/recovery/retry",
         "/api/v1/changes/{change_id}/recovery/resolve",
+    }
+    assess = paths["/api/v1/changes/{change_id}/recovery/assess"]["post"]
+    assert "requestBody" not in assess
+    assert {(item["name"], item["in"]) for item in assess["parameters"]} == {
+        ("change_id", "path"), ("If-Recovery-Revision", "header"),
     }
 
 
 def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
-    """Twenty-two endpoints are not exclusively a `GET`, and exactly two can change the host.
+    """Twenty-three endpoints are not exclusively a `GET`, and exactly two can change the host.
 
     Most of them change nothing at all. **Four read the host and record or return what
     they saw** — the interface sweep, container sweep, systemd sweep, and management-path
@@ -590,7 +596,9 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
     Storage observation is the twenty-first: a bounded filesystem read with no retention.
     Service journal diagnosis is the twenty-second: explicit sensitivity acknowledgment,
     fixed scope and no retention. It grants no lifecycle authority.
-    The document lists exactly these twenty-two so another cannot appear unnoticed, and
+    Recovery assessment is the twenty-third: a bodyless observation of the original
+    expectation, structurally incapable of dispatching or consuming a grant.
+    The document lists exactly these twenty-three so another cannot appear unnoticed, and
     the assertion is an equality rather than a containment for that reason.
 
     There is still deliberately no `/execute`, no `/operations/{name}/execute`, no generic
@@ -625,6 +633,7 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
         "/api/v1/runs/{run_id}/guard/keep": ["post"],
         "/api/v1/runs/{run_id}/self-impact-override": ["post"],
         "/api/v1/changes/{change_id}/recovery/confirm": ["post"],
+        "/api/v1/changes/{change_id}/recovery/assess": ["post"],
         "/api/v1/changes/{change_id}/recovery/retry": ["post"],
         "/api/v1/changes/{change_id}/recovery/resolve": ["post"],
     }

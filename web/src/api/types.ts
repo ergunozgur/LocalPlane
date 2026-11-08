@@ -124,6 +124,8 @@ export type ChangeMutation = S['ChangeMutation'];
 export type ChangeVerification = S['ChangeVerification'];
 export type ChangeRollback = S['ChangeRollback'];
 export type ChangeRecovery = S['ChangeRecovery'];
+export type RecoveryConfirmRequest = S['RecoveryConfirmRequest'];
+export type RecoveryResolveRequest = S['RecoveryResolveRequest'];
 
 export type Finding = S['Finding'];
 export type FindingList = S['FindingList'];

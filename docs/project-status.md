@@ -115,6 +115,58 @@ checks, with backend startup observation disabled and normal authentication reta
 performs no startup host probes and refuses other methods. There is no production fixture
 switch or authentication bypass.
 
+## Recovery console and durable continuity
+
+Systemd service Changes expose object-scoped recovery beside the original immutable outcome.
+Open the exact Change from its Run or recovery alert. **Refresh recorded status** only reads
+the existing Change, original Run and authoritative unresolved-hold count. **Assess current
+service state** is a separate explicit non-mutating assessment, even when a retry grant is
+outstanding. An inconclusive assessment keeps the hold; running alone cannot prove a restart.
+
+When the backend permits another write, review the original service/action and published
+recovery confirmation policy. Acknowledge it and type the exact service name when required,
+then grant one recovery retry. **Retry original action once** is a separate deliberate action;
+navigation, refresh and assessment never grant or spend authority. Every recovery action
+cross-checks the reviewed revision; retry also names the exact single-use grant. Backend
+executor, job, protection, freshness and authorization refusals remain authoritative.
+
+Manual release has a separate typed-name acknowledgment and optional recorded note. It does
+not mutate the host, verify or repair the service, or upgrade the original uncertain outcome.
+Chronological attempts retain pre-write evidence, dispatch, host effect, post-write verification,
+grant references, refusals and release statements. Current lock state is separate from the
+historical recovery-required result, and host hold counts are reread rather than decremented.
+
+Closing a view detaches from the same durable Run; it does not cancel it. The console retains
+write-attempt intent in session storage before dispatch and refuses dispatch if retention is
+unavailable. Lost apply, confirmation or recovery responses are reconciled through reads,
+never automatic write replay. A missing grant in one read is not proof a confirmation was
+never delivered. Intent markers survive reload in the same tab, not cleared browser storage
+or independent browser sessions; backend single-use/revision guards remain necessary.
+A structured, recognized pre-handler authentication refusal is different from lost delivery:
+after sign-in and a fresh successful read of the same record, only that definitively refused
+intent can be released for another deliberate click. Reattachment never resends the request.
+Transport failures, malformed or unrecognized authentication responses, and unrelated historical
+or legacy apply markers remain blocking.
+The same fresh-read rule applies to the recovery backend's exact pre-dispatch revision/grant
+mismatch refusals. Generic conflicts or server errors do not establish safe non-delivery.
+If completed retry history positively records consumption of the prior grant together with
+its mutation dispatch marker, a held operation can receive a new deliberate single-use grant.
+The operator must acknowledge and type again under the current policy; this does not retry
+automatically. An assessment or revision change alone never renews a lost confirmation.
+Visible attached views watch active or ambiguous records with non-overlapping GETs, bounded
+to 20 reads at three-second intervals. Watching stops on detach, hidden views, authentication
+failure, settled state or budget exhaustion; manual refresh remains available. Sign-in returns
+to the same URL and rereads its records without reissuing writes. Missing recovery metadata
+or unreadable current status cannot enable recovery controls.
+
+Lifecycle completion receipts are bounded to 4096 entries and held in process memory.
+Missing, old-agent or post-restart receipts fail closed and can prevent automatic proof or manual release.
+A completion receipt proves executor completion, not service verification.
+At capacity, new lifecycle dispatches are refused without evicting existing receipts. An exact
+correlated refusal records `not_written`; a lost or unreadable refusal remains uncertain and
+can keep a hold unresolved because no receipt was registered for that refused attempt.
+LocalPlane does not automatically restart the agent or renew recovery authority.
+
 ## Object and operational-record search
 
 The authenticated shell includes a read-only palette for objects and operational records. On
@@ -162,7 +214,7 @@ surface will ship. Source and generated contract decide what is **CURRENT**.
 - Browser sessions are process-local, expire absolutely after 12 hours, and disappear on restart.
 - Plain-HTTP browser use requires a numeric loopback bind. Optional direct HTTPS console startup validates operator-supplied certificate/key files and snapshots a newly installed protected built-console copy; group/other-writable build paths or ancestors fail closed. Restart replaces either. It is not proxy support, public exposure, or production readiness.
 - Rootful Docker socket access is effectively root-equivalent.
-- Console writes are limited to systemd service Composer. The narrow pre-release direct HTTPS serving shape is accepted; broader production packaging and exposure remain unresolved.
+- Console host writes are limited to systemd service Composer and separately authorized exact service recovery retries. The narrow pre-release direct HTTPS serving shape is accepted; broader production packaging and exposure remain unresolved.
 - Container lifecycle lacks authoritative operator-route protection.
 - systemd lifecycle fails closed when containment, effect, authorization, or verification
   evidence cannot be established.

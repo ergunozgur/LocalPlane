@@ -109,6 +109,7 @@ function unit(overrides: Partial<SystemdUnit> = {}): SystemdUnit {
     transient: false,
     template: null,
     current_job: null,
+    current_job_state: 'unreadable',
     invocation_id: 'abc',
     timestamps: {},
     relationships: [],

@@ -38,6 +38,7 @@ shell, no ``sudo`` and no subprocess on it, and the privileged helper does not s
 from __future__ import annotations
 
 import os
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -193,6 +194,8 @@ class AgentService:
             self._systemd, self._socket_diag, self._runtime_owner
         )
         self._instance_id = f"agent_{uuid.uuid4().hex}"
+        self._lifecycle_receipts_lock = threading.Lock()
+        self._lifecycle_receipts: dict[str, tuple[str, str, str]] = {}
         self._started_at = _now()
         self._provider = LinuxNetworkProvider(sysfs_net=self._sysfs_net, runner=runner)
         self._providers = NetworkProviderEvidenceCollector(
@@ -239,6 +242,7 @@ class AgentService:
                 self._systemd_observe_lifecycle_context
             ),
             Method.SYSTEMD_SERVICE_LIFECYCLE: self._systemd_service_lifecycle,
+            Method.SYSTEMD_SERVICE_LIFECYCLE_STATUS: self._systemd_service_lifecycle_status,
         }
         missing = METHODS - set(self._handlers)
         if missing:
@@ -859,7 +863,7 @@ class AgentService:
         """
         _reject_unknown_params(
             params,
-            {"attempt_id", "unit_id", "action"},
+            {"attempt_id", "unit_id", "action", "agent_instance_id"},
             Method.SYSTEMD_SERVICE_LIFECYCLE,
         )
         self._require_capability(CAPABILITY_SYSTEMD_SERVICE_LIFECYCLE)
@@ -867,6 +871,9 @@ class AgentService:
         attempt_id = _require_str(params.get("attempt_id"), "attempt_id")
         unit_id = _require_str(params.get("unit_id"), "unit_id")
         action = _require_str(params.get("action"), "action")
+        instance = params.get("agent_instance_id")
+        if instance is not None and instance != self._instance_id:
+            raise ProtocolError(ErrorCode.INVALID_PARAMS, "agent instance changed", {})
         if action not in SYSTEMD_SERVICE_LIFECYCLE_ACTIONS:
             raise ProtocolError(
                 ErrorCode.INVALID_PARAMS,
@@ -883,7 +890,28 @@ class AgentService:
                  "required_suffix": SYSTEMD_SERVICE_LIFECYCLE_UNIT_SUFFIX},
             ) from exc
 
-        result = self._systemd.dispatch_service_lifecycle(unit_id, action)
+        with self._lifecycle_receipts_lock:
+            if attempt_id in self._lifecycle_receipts:
+                raise ProtocolError(ErrorCode.INVALID_PARAMS, "duplicate lifecycle attempt", {})
+            if len(self._lifecycle_receipts) >= 4096:
+                # No receipt was registered and the provider cannot be called on this path.
+                # A fully correlated reply lets the backend distinguish this definite refusal
+                # from a lost or malformed response, without making room by evicting receipts.
+                return {
+                    "agent_instance_id": self._instance_id,
+                    "host_id": self._identity().host_id,
+                    "mutation": {
+                        "attempt_id": attempt_id, "unit_id": unit_id, "action": action,
+                        "outcome": "not_written", "reason": "lifecycle_receipt_capacity_exhausted",
+                        "provider": PROVIDER_SYSTEMD, "provider_version": None,
+                    },
+                }
+            self._lifecycle_receipts[attempt_id] = (unit_id, action, "active")
+        try:
+            result = self._systemd.dispatch_service_lifecycle(unit_id, action)
+        finally:
+            with self._lifecycle_receipts_lock:
+                self._lifecycle_receipts[attempt_id] = (unit_id, action, "completed")
         return {
             "agent_instance_id": self._instance_id,
             "host_id": self._identity().host_id,
@@ -894,6 +922,20 @@ class AgentService:
                 "provider_version": self._systemd_manager_version(),
             },
         }
+
+    def _systemd_service_lifecycle_status(self, params: dict[str, Any]) -> dict[str, Any]:
+        _reject_unknown_params(params, {"attempt_id", "unit_id", "action", "agent_instance_id"},
+                               Method.SYSTEMD_SERVICE_LIFECYCLE_STATUS)
+        attempt_id = _require_str(params.get("attempt_id"), "attempt_id")
+        unit_id = _require_str(params.get("unit_id"), "unit_id")
+        action = _require_str(params.get("action"), "action")
+        instance = _require_str(params.get("agent_instance_id"), "agent_instance_id")
+        with self._lifecycle_receipts_lock:
+            receipt = self._lifecycle_receipts.get(attempt_id)
+        status = (receipt[2] if instance == self._instance_id and receipt is not None
+                  and receipt[:2] == (unit_id, action) else "unknown")
+        return {"agent_instance_id": self._instance_id, "attempt_id": attempt_id,
+                "unit_id": unit_id, "action": action, "status": status}
 
     def _systemd_manager_version(self) -> str | None:
         """The manager version this agent last read, for the mutation's provenance.

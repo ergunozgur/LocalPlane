@@ -1999,6 +1999,7 @@ def test_the_agent_names_everything_it_has_that_can_change_anything(drifted: Est
         "systemd.resolve_agent_unit",
         "systemd.observe_lifecycle_context",
         "systemd.service_lifecycle",
+        "systemd.service_lifecycle_status",
         # The connection guard's three, of which only the first can cause a write: the
         # other two release one and report on one, and a release can only *prevent* the
         # reversal it was holding.

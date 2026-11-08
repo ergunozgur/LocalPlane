@@ -181,8 +181,11 @@ describe('authenticated boot boundary', () => {
     expect(screen.queryByText(/^shell:/)).not.toBeInTheDocument();
   });
 
-  it('does not bind general-purpose planning or recovery controls', () => {
+  it('binds only named recovery actions, not general-purpose planning', () => {
     expect('createRun' in endpoints).toBe(false);
-    expect('retryRecovery' in endpoints).toBe(false);
+    expect(typeof endpoints.assessRecovery).toBe('function');
+    expect(typeof endpoints.confirmRecovery).toBe('function');
+    expect(typeof endpoints.retryRecovery).toBe('function');
+    expect(typeof endpoints.resolveRecovery).toBe('function');
   });
 });

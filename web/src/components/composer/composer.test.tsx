@@ -295,3 +295,61 @@ it('shows every execution blocker even when the backend reports more than twelve
   for (const code of run.preview.how.blockers) expect(screen.getByText(code)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Apply approved preview' })).toBeDisabled();
 });
+
+it.each(['confirm', 'apply'])('pre-handler %s auth refusal reattaches to the same Run and allows only a new deliberate click', async (kind) => {
+  const run = planned(); let current = kind === 'apply' ? confirmed(run) : run;
+  let refused = false; let lost = false;
+  const fetch = vi.fn(async (path: string, _options: RequestInit) => {
+    if (path === '/api/v1/session') {
+      if (lost) {
+        current = { ...current, preview: { ...current.preview, preview_id: 'preview_after_auth', preview_digest: 'digest_after_auth' } };
+        if (kind === 'apply') current = confirmed(current);
+      }
+      lost = false; return response({ authenticated: true, expires_at: '2026-11-08T20:00:00Z' });
+    }
+    if (path.endsWith(`/${kind}`)) {
+      if (!refused) { refused = true; lost = true; return response({ error: { code: 'authentication_required', message: 'Sign in again', detail: {} } }, 401); }
+      current = kind === 'confirm' ? confirmed(current) : { ...current, state: 'succeeded', host_effect: 'written' };
+    }
+    return response(current);
+  });
+  vi.stubGlobal('fetch', fetch);
+  render(<MemoryRouter initialEntries={[`/operations/runs/${run.run_id}`]}><AuthenticationProvider><Routes><Route path="/operations/runs/:runId" element={<RunDetail />} /></Routes></AuthenticationProvider></MemoryRouter>);
+  const send = () => {
+    if (kind === 'confirm') fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: kind === 'confirm' ? 'Confirm preview' : 'Apply approved preview' }));
+  };
+  await screen.findByRole('region', { name: 'Change Composer' }); send();
+  await screen.findByRole('button', { name: 'Sign in' });
+  fireEvent.change(screen.getByLabelText('Master credential'), { target: { value: 'fixture-only-credential' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+  await screen.findByRole('region', { name: 'Change Composer' });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh Run' })).toBeEnabled());
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(fetch.mock.calls.filter(([path]) => path.endsWith(`/${kind}`))).toHaveLength(1);
+  expect(fetch.mock.calls.filter(([path, options]) => path !== '/api/v1/session' && options.method === 'GET').every(([path]) => path === `/api/v1/runs/${run.run_id}`)).toBe(true);
+  send();
+  await waitFor(() => expect(fetch.mock.calls.filter(([path]) => path.endsWith(`/${kind}`))).toHaveLength(2));
+  const post = fetch.mock.calls.filter(([path]) => path.endsWith(`/${kind}`)).at(-1)!;
+  if (kind === 'confirm') expect(JSON.parse(post[1].body as string)).toMatchObject({ preview_id: 'preview_after_auth', expected_preview_digest: 'digest_after_auth' });
+  else expect(post[1].body).toBeUndefined();
+});
+
+it('a lost Run confirmation remains nonrenewable after a successful same-ID reread and remount', async () => {
+  const run = planned();
+  const fetch = vi.fn(async (path: string) => {
+    if (path.endsWith('/confirm')) throw new TypeError('confirmation response lost');
+    return response(run);
+  });
+  vi.stubGlobal('fetch', fetch); const view = show(run);
+  fireEvent.click(await screen.findByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm preview' }));
+  await screen.findByRole('alert');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh Run' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh Run' }));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  view.unmount(); show(run);
+  fireEvent.click(await screen.findByRole('checkbox'));
+  expect(screen.getByRole('button', { name: 'Confirm preview' })).toBeDisabled();
+  expect(fetch.mock.calls.filter(([path]) => path.endsWith('/confirm'))).toHaveLength(1);
+});

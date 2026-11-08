@@ -70,7 +70,10 @@ The React/Vite Operator Console shows host overview, networking, workloads, syst
 storage pressure, topology, Runs, Changes, and findings. Its read-only global palette searches observed objects
 and bounded recent operational records, then opens their detail views. Authenticated systemd
 service start/stop/restart uses the guarded Composer; Docker, MTU, Adopt and intent-revision
-controls remain absent. See [project status](docs/project-status.md) for scope and limits.
+controls remain absent. Service recovery offers explicit non-mutating assessment, a separate
+single-use grant and deliberate retry, or typed manual hold release without upgrading the
+original outcome. Lost responses reattach to the same Run/Change through bounded reads,
+never automatic write replay. See [project status](docs/project-status.md) for scope and limits.
 
 The console distinguishes re-reading stored records from collecting provider evidence.
 Network, System and Docker have explicit inventory observation controls; failed observations

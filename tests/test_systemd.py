@@ -349,12 +349,31 @@ def test_service_normalisation_and_sentinels_are_localplane_owned():
     facts = unit.facts
     assert facts["canonical_id"] == "alpha.service"
     assert facts["current_job"] is None
+    assert facts["current_job_state"] == "none"
     assert facts["source_path"] is None
     assert facts["invocation_id"] == "01" * 16
     assert facts["service"]["main_pid"] == 42
     assert facts["service"]["control_pid"] is None
     assert facts["service"]["watchdog_usec"] is None
     assert facts["service"]["watchdog_timestamp_monotonic"] is None
+
+
+@pytest.mark.parametrize("job,expected", [
+    ((0, "/"), "none"),
+    ((42, "/org/freedesktop/systemd1/job/42"), "pending"),
+    (None, "unreadable"),
+    ((0, "/bad"), "unreadable"),
+    ("bad", "unreadable"),
+])
+def test_job_state_does_not_treat_missing_or_malformed_as_no_job(job, expected):
+    state = _estate()
+    if job is None:
+        del state.units["alpha.service"]["Job"]
+    else:
+        state.units["alpha.service"]["Job"] = job
+    unit = _provider(state).observe_unit("alpha.service").unit
+    assert unit is not None
+    assert unit.facts["current_job_state"] == expected
 
 
 def test_each_type_has_only_its_own_small_type_specific_model():

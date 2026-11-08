@@ -3272,6 +3272,22 @@
               "type": "string",
               "title": "Change Id"
             }
+          },
+          {
+            "name": "If-Recovery-Revision",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Recovery-Revision"
+            }
           }
         ],
         "requestBody": {
@@ -3284,6 +3300,92 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Change"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/changes/{change_id}/recovery/assess": {
+      "post": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "Assess Change Recovery",
+        "operationId": "assess_change_recovery_api_v1_changes__change_id__recovery_assess_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "change_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Change Id"
+            }
+          },
+          {
+            "name": "If-Recovery-Revision",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Recovery-Revision"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3352,6 +3454,38 @@
             "schema": {
               "type": "string",
               "title": "Change Id"
+            }
+          },
+          {
+            "name": "If-Recovery-Revision",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Recovery-Revision"
+            }
+          },
+          {
+            "name": "If-Recovery-Confirmation",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Recovery-Confirmation"
             }
           }
         ],
@@ -3423,6 +3557,22 @@
             "schema": {
               "type": "string",
               "title": "Change Id"
+            }
+          },
+          {
+            "name": "If-Recovery-Revision",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Recovery-Revision"
             }
           }
         ],
@@ -4228,6 +4378,13 @@
             "type": "boolean",
             "title": "Required"
           },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "confirmation_requirement": {
+            "$ref": "#/components/schemas/RecoveryConfirmationRequirement"
+          },
           "state": {
             "type": "string",
             "title": "State",
@@ -4286,7 +4443,7 @@
               }
             ],
             "title": "Released By",
-            "description": "retry | resolve, or null while it is held."
+            "description": "assess | retry | resolve, or null while held."
           },
           "released_by_attempt_id": {
             "anyOf": [
@@ -4330,13 +4487,15 @@
             },
             "type": "array",
             "title": "Available Actions",
-            "description": "What the operator can do next: `retry` re-attempts the original end state and looks before it writes; `confirm_retry` grants the authority a retry needs if it must write again; `resolve` releases the hold and claims nothing."
+            "description": "Current controls, not a guarantee of dispatch eligibility: `assess` only reads; `retry` re-attempts the original end state and looks before it writes; `confirm_retry` grants the authority a retry needs if it must write again; `resolve` releases the hold and claims nothing."
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "required",
+          "revision",
+          "confirmation_requirement",
           "state",
           "reason",
           "known",
@@ -10023,7 +10182,7 @@
           "kind": {
             "type": "string",
             "title": "Kind",
-            "description": "retry | resolve."
+            "description": "assess | retry | resolve."
           },
           "started_at": {
             "type": "string",
@@ -10167,7 +10326,7 @@
           "note"
         ],
         "title": "RecoveryAttemptView",
-        "description": "One recovery action against a Change: a retry, or a person releasing the hold.\n\nA **later, separate event**. Nothing here is a correction to the Change it belongs to —\nthat record goes on saying what happened to it, and this says what somebody did about it\nafterwards."
+        "description": "One assessment, retry, or manual hold release against a Change.\n\nA **later, separate event**. Nothing here is a correction to the Change it belongs to —\nthat record goes on saying what happened to it, and this says what somebody did about it\nafterwards."
       },
       "RecoveryAuthority": {
         "properties": {
@@ -10216,7 +10375,18 @@
           "acknowledge": {
             "type": "boolean",
             "title": "Acknowledge",
-            "description": "Must be true. The same acknowledge method the original plan required."
+            "description": "Must be true; typed plans also require the exact object name."
+          },
+          "acknowledge_object": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledge Object"
           },
           "expected_recovery_reason": {
             "anyOf": [
@@ -10238,6 +10408,30 @@
         ],
         "title": "RecoveryConfirmRequest",
         "description": "Authorise one recovery retry to dispatch a *new* mutation.\n\nThe confirmation the original apply consumed authorises nothing here. It authorised an\nattempt; that attempt happened. This is a second, separate grant — recorded in the same\ntable, under the same single-use rule — and at most one may be outstanding at a time.\n\n**A retry does not need this to begin.** A retry first asks whether a fresh reading\nalready proves the end state, and one that does completes without writing and without\nconsuming anything. This exists for the case where it does not.\n\nNothing else is accepted. There is no field here for a value, a verb, a target, a\nprovider or a command, and ``extra`` is forbidden on every model in this file."
+      },
+      "RecoveryConfirmationRequirement": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "object_name": {
+            "type": "string",
+            "title": "Object Name"
+          },
+          "policy": {
+            "type": "string",
+            "title": "Policy"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "method",
+          "object_name",
+          "policy"
+        ],
+        "title": "RecoveryConfirmationRequirement"
       },
       "RecoveryHolds": {
         "properties": {
@@ -13773,6 +13967,16 @@
                 "type": "null"
               }
             ]
+          },
+          "current_job_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "pending",
+              "unreadable"
+            ],
+            "title": "Current Job State",
+            "default": "unreadable"
           },
           "invocation_id": {
             "anyOf": [
