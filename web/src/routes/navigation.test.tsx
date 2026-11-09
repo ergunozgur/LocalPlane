@@ -65,6 +65,9 @@ describe('every route renders', () => {
   ])('renders %s', async (path, expected) => {
     stubBackend();
     renderAt(path);
+    // The first render of the full App shell can be slow under load; wait for it to mount
+    // before asserting the route-specific content.
+    await screen.findByRole('button', { name: /Search objects/ }, { timeout: 3000 });
     expect((await screen.findAllByText(expected)).length).toBeGreaterThan(0);
   });
 

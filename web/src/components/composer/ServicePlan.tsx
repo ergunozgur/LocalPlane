@@ -4,6 +4,7 @@ import { endpoints } from '@/api/endpoints';
 import type { Run, SystemdUnit, SystemdServiceOperation } from '@/api/types';
 import { runRequestError } from '@/hooks/useRun';
 import { OPERATIONS_WITH_UI_CONTROLS } from '@/domain/execution';
+import { runUrl } from '@/domain/recordLink';
 import type { ServiceIntent } from '@/domain/serviceIntent';
 import styles from './Composer.module.css';
 
@@ -34,7 +35,7 @@ export function ServicePlan({ unit, intent }: { unit: SystemdUnit; intent?: Serv
     </div>
     </> : null}
     {pending ? <p role="status">Planning… You can find the retained Run in Operations if you leave this page.</p> : null}
-    {run ? <p role="status"><Link to={`/operations/runs/${encodeURIComponent(run.run_id)}`}>Open Composer · {run.object_name} · {run.operation}</Link></p> : null}
+    {run ? <p role="status"><Link to={runUrl(run.run_id)}>Open Composer · {run.object_name} · {run.operation}</Link></p> : null}
     {error ? <div role="alert" className={styles.error}><p>{runRequestError(error)}</p><p>Inspect <Link to="/operations?tab=runs">Runs in Operations</Link> before planning again; a Run may already have been created.</p></div> : null}
   </div>;
 }

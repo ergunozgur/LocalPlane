@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { endpoints } from '@/api/endpoints';
 import { OPERATIONS_WITH_UI_CONTROLS } from '@/domain/execution';
+import { changeUrl, findingUrl, runUrl } from '@/domain/recordLink';
 import { serviceIntentUrl, type ServiceOperation } from '@/domain/serviceIntent';
 import styles from './GlobalSearch.module.css';
 
@@ -137,7 +138,7 @@ export function GlobalSearch(): JSX.Element {
           kind: 'run',
           state: item.state,
           fields: [item.object_id, item.object_name, item.operation, item.state],
-          to: `/operations/runs/${encodeURIComponent(item.run_id)}`,
+          to: runUrl(item.run_id),
         })),
       ),
       endpoints.changes({ limit: 100 }, { signal: controller.signal }).then((list) =>
@@ -148,7 +149,7 @@ export function GlobalSearch(): JSX.Element {
           kind: 'change',
           state: item.result,
           fields: [item.object_id, item.object_name, item.operation, item.result],
-          to: `/operations/changes/${encodeURIComponent(item.change_id)}`,
+          to: changeUrl(item.change_id),
         })),
       ),
       endpoints.findings({ status: 'all', limit: 100 }, { signal: controller.signal }).then((list) =>
@@ -159,7 +160,7 @@ export function GlobalSearch(): JSX.Element {
           kind: 'finding',
           state: item.status,
           fields: [item.object_id, item.object_name, item.summary, item.finding_type, item.subject, item.status],
-          to: `/operations/findings/${encodeURIComponent(item.finding_id)}`,
+          to: findingUrl(item.finding_id),
         })),
       ),
     ];

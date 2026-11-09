@@ -9,6 +9,7 @@ import { Disclosure, Gaps, RawEvidence } from '@/components/semantic/Evidence';
 import { formatTimestamp } from '@/domain/format';
 import { buildOffersControl } from '@/domain/execution';
 import { recoveryConfirmationIntent } from '@/domain/recovery';
+import { runUrl } from '@/domain/recordLink';
 import { RequestFailure } from './RunComposer';
 import styles from './RecoveryPanel.module.css';
 
@@ -46,7 +47,7 @@ export function RecoveryPanel({ change, controller }: { change: Change; controll
   return <Plate tone={held ? 'attention' : undefined} className={styles.panel} aria-label="Recovery console">
     <PlateHead title="Recovery" meta={held ? 'object-only hold' : recovery.state} />
     <PlateBody>
-      <div className={styles.identity}><strong>{change.object_name}</strong><span>{change.operation}</span><Link to={`/operations/runs/${encodeURIComponent(change.run_id)}`}>Original Run · {change.run_id}</Link></div>
+      <div className={styles.identity}><strong>{change.object_name}</strong><span>{change.operation}</span><Link to={runUrl(change.run_id)}>Original Run · {change.run_id}</Link></div>
       <div className={styles.summary}>
         <div><span>Original outcome</span><strong>{change.result}</strong><small>Mutation: {change.mutation.outcome ?? 'unsettled'} · Verification: {change.verification.outcome}</small></div>
         <div><span>Latest recovery attempt</span><strong>{latest ? `${latest.kind} · ${latest.outcome}` : 'None recorded'}</strong><small>{latest ? formatTimestamp(latest.started_at) : 'No assessment or recovery recorded'}</small></div>

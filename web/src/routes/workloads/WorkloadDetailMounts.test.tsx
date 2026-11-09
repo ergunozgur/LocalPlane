@@ -1,18 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { WorkloadDetail } from './WorkloadDetail';
-import { BACKEND, stubBackend, urlOf } from '@/test/backend';
+import { BACKEND, RELATIONSHIP_BRIDGE, stubBackend, urlOf } from '@/test/backend';
 import type { DockerContainer } from '@/api/types';
+import { refreshAll } from '@/hooks/useResource';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-function renderMounts(container: DockerContainer, objectId = 'obj_ct'): void {
-  stubBackend({ [`/api/v1/docker/containers/${encodeURIComponent(objectId)}`]: container });
+function renderMounts(container: DockerContainer, objectId = 'obj_ct', extra: Record<string, unknown> = {}): void {
+  stubBackend({ [`/api/v1/docker/containers/${encodeURIComponent(objectId)}`]: container, ...extra });
   render(
     <MemoryRouter initialEntries={[`/workloads/${encodeURIComponent(objectId)}?tab=mounts`]}>
       <Routes><Route path="workloads/:objectId" element={<WorkloadDetail />} /></Routes>
@@ -23,9 +24,6 @@ function renderMounts(container: DockerContainer, objectId = 'obj_ct'): void {
 function expectMountReadsOnly(objectId = 'obj_ct'): void {
   const expectedPaths = new Set([
     `/api/v1/docker/containers/${encodeURIComponent(objectId)}`,
-    '/api/v1/network/interfaces',
-    '/api/v1/docker/containers',
-    '/api/v1/management-path',
     '/api/v1/findings',
     '/api/v1/changes',
     '/api/v1/runs',
@@ -38,6 +36,32 @@ function expectMountReadsOnly(objectId = 'obj_ct'): void {
 }
 
 describe('container Mounts tab', () => {
+  it('reads relationship resources only after the Relationships tab opens', async () => {
+    const container = BACKEND['/api/v1/docker/containers/obj_ct'] as DockerContainer;
+    renderMounts(container, 'obj_ct', {
+      '/api/v1/network/interfaces': { ...(BACKEND['/api/v1/network/interfaces'] as object), interfaces: [RELATIONSHIP_BRIDGE] },
+      '/api/v1/docker/containers': { ...(BACKEND['/api/v1/docker/containers'] as object), containers: [container, { ...container, object_id: 'sibling', name: 'sibling-container' }] },
+    });
+    await screen.findByRole('tabpanel', { name: 'Mounts' });
+    await waitFor(() => expectMountReadsOnly());
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('tab', { name: 'Overview' }));
+    expectMountReadsOnly();
+    await user.click(screen.getByRole('tab', { name: 'Relationships' }));
+    await screen.findByRole('tabpanel', { name: 'Relationships' });
+    expect(await screen.findByText('br-app')).toBeInTheDocument();
+    expect(screen.getByText('sibling-container')).toBeInTheDocument();
+    expect(screen.getByText(/ownership.created_by.owner.instance=net1 matched/)).toBeInTheDocument();
+    const paths = vi.mocked(fetch).mock.calls.map(([input]) => urlOf(input));
+    expect(paths).toEqual(expect.arrayContaining(['/api/v1/network/interfaces', '/api/v1/docker/containers', '/api/v1/management-path']));
+    act(() => refreshAll());
+    await waitFor(() => {
+      for (const path of ['/api/v1/network/interfaces', '/api/v1/docker/containers', '/api/v1/management-path']) {
+        expect(vi.mocked(fetch).mock.calls.filter(([input]) => urlOf(input) === path).length).toBeGreaterThanOrEqual(2);
+      }
+    });
+    expect(vi.mocked(fetch).mock.calls.every(([, init]) => init?.method === 'GET')).toBe(true);
+  });
   it('keeps volume names, daemon sources, reported access, and exact conflicting facts distinct', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const container: DockerContainer = {

@@ -1,7 +1,7 @@
 /**
  * The outcome banner for an explicit observe → stored-read flow.
  *
- * This is the generic form of the Docker-specific banner in WorkloadList. It states exactly
+ * States exactly
  * what the provider returned, whether the stored list matches it, and what recovery actions
  * are available — without ever claiming the list is current when it is not.
  */
@@ -19,6 +19,8 @@ interface ObservationOutcomeProps<Result extends BaseObservationResult> {
   resultSummary: (result: Result) => ReactNode;
   onRefresh: () => void;
   onRetryStoredRead: () => void;
+  vocabulary?: { action: string; actor: string; records: string; observingTitle: string; uncertain: string };
+  hasStoredRecords: boolean;
 }
 
 export function ObservationOutcome<Result extends BaseObservationResult>({
@@ -27,15 +29,20 @@ export function ObservationOutcome<Result extends BaseObservationResult>({
   resultSummary,
   onRefresh,
   onRetryStoredRead,
+  vocabulary,
+  hasStoredRecords,
 }: ObservationOutcomeProps<Result>): JSX.Element | null {
   if (!outcome) return null;
+  const action = vocabulary?.action ?? 'observation';
+  const actor = vocabulary?.actor ?? 'the agent';
+  const records = vocabulary?.records ?? subject.toLowerCase();
+  const retained = hasStoredRecords ? 'The prior stored records remain visible. ' : 'No stored records are currently visible. ';
 
   if (outcome.phase === 'observing') {
     return (
       <div className={styles.outcome} role="status" aria-live="polite">
-        <Degraded title={`Observing ${subject.toLowerCase()} now`}>
-          The prior stored records remain visible while LocalPlane asks the agent for one
-          observation.
+        <Degraded title={vocabulary?.observingTitle ?? `Observing ${subject.toLowerCase()} now`}>
+          {retained}LocalPlane is asking {actor} for one {action}.
         </Degraded>
       </div>
     );
@@ -43,8 +50,8 @@ export function ObservationOutcome<Result extends BaseObservationResult>({
   if (outcome.phase === 'reading') {
     return (
       <div className={styles.outcome} role="status" aria-live="polite">
-        <Degraded title={`Reading stored ${subject.toLowerCase()} records`}>
-          The agent returned an observation response. LocalPlane is re-reading stored records
+        <Degraded title={`Reading stored ${records} records`}>
+          {actor} returned an {action} response. LocalPlane is re-reading stored records
           before presenting the list as updated.
         </Degraded>
       </div>
@@ -53,10 +60,9 @@ export function ObservationOutcome<Result extends BaseObservationResult>({
   if (outcome.phase === 'observation_failed') {
     return (
       <div className={styles.outcome} role="alert">
-        <Degraded tone="warn" title={`${subject} observation request failed`}>
-          The backend returned no completed observation result. The visible stored records were
-          not replaced. <ErrorFact error={outcome.error} />{' '}
-          <button type="button" className="btn sm" onClick={onRefresh}>Retry observation</button>
+        <Degraded tone="warn" title={`${subject} ${action} request failed`}>
+          The backend returned no completed {action} result. {retained}<ErrorFact error={outcome.error} />{' '}
+          <button type="button" className="btn sm" onClick={onRefresh}>Retry {action}</button>
         </Degraded>
       </div>
     );
@@ -64,11 +70,10 @@ export function ObservationOutcome<Result extends BaseObservationResult>({
   if (outcome.phase === 'observation_uncertain') {
     return (
       <div className={styles.outcome} role="alert">
-        <Degraded tone="unknown" title={`${subject} observation outcome is uncertain`}>
-          LocalPlane did not receive a readable observation result, so the agent may or may not
-          have looked. A stored-record re-read may show different retained evidence, but cannot
+        <Degraded tone="unknown" title={`${subject} ${action} outcome is uncertain`}>
+          LocalPlane did not receive a readable {action} result, so {vocabulary?.uncertain ?? 'the agent may or may not have looked'}. A stored-record re-read may show different retained evidence, but cannot
           acknowledge this response. <ErrorFact error={outcome.error} />{' '}
-          <button type="button" className="btn sm" onClick={onRefresh}>Retry observation</button>
+          <button type="button" className="btn sm" onClick={onRefresh}>Retry {action}</button>
         </Degraded>
       </div>
     );
@@ -77,10 +82,11 @@ export function ObservationOutcome<Result extends BaseObservationResult>({
     return (
       <div className={styles.outcome} role="alert">
         <Degraded tone="unknown" title={`${subject} responded, but stored records could not be re-read`}>
-          The prior stored records remain visible. Re-read stored records does not contact the
-          agent or repeat the observation. <ErrorFact error={outcome.error} />{' '}
+          {retained}Re-read stored records does not contact {actor} or repeat the {action}.{' '}
+          {resultSummary(outcome.result)} <ErrorFact error={outcome.error} />{' '}
           <button type="button" className="btn sm" onClick={onRetryStoredRead}>Re-read stored records</button>
           <IssueList issues={outcome.result.issues} label="Reported issues" />
+          <ProviderList providers={outcome.result.providers} label="Provider results" />
         </Degraded>
       </div>
     );
@@ -92,12 +98,12 @@ export function ObservationOutcome<Result extends BaseObservationResult>({
   const matchesReturnedSweep = latest?.sweep_id === result.sweep_id;
   const providerFailed = result.status === 'failed';
   const title = outcome.phase === 'complete'
-    ? `${subject} observation completed`
+    ? `${subject} ${action} completed`
     : outcome.phase === 'partial'
-      ? `${subject} observation completed with gaps`
+      ? `${subject} ${action} completed with gaps`
       : providerFailed
-        ? `${subject} observation reported provider failure`
-        : `${subject} observation returned unrecognised status: ${result.status}`;
+        ? `${subject} ${action} reported provider failure`
+        : `${subject} ${action} returned unrecognised status: ${result.status}`;
 
   return (
     <div className={styles.outcome} role="status" aria-live="polite">

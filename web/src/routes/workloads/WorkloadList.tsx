@@ -10,6 +10,7 @@ import type { Sweep } from '@/api/types';
 import { useHostName } from '@/hooks/useEstateCounts';
 import { Plate, PlateBody, PlateFoot, PlateHead, StatusDot } from '@/components/primitives/Plate';
 import { StatusPill } from '@/components/semantic/StatusPill';
+import { ObservationOutcome } from '@/components/semantic/ObservationOutcome';
 import { Value } from '@/components/semantic/UnknownValue';
 import { ResourceView } from '@/components/states/ResourceView';
 import { Degraded, Empty } from '@/components/states/SurfaceState';
@@ -29,7 +30,7 @@ import {
 } from '@/domain/vocabulary';
 import { formatRelative, formatTimestamp } from '@/domain/format';
 import styles from './WorkloadList.module.css';
-import { type InventoryOutcome, useDockerInventory } from './useDockerInventory';
+import { useDockerInventory } from './useDockerInventory';
 
 function effectiveGroup(params: URLSearchParams): string | null {
   const raw = params.get('group');
@@ -49,11 +50,43 @@ export function WorkloadList(): JSX.Element {
   }, [searchParams]);
 
   const refreshPending = outcome?.phase === 'observing' || outcome?.phase === 'reading';
+  const storedGroups = resource.status === 'success' ? groupContainers(resource.data.containers) : null;
 
   return (
-    <ResourceView resource={resource} what="container list" loadingLabel="Reading containers…">
-      {(list, meta) => {
-        const groups = groupContainers(list.containers);
+    <>
+      <ScopeBar
+        crumbs={[{ label: hostName, to: '/' }, { label: 'workloads' }]}
+        tabs={[
+          { to: '/workloads', label: 'Container groups', count: storedGroups?.length, end: true,
+            ...(groupFilter ? ({ current: true } as const) : {}) },
+          { to: '/workloads/runtime', label: 'Runtime' },
+        ]}
+        observedAt={resource.status === 'success' ? resource.fetchedAt : undefined}
+      />
+      <PageHeader
+        title="Workloads"
+        count={resource.status === 'success' ? resource.data.count : undefined}
+        annotation="Stored Docker records stay visible until an explicit inventory observation and a successful stored-record reread establish what this view can show. Compose labels support project grouping, but these groups are provider-derived views—not canonical LocalPlane Applications."
+      >
+        <button type="button" className="btn" onClick={refreshInventory} disabled={refreshPending}>
+          {refreshPending ? 'Refreshing Docker inventory…' : 'Refresh Docker inventory'}
+        </button>
+      </PageHeader>
+      <ObservationOutcome
+        outcome={outcome}
+        subject="Docker"
+        vocabulary={{ action: 'inventory', actor: 'Docker', records: 'container', observingTitle: 'Refreshing Docker inventory', uncertain: 'Docker may or may not have been observed' }}
+        hasStoredRecords={resource.status === 'success'}
+        resultSummary={(result) => <AcknowledgedResult result={result} />}
+        onRefresh={refreshInventory}
+        onRetryStoredRead={retryStoredRead}
+      />
+      {storedReadError && outcome?.phase !== 'reread_failed' && resource.status === 'success' ? (
+        <StoredReadFailure error={storedReadError} onRetry={retryStoredRead} />
+      ) : null}
+      <ResourceView resource={resource} what="container list" loadingLabel="Reading containers…">
+        {(list, meta) => {
+        const groups = storedGroups ?? groupContainers(list.containers);
         const activeGroups = groupFilter
           ? groups.filter((g) => g.origin === 'compose' && g.name === groupFilter)
           : groups;
@@ -62,45 +95,6 @@ export function WorkloadList(): JSX.Element {
 
         return (
           <>
-            <ScopeBar
-              crumbs={[{ label: hostName, to: '/' }, { label: 'workloads' }]}
-              tabs={[
-                {
-                  to: '/workloads',
-                  label: 'Container groups',
-                  count: groups.length,
-                  end: true,
-                  ...(groupFilter ? ({ current: true } as const) : {}),
-                },
-                { to: '/workloads/runtime', label: 'Runtime' },
-              ]}
-              observedAt={meta.fetchedAt}
-            />
-
-            <PageHeader
-              title="Workloads"
-              count={list.count}
-              annotation="Stored Docker records stay visible until an explicit inventory observation and a successful stored-record reread establish what this view can show. Compose labels support project grouping, but these groups are provider-derived views—not canonical LocalPlane Applications."
-            >
-              <button
-                type="button"
-                className="btn"
-                onClick={refreshInventory}
-                disabled={refreshPending}
-              >
-                {refreshPending ? 'Refreshing Docker inventory…' : 'Refresh Docker inventory'}
-              </button>
-            </PageHeader>
-
-            <InventoryOutcomeView
-              outcome={outcome}
-              onRefresh={refreshInventory}
-              onRetryStoredRead={retryStoredRead}
-            />
-            {storedReadError && outcome?.phase !== 'reread_failed' ? (
-              <StoredReadFailure error={storedReadError} onRetry={retryStoredRead} />
-            ) : null}
-
             <Plate quiet>
               <PlateHead
                 title="Container groups"
@@ -199,8 +193,9 @@ export function WorkloadList(): JSX.Element {
             </Plate>
           </>
         );
-      }}
-    </ResourceView>
+        }}
+      </ResourceView>
+    </>
   );
 }
 
@@ -261,85 +256,6 @@ function ContainerGroupRows({ group }: { group: ContainerGroup }): JSX.Element {
         ))}
       </div>
     </section>
-  );
-}
-
-function InventoryOutcomeView({
-  outcome,
-  onRefresh,
-  onRetryStoredRead,
-}: {
-  outcome: InventoryOutcome | null;
-  onRefresh: () => void;
-  onRetryStoredRead: () => void;
-}): JSX.Element | null {
-  if (!outcome) return null;
-
-  if (outcome.phase === 'observing') {
-    return <div id="docker-inventory-status" className={styles.outcome} role="status" aria-live="polite"><Degraded title="Refreshing Docker inventory">The prior stored records remain visible while LocalPlane asks Docker for one inventory observation.</Degraded></div>;
-  }
-  if (outcome.phase === 'reading') {
-    return <div id="docker-inventory-status" className={styles.outcome} role="status" aria-live="polite"><Degraded title="Reading stored container records">Docker returned an inventory response. LocalPlane is re-reading its stored records before presenting the visible list as updated.</Degraded></div>;
-  }
-  if (outcome.phase === 'observation_failed') {
-    return (
-      <div id="docker-inventory-status" className={styles.outcome} role="alert">
-        <Degraded tone="warn" title="Docker inventory request failed">
-          The backend returned no completed inventory result. The visible stored records were not replaced.{' '}
-          <ErrorFact error={outcome.error} />{' '}
-          <button type="button" className="btn sm" onClick={onRefresh}>Retry inventory</button>
-        </Degraded>
-      </div>
-    );
-  }
-  if (outcome.phase === 'observation_uncertain') {
-    return (
-      <div id="docker-inventory-status" className={styles.outcome} role="alert">
-        <Degraded tone="unknown" title="Docker inventory outcome is uncertain">
-          LocalPlane did not receive a readable inventory result, so Docker may or may not have been observed. A stored-record re-read may show different retained evidence, but cannot acknowledge this response.{' '}
-          <ErrorFact error={outcome.error} />{' '}
-          <button type="button" className="btn sm" onClick={onRefresh}>Retry inventory</button>
-        </Degraded>
-      </div>
-    );
-  }
-  if (outcome.phase === 'reread_failed') {
-    return (
-      <div id="docker-inventory-status" className={styles.outcome} role="alert">
-        <Degraded tone="unknown" title="Docker responded, but stored records could not be re-read">
-          The prior stored records remain visible. Re-read stored records does not contact Docker or repeat the inventory observation.{' '}
-          <AcknowledgedResult result={outcome.result} /> <ErrorFact error={outcome.error} />{' '}
-          <button type="button" className="btn sm" onClick={onRetryStoredRead}>Re-read stored records</button>
-          <IssueList issues={outcome.result.issues} label="Reported issues" />
-        </Degraded>
-      </div>
-    );
-  }
-  if (outcome.phase !== 'complete' && outcome.phase !== 'partial' && outcome.phase !== 'unknown') {
-    return null;
-  }
-
-  const { result, list } = outcome;
-  const latest = list.last_sweep;
-  const matchesReturnedSweep = latest?.sweep_id === result.sweep_id;
-  const providerFailed = result.status === 'failed';
-  const title = outcome.phase === 'complete'
-    ? 'Docker inventory completed'
-    : outcome.phase === 'partial'
-      ? 'Docker inventory completed with gaps'
-      : providerFailed
-        ? 'Docker inventory reported provider failure'
-        : `Docker inventory returned unrecognised status: ${result.status}`;
-  return (
-    <div id="docker-inventory-status" className={styles.outcome} role="status" aria-live="polite">
-      <Degraded tone={outcome.phase === 'complete' ? 'unknown' : providerFailed ? 'bad' : 'warn'} title={title}>
-        <AcknowledgedResult result={result} />
-        {matchesReturnedSweep
-          ? <> Stored records were re-read for this sweep{latest?.completed_at ? ` at ${formatTimestamp(latest.completed_at)}` : ''}.</>
-          : <> Stored records were re-read, but their latest sweep differs from this returned response; the list is not claimed to represent the returned sweep.</>}
-        <IssueList issues={result.issues} label="Reported issues" />
-      </Degraded>
-    </div>
   );
 }
 

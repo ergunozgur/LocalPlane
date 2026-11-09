@@ -21,9 +21,6 @@ function expectNetworkingReadsOnly(): void {
   const calls = vi.mocked(fetch).mock.calls;
   const expectedPaths = new Set([
     '/api/v1/docker/containers/obj_ct',
-    '/api/v1/network/interfaces',
-    '/api/v1/docker/containers',
-    '/api/v1/management-path',
     '/api/v1/findings',
     '/api/v1/changes',
     '/api/v1/runs',
