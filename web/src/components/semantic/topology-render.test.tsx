@@ -10,8 +10,8 @@
  * puts the component permanently in the state where labels are dropped, and lets the dropped
  * count be asserted.
  */
-import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi, afterEach } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Topology } from './Topology';
@@ -55,12 +55,48 @@ const NODES: TopologyNode[] = [
   },
 ];
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 function draw(): void {
   render(
     <MemoryRouter>
       <Topology nodes={NODES} columns={4} />
     </MemoryRouter>,
   );
+}
+
+function withGeometry(): void {
+  const origin: DOMRect = {
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 1200,
+    bottom: 800,
+    width: 1200,
+    height: 800,
+    toJSON: () => origin,
+  };
+  const nodeBoxes: Record<string, DOMRect> = {
+    path: {
+      x: 250, y: 100, top: 100, left: 250, right: 450, bottom: 180, width: 200, height: 80,
+      toJSON: () => nodeBoxes.path,
+    },
+    host: {
+      x: 650, y: 100, top: 100, left: 650, right: 850, bottom: 180, width: 200, height: 80,
+      toJSON: () => nodeBoxes.host,
+    },
+    'net:1': {
+      x: 1050, y: 100, top: 100, left: 1050, right: 1250, bottom: 180, width: 200, height: 80,
+      toJSON: () => nodeBoxes['net:1'],
+    },
+  };
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const id = this.getAttribute('data-node');
+    return id && id in nodeBoxes ? nodeBoxes[id]! : origin;
+  });
 }
 
 describe('selection', () => {
@@ -108,7 +144,7 @@ describe('edge labels', () => {
   });
 });
 
-describe('the host’s ports', () => {
+describe("the host's ports", () => {
   it('renders each attachment as its own link out of the diagram', () => {
     draw();
     expect(screen.getByRole('link', { name: /eth0/ })).toHaveAttribute('href', '/network/obj_eth0');
@@ -132,5 +168,192 @@ describe('the host’s ports', () => {
     const slot = container.querySelector('[title^="No traffic history"]');
     expect(slot).toBeInTheDocument();
     expect(slot?.textContent).toBe('');
+  });
+});
+
+describe('selection survival', () => {
+  it('clears the selection when a column resize hides the selected node', async () => {
+    const { container, rerender } = render(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={4} />
+      </MemoryRouter>,
+    );
+    const path = screen.getByRole('button', { name: /eth0/ });
+    fireEvent.click(path);
+    expect(path).toHaveAttribute('aria-pressed', 'true');
+    expect(container.querySelector('[class*="dimmed"]')).toBeInTheDocument();
+    expect(container.querySelector('[class*="nodeDimmed"]')).toBeInTheDocument();
+
+    // Narrowing to two columns hides column 1 (the path node).
+    rerender(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={2} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText(/Select anything in the plane/)).toBeInTheDocument());
+    expect(container.querySelector('[class*="dimmed"]')).toBeNull();
+    expect(container.querySelector('[class*="nodeDimmed"]')).toBeNull();
+    expect(screen.getAllByRole('button').every((button) => button.getAttribute('aria-pressed') === 'false')).toBe(true);
+
+    // A remaining node can be selected again.
+    fireEvent.click(screen.getByRole('button', { name: /demo-host/ }));
+    expect(screen.getByRole('button', { name: /demo-host/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('clears the selection when the selected node is removed from the data', async () => {
+    const { container, rerender } = render(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={4} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /demo-host/ }));
+    expect(screen.getByRole('button', { name: /demo-host/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(container.querySelector('[class*="nodeDimmed"]')).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <Topology nodes={NODES.filter((node) => node.id !== 'host')} columns={4} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText(/Select anything in the plane/)).toBeInTheDocument());
+    expect(container.querySelector('[class*="dimmed"]')).toBeNull();
+    expect(container.querySelector('[class*="nodeDimmed"]')).toBeNull();
+    expect(screen.queryByText('15 interfaces')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /monitoring_default/ }));
+    expect(screen.getByRole('button', { name: /monitoring_default/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('does not resurrect a stored selection when a hidden node reappears', async () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={4} />
+      </MemoryRouter>,
+    );
+    const path = screen.getByRole('button', { name: /eth0/ });
+    fireEvent.click(path);
+    expect(path).toHaveAttribute('aria-pressed', 'true');
+
+    rerender(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={2} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText(/Select anything in the plane/)).toBeInTheDocument());
+
+    // Widening again must not revive the old selection.
+    rerender(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={4} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: /eth0/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText(/Select anything in the plane/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /monitoring_default/ }));
+    expect(screen.getByRole('button', { name: /monitoring_default/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('drops relationship rows when the selected node is hidden', async () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={4} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /demo-host/ }));
+    expect(screen.getByText('The connection terminates on eth0.')).toBeInTheDocument();
+    expect(screen.getByText('br-dd9c carries this network’s gateway.')).toBeInTheDocument();
+
+    // Hide the host (and path) by showing only the last column.
+    rerender(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={1} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.queryByText('The connection terminates on eth0.')).not.toBeInTheDocument());
+    expect(screen.queryByText('br-dd9c carries this network’s gateway.')).not.toBeInTheDocument();
+  });
+});
+
+describe('selection appearance', () => {
+  it('marks the selected node and dims the others', () => {
+    withGeometry();
+    const { container } = render(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={4} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /demo-host/ }));
+
+    const selected = screen.getByRole('button', { name: /demo-host/ });
+    expect(selected.className).toContain('selected');
+    expect(container.querySelectorAll('[class*="nodeDimmed"]')).toHaveLength(2);
+    for (const dimmed of container.querySelectorAll('[class*="nodeDimmed"]')) {
+      expect(dimmed.contains(selected)).toBe(false);
+    }
+  });
+
+  it('lights edges touching the selection and dims the rest', () => {
+    withGeometry();
+    const { container } = render(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={4} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /demo-host/ }));
+    let paths = container.querySelectorAll('svg path');
+    expect(paths).toHaveLength(2);
+    const hasClass = (p: Element, token: string) => p.getAttribute('class')?.includes(token) ?? false;
+    expect([...paths].filter((p) => hasClass(p, 'lit'))).toHaveLength(2);
+    expect([...paths].filter((p) => hasClass(p, 'dimmed'))).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /eth0/ }));
+    paths = container.querySelectorAll('svg path');
+    expect([...paths].filter((p) => hasClass(p, 'lit'))).toHaveLength(1);
+    expect([...paths].filter((p) => hasClass(p, 'dimmed'))).toHaveLength(1);
+  });
+});
+
+describe('nonzero geometry', () => {
+  it('places SVG labels and backgrounds when nodes have real size', () => {
+    withGeometry();
+    const { container } = render(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={4} />
+      </MemoryRouter>,
+    );
+    const texts = container.querySelectorAll('svg text');
+    expect(texts).toHaveLength(2);
+    expect([...texts].map((text) => text.textContent)).toEqual(
+      expect.arrayContaining(['192.0.2.1', '172.19.0.0/16']),
+    );
+    const backgrounds = container.querySelectorAll('svg rect');
+    expect(backgrounds).toHaveLength(2);
+    for (const rect of backgrounds) {
+      expect(rect).toHaveAttribute('width', expect.stringMatching(/^[1-9]/));
+      expect(rect).toHaveAttribute('height', '13');
+    }
+  });
+
+  it('places labels at positive coordinates inside the measured plane', () => {
+    withGeometry();
+    const { container } = render(
+      <MemoryRouter>
+        <Topology nodes={NODES} columns={4} />
+      </MemoryRouter>,
+    );
+    for (const text of container.querySelectorAll('svg text')) {
+      const x = Number(text.getAttribute('x'));
+      const y = Number(text.getAttribute('y'));
+      expect(x).toBeGreaterThan(0);
+      expect(y).toBeGreaterThan(0);
+    }
+    for (const rect of container.querySelectorAll('svg rect')) {
+      const x = Number(rect.getAttribute('x'));
+      const y = Number(rect.getAttribute('y'));
+      expect(x).toBeGreaterThan(0);
+      expect(y).toBeGreaterThan(0);
+    }
   });
 });

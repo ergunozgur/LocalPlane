@@ -101,6 +101,125 @@ function expectOnlyInventoryPost(fetchMock: ReturnType<typeof vi.fn<typeof fetch
 }
 
 describe('explicit Docker inventory refresh', () => {
+  it('settles an acknowledged cold reread failure through the ResourceView GET retry', async () => {
+    let reads = 0;
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const path = urlOf(input);
+      if (path === '/api/v1/docker/containers/observations/refresh') return Promise.resolve(response({
+        sweep_id: 'swp_refreshed', status: 'ok', container_count: 1, provider_version: '1', issues: [],
+      }));
+      if (path === '/api/v1/docker/containers') {
+        reads += 1;
+        return Promise.resolve(reads <= 2
+          ? response({ error: { code: 'store_busy', message: 'store busy', detail: {} } }, 503)
+          : response(listWith([original])));
+      }
+      return Promise.resolve(response(BACKEND[path] ?? {}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkloads();
+    await screen.findByText('The backend refused this request');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Docker inventory' }));
+    await screen.findByText('Docker responded, but stored records could not be re-read');
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await screen.findByText('Docker inventory completed');
+    expect(screen.queryByText('Docker responded, but stored records could not be re-read')).not.toBeInTheDocument();
+    expect(screen.getByText(original.name)).toBeInTheDocument();
+    expectOnlyInventoryPost(fetchMock);
+  });
+
+  it('updates the acknowledged sweep comparison after a later global stored GET', async () => {
+    let newer = false;
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const path = urlOf(input);
+      if (path === '/api/v1/docker/containers/observations/refresh') return Promise.resolve(response({
+        sweep_id: 'swp_a', status: 'ok', container_count: 1, provider_version: '1', issues: [],
+      }));
+      if (path === '/api/v1/docker/containers') return Promise.resolve(response(newer
+        ? listWith([{ ...original, name: 'global-sweep-b' }], 'swp_b')
+        : listWith([original], 'swp_a')));
+      return Promise.resolve(response(BACKEND[path] ?? {}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkloads();
+    await screen.findByText(original.name);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Docker inventory' }));
+    await screen.findByText('Docker inventory completed');
+    expect(screen.getByText(/Stored records were re-read for this sweep/)).toBeInTheDocument();
+    newer = true;
+    act(() => refreshAll());
+    await screen.findByText('global-sweep-b');
+    expect(screen.getByText(/latest sweep differs from this returned response/)).toBeInTheDocument();
+    expectOnlyInventoryPost(fetchMock);
+  });
+  it.each([
+    ['failed', response({ error: { code: 'unavailable', message: 'failed', detail: {} } }, 503), 'Docker inventory request failed'],
+    ['uncertain', response({ sweep_id: 'swp_bad', status: 'ok', container_count: 0, provider_version: '1', issues: [null] }), 'Docker inventory outcome is uncertain'],
+  ])('keeps a cold %s outcome visible when every stored GET fails, and retry is GET-only', async (_kind, postResult, title) => {
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const path = urlOf(input);
+      if (path === '/api/v1/docker/containers/observations/refresh') return Promise.resolve(postResult.clone());
+      if (path === '/api/v1/docker/containers') return Promise.resolve(response({ error: { code: 'store_busy', message: 'unavailable', detail: {} } }, 503));
+      return Promise.resolve(response(BACKEND[path] ?? {}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkloads();
+    await screen.findByText('The backend refused this request');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Docker inventory' }));
+    await screen.findByText(title);
+    await screen.findByText('The backend refused this request');
+    expect(screen.queryByText(/prior stored records remain visible/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Reading containers…')).not.toBeInTheDocument();
+    const reads = containerReads(fetchMock).length;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(containerReads(fetchMock).length).toBeGreaterThan(reads));
+    expectOnlyInventoryPost(fetchMock);
+    expect(screen.getByText(title)).toBeInTheDocument();
+  });
+  it.each([false, true])('enables refresh while first GET is %s and recovers a cold failed POST', async (firstFails) => {
+    const first = deferred<Response>();
+    let reads = 0;
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const path = urlOf(input);
+      if (path === '/api/v1/docker/containers/observations/refresh') {
+        return Promise.resolve(response({ error: { code: 'unavailable', message: 'failed', detail: {} } }, 503));
+      }
+      if (path === '/api/v1/docker/containers') {
+        reads += 1;
+        if (reads === 1) return firstFails
+          ? Promise.resolve(response({ error: { code: 'unavailable', message: 'failed', detail: {} } }, 503))
+          : first.promise;
+        return Promise.resolve(response(before));
+      }
+      return Promise.resolve(response(BACKEND[path] ?? {}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkloads();
+    const button = await screen.findByRole('button', { name: 'Refresh Docker inventory' });
+    if (firstFails) await screen.findByText('The backend refused this request');
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await screen.findByText('Docker inventory request failed');
+    await screen.findByText(original.name);
+    expectOnlyInventoryPost(fetchMock);
+  });
+  it.each([
+    ['null issue', { issues: [null] }],
+    ['bad provider reason', { issues: [], providers: [{ provider: 'docker', source: 'engine', status: 'ok', reason: {} }] }],
+    ['bad provider source', { issues: [], providers: [{ provider: 'docker', source: null, status: 'ok', reason: null }] }],
+    ['bad provider status', { issues: [], providers: [{ provider: 'docker', source: 'engine', status: null, reason: null }] }],
+  ])('treats %s as uncertain without replacing stored rows', async (_name, fields) => {
+    const fetchMock = installBackend({ after: before, result: {
+      sweep_id: 'swp_refreshed', status: 'ok', container_count: 1, provider_version: '29.1.3', ...fields,
+    } });
+    renderWorkloads();
+    await screen.findByText(original.name);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Docker inventory' }));
+    await screen.findByText('Docker inventory outcome is uncertain');
+    expect(screen.getByText(original.name)).toBeInTheDocument();
+    await waitFor(() => expect(containerReads(fetchMock).length).toBeGreaterThan(1));
+    expectOnlyInventoryPost(fetchMock);
+  });
   it('uses one exact POST, guards rapid activation, then uses a pure stored-record GET', async () => {
     const updated: DockerContainer = {
       ...original,
@@ -153,6 +272,8 @@ describe('explicit Docker inventory refresh', () => {
     fireEvent.click(button);
 
     await screen.findByText('Docker responded, but stored records could not be re-read');
+    expect(screen.getByText('swp_refreshed')).toBeInTheDocument();
+    expect(screen.getByText('29.1.3')).toBeInTheDocument();
     expect(screen.getByText('retained-before-read-failure')).toBeInTheDocument();
     expect(inventoryCalls(fetchMock)).toHaveLength(1);
     expect(screen.getByText('Reported issues (1)')).toBeInTheDocument();

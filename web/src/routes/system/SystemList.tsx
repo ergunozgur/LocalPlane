@@ -88,6 +88,7 @@ export function SystemList(): JSX.Element {
       <ObservationOutcome
         outcome={outcome}
         subject="Systemd units"
+        hasStoredRecords={resource.status === 'success'}
         resultSummary={(result) => (
           <>
             {' '}Agent returned status <code>{result.status}</code> · {result.unit_count} unit{result.unit_count === 1 ? '' : 's'} · sweep <code>{result.sweep_id}</code>.
@@ -101,7 +102,7 @@ export function SystemList(): JSX.Element {
       {storedReadError && outcome?.phase !== 'reread_failed' ? (
         <div role="alert" style={{ marginBottom: 14 }}>
           <Degraded tone="unknown" title="Stored unit records could not be re-read">
-            The last visible records remain on screen.{' '}
+            {resource.status === 'success' ? 'The last visible records remain on screen.' : 'No stored records are currently visible.'}{' '}
             <button type="button" className="btn sm" onClick={retryStoredRead}>Re-read stored records</button>
           </Degraded>
         </div>

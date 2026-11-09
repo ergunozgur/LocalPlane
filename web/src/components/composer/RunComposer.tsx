@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Run } from '@/api/types';
 import { endpoints } from '@/api/endpoints';
+import { changeUrl } from '@/domain/recordLink';
 import { executionGate, buildOffersControl } from '@/domain/execution';
 import { useRun, runRequestError } from '@/hooks/useRun';
 import { Plate, PlateBody, PlateHead } from '@/components/primitives/Plate';
@@ -78,7 +79,7 @@ export function RunComposer({ run, controller }: { run: Run; controller: Control
         {buildOffersControl(run.operation) && preWrite && !controller.applyAttempted ? <button type="button" className={styles.button} disabled={!idle} onClick={() => { if (idle) void controller.act('Cancelling', () => endpoints.cancelRun(run.run_id)); }}>Cancel before write</button> : null}
         <button type="button" className={styles.button} disabled={controller.reading} onClick={controller.refresh}>Refresh Run</button>
         <Link to="/operations?tab=runs">Close Composer</Link>
-        {run.change_id ? <Link to={`/operations/changes/${encodeURIComponent(run.change_id)}`}>Inspect Change outcome and verification</Link> : null}
+        {run.change_id ? <Link to={changeUrl(run.change_id)}>Inspect Change outcome and verification</Link> : null}
       </div>
     </PlateBody>
   </Plate>;

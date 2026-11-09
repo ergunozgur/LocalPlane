@@ -74,6 +74,7 @@ export function NetworkList(): JSX.Element {
       <ObservationOutcome
         outcome={outcome}
         subject="Network"
+        hasStoredRecords={resource.status === 'success'}
         resultSummary={(result) => (
           <>
             {' '}Agent returned status <code>{result.status}</code> · {result.object_count} interface{result.object_count === 1 ? '' : 's'} · {result.observation_count} observation{result.observation_count === 1 ? '' : 's'} · sweep <code>{result.sweep_id}</code>.
@@ -89,7 +90,7 @@ export function NetworkList(): JSX.Element {
       {storedReadError && outcome?.phase !== 'reread_failed' ? (
         <div className="outcome" role="alert">
           <Degraded tone="unknown" title="Stored interface records could not be re-read">
-            The last visible records remain on screen.{' '}
+            {resource.status === 'success' ? 'The last visible records remain on screen.' : 'No stored records are currently visible.'}{' '}
             <button type="button" className="btn sm" onClick={retryStoredRead}>Re-read stored records</button>
           </Degraded>
         </div>

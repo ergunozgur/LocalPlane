@@ -49,6 +49,19 @@ function asApiError(cause: unknown, path: string): ApiError {
   });
 }
 
+/** Validate nested fields consumed by the shared outcome renderer, without hiding bad evidence. */
+function hasReadableEvidence(value: BaseObservationResult): boolean {
+  const record = (item: unknown): item is Record<string, unknown> =>
+    typeof item === 'object' && item !== null && !Array.isArray(item);
+  const nullableString = (item: unknown) => item === null || typeof item === 'string';
+  return Array.isArray(value.issues) && value.issues.every((issue: unknown) =>
+    record(issue) && typeof issue.source === 'string' && typeof issue.code === 'string'
+      && typeof issue.message === 'string')
+    && (value.providers === undefined || (Array.isArray(value.providers) && value.providers.every((provider: unknown) =>
+      record(provider) && typeof provider.provider === 'string' && typeof provider.source === 'string'
+        && typeof provider.status === 'string' && nullableString(provider.reason))));
+}
+
 function defaultResultPhase(result: BaseObservationResult): 'complete' | 'partial' | 'unknown' {
   if (result.status === 'ok') return result.issues.length === 0 ? 'complete' : 'partial';
   if (result.status === 'partial') return 'partial';
@@ -137,7 +150,8 @@ export function useInventoryObservation<
 
   const settleReadingOutcome = useCallback((read: StoredRead<List>) => {
     if (read.kind === 'success') {
-      setOutcome((current) => (current?.phase === 'reading' || current?.phase === 'reread_failed')
+      setOutcome((current) => (current?.phase === 'reading' || current?.phase === 'reread_failed'
+        || current?.phase === 'complete' || current?.phase === 'partial' || current?.phase === 'unknown')
         ? { phase: getPhase(current.result), result: current.result, list: read.list }
         : current);
     } else if (read.kind === 'failed') {
@@ -174,6 +188,7 @@ export function useInventoryObservation<
     // An explicit POST supersedes an initial/global list request, but a global re-read never
     // aborts or repeats the POST itself.
     readSequence.current += 1;
+    const observationReadSequence = readSequence.current;
     for (const controller of storedControllers.current) controller.abort();
     storedControllers.current.clear();
     setOutcome({ phase: 'observing' });
@@ -189,7 +204,7 @@ export function useInventoryObservation<
       try {
         const result = await observeRef.current(controller.signal);
         if (!alive.current || thisFlow !== flow.current) return;
-        if (!isResultRef.current(result)) {
+        if (!isResultRef.current(result) || !hasReadableEvidence(result)) {
           const error = new ApiError({
             kind: 'malformed',
             message: 'the inventory response could not be read as the declared result',
@@ -221,6 +236,9 @@ export function useInventoryObservation<
           });
           const latest = stored.current;
           if (latest) setResource({ status: 'success', data: latest.data, fetchedAt: latest.fetchedAt, refreshing: false });
+          else if (readSequence.current === observationReadSequence) {
+            void startStoredRead().then(settleReadingOutcome);
+          }
         }
       } finally {
         postControllers.current.delete(controller);
@@ -235,7 +253,8 @@ export function useInventoryObservation<
     void startStoredRead().then(settleReadingOutcome);
   }, [outcome, settleReadingOutcome, startStoredRead]);
 
-  return { resource, outcome, storedReadError, refreshInventory, retryStoredRead };
+  const exposedResource = resource.status === 'failed' ? { ...resource, retry: retryStoredRead } : resource;
+  return { resource: exposedResource, outcome, storedReadError, refreshInventory, retryStoredRead };
 }
 
 type StoredRead<List> =

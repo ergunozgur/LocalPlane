@@ -64,6 +64,93 @@ function interfaceTable() {
 }
 
 describe('explicit network observation', () => {
+  it.each(['pending', 'failed'] as const)('reports no retained records with a cold %s first GET and recovers with GET only', async (initial) => {
+    const first = deferred<Response>();
+    const post = deferred<Response>();
+    let reads = 0;
+    let recover = false;
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const path = urlOf(input);
+      if (path === '/api/v1/network/observations/refresh') return post.promise;
+      if (path === '/api/v1/network/interfaces') {
+        reads += 1;
+        if (reads === 1 && initial === 'pending') return first.promise;
+        return Promise.resolve(recover ? response(listWith([BACKEND_NETWORK.interfaces[0]]))
+          : response({ error: { code: 'store_busy', message: 'store busy', detail: {} } }, 503));
+      }
+      return Promise.resolve(response(BACKEND[path] ?? {}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderNetwork();
+    if (initial === 'failed') await screen.findByText('Stored interface records could not be re-read');
+    fireEvent.click(await screen.findByRole('button', { name: 'Observe network' }));
+    expect(screen.getByText(/No stored records are currently visible/)).toBeInTheDocument();
+    expect(screen.queryByText(/prior stored records remain visible|last visible records remain on screen/i)).not.toBeInTheDocument();
+    await act(async () => post.resolve(response({ error: { code: 'unavailable', message: 'failed', detail: {} } }, 503)));
+    await screen.findByText('Network observation request failed');
+    await screen.findByText('Stored interface records could not be re-read');
+    expect(screen.queryByText(/prior stored records remain visible|last visible records remain on screen/i)).not.toBeInTheDocument();
+    recover = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Re-read stored records' }));
+    await waitFor(() => expect(interfaceTable().getByRole('link', { name: 'enx020000000012' })).toBeInTheDocument());
+    expect(observationPosts(fetchMock)).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([, init]) => (init?.method ?? 'GET') !== 'GET')).toHaveLength(1);
+  });
+
+  it('exposes returned provider failure when the stored reread fails and retries only GET', async () => {
+    let reads = 0;
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const path = urlOf(input);
+      if (path === '/api/v1/network/observations/refresh') return Promise.resolve(response({
+        sweep_id: 'swp_provider', status: 'partial', object_count: 1, observation_count: 1, issues: [],
+        providers: [{ provider: 'networkmanager', source: 'networkmanager.devices', status: 'failed', reason: 'dbus_timeout', version: '1' }],
+      }));
+      if (path === '/api/v1/network/interfaces') {
+        reads += 1;
+        return Promise.resolve(reads === 2
+          ? response({ error: { code: 'store_busy', message: 'store busy', detail: {} } }, 503)
+          : response(listWith([BACKEND_NETWORK.interfaces[0]], 'swp_provider')));
+      }
+      return Promise.resolve(response(BACKEND[path] ?? {}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderNetwork();
+    await screen.findByRole('table', { name: 'Network interfaces' });
+    fireEvent.click(screen.getByRole('button', { name: 'Observe network' }));
+    await screen.findByText('Network responded, but stored records could not be re-read');
+    const details = screen.getByText('Provider results (1)').closest('details') as HTMLElement;
+    expect(within(details).getByText('networkmanager')).toBeInTheDocument();
+    expect(within(details).getByText('failed')).toBeInTheDocument();
+    expect(within(details).getByText(/dbus_timeout/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Re-read stored records' }));
+    await screen.findByText('Network observation completed with gaps');
+    expect(observationPosts(fetchMock)).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([, init]) => (init?.method ?? 'GET') !== 'GET')).toHaveLength(1);
+  });
+  it.each([
+    ['null issue', { issues: [null] }],
+    ['null provider', { issues: [], providers: [null] }],
+    ['bad reason', { issues: [], providers: [{ provider: 'network', source: 'netlink', status: 'ok', reason: {} }] }],
+    ['bad status', { issues: [], providers: [{ provider: 'network', source: 'netlink', status: null, reason: null }] }],
+  ])('keeps stored network data for malformed %s and rereads with GET only', async (_name, fields) => {
+    const before = listWith([BACKEND_NETWORK.interfaces[0]], 'swp_before');
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const path = urlOf(input);
+      if (path === '/api/v1/network/observations/refresh') return Promise.resolve(response({
+        host_id: 'host_1', sweep_id: 'swp_new', status: 'ok', object_count: 1, observation_count: 1, missing: [], ...fields,
+      }));
+      return Promise.resolve(response(path === '/api/v1/network/interfaces' ? before : BACKEND[path] ?? {}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderNetwork();
+    await screen.findByRole('table', { name: 'Network interfaces' });
+    fireEvent.click(screen.getByRole('button', { name: 'Observe network' }));
+    await screen.findByText('Network observation outcome is uncertain');
+    expect(interfaceTable().getByRole('link', { name: 'enx020000000012' })).toBeInTheDocument();
+    await waitFor(() => expect(interfaceReads(fetchMock).length).toBeGreaterThan(1));
+    expect(observationPosts(fetchMock)).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([, init]) => (init?.method ?? 'GET') !== 'GET')).toHaveLength(1);
+  });
   it('shows the observe button before any stored read and issues one POST on click', async () => {
     const before = listWith([BACKEND_NETWORK.interfaces[0]], 'swp_before');
     const fetchMock = vi.fn<typeof fetch>((input, init) => {

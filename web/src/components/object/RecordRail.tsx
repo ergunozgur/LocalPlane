@@ -20,6 +20,7 @@ import { Plate, PlateFoot, PlateHead } from '@/components/primitives/Plate';
 import { Timeline, type TickEntry } from '@/components/semantic/Timeline';
 import { Empty } from '@/components/states/SurfaceState';
 import { FilterChips } from '@/components/primitives/FilterChips';
+import { changeUrl, findingUrl, runUrl } from '@/domain/recordLink';
 import { changeResult, findingStatus, runState } from '@/domain/vocabulary';
 import { formatTimestamp } from '@/domain/format';
 import styles from './RecordRail.module.css';
@@ -71,7 +72,7 @@ function ObjectRecord({ objectId, objectName }: { objectId: string; objectName: 
             at: `Opened ${formatTimestamp(finding.first_seen_at) ?? '—'}`,
             what: (
               <>
-                <Link to={`/operations/findings/${encodeURIComponent(finding.finding_id)}`}>{finding.summary}</Link>
+                <Link to={findingUrl(finding.finding_id)}>{finding.summary}</Link>
               </>
             ),
             note: `Finding · ${state.label} · ${finding.finding_type.replace(/_/g, ' ')}${finding.resolution ? ` · ${finding.resolution.replace(/_/g, ' ')}` : ''}`,
@@ -92,7 +93,7 @@ function ObjectRecord({ objectId, objectName }: { objectId: string; objectName: 
             at: `Created ${formatTimestamp(change.created_at) ?? '—'}`,
             what: (
               <>
-                <Link to={`/operations/changes/${encodeURIComponent(change.change_id)}`}>{change.operation}</Link>
+                <Link to={changeUrl(change.change_id)}>{change.operation}</Link>
                 {change.field ? <> · {change.field}</> : null}
               </>
             ),
@@ -115,8 +116,8 @@ function ObjectRecord({ objectId, objectName }: { objectId: string; objectName: 
             at: `Created ${formatTimestamp(run.created_at) ?? '—'}`,
             what: (
               <>
-                <Link to={`/operations/runs/${encodeURIComponent(run.run_id)}`}>{run.operation}</Link>
-                {run.change_id ? <> · <Link to={`/operations/changes/${encodeURIComponent(run.change_id)}`}>Change record</Link></> : null}
+                <Link to={runUrl(run.run_id)}>{run.operation}</Link>
+                {run.change_id ? <> · <Link to={changeUrl(run.change_id)}>Change record</Link></> : null}
               </>
             ),
             note: `Run · ${runState(run.state).label} · host effect ${run.host_effect.replace(/_/g, ' ')}`,

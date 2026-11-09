@@ -69,19 +69,6 @@ export function WorkloadDetail(): JSX.Element {
     `container:${objectId}`,
     useCallback((signal) => endpoints.container(objectId, { signal }), [objectId]),
   );
-  const { resource: interfaces } = useResource(
-    'interfaces',
-    useCallback((signal) => endpoints.interfaces({ signal }), []),
-  );
-  const { resource: containers } = useResource(
-    'containers',
-    useCallback((signal) => endpoints.containers({ signal }), []),
-  );
-  const { resource: managementPath } = useResource(
-    'management-path',
-    useCallback((signal) => endpoints.managementPath({ signal }), []),
-  );
-
   return (
     <ResourceView resource={resource} what="container" loadingLabel="Reading container…">
       {(data, meta) => {
@@ -368,12 +355,7 @@ export function WorkloadDetail(): JSX.Element {
             render: () => (
               <ObjectColumns
                 main={
-                  <ObjectRelationships
-                    subject={data}
-                    interfaces={interfaces}
-                    containers={containers}
-                    managementPath={managementPath}
-                  />
+                  <WorkloadRelationships subject={data} />
                 }
               />
             ),
@@ -454,6 +436,21 @@ export function WorkloadDetail(): JSX.Element {
         );
       }}
     </ResourceView>
+  );
+}
+
+function WorkloadRelationships({ subject }: { subject: import('@/api/types').DockerContainer }): JSX.Element {
+  const { resource: interfaces } = useResource(
+    'interfaces', useCallback((signal) => endpoints.interfaces({ signal }), []),
+  );
+  const { resource: containers } = useResource(
+    'containers', useCallback((signal) => endpoints.containers({ signal }), []),
+  );
+  const { resource: managementPath } = useResource(
+    'management-path', useCallback((signal) => endpoints.managementPath({ signal }), []),
+  );
+  return (
+    <ObjectRelationships subject={subject} interfaces={interfaces} containers={containers} managementPath={managementPath} />
   );
 }
 

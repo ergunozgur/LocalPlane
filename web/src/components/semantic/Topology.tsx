@@ -65,6 +65,17 @@ export function Topology({
   const [density, setDensity] = useState<'full' | 'tight' | 'compact' | 'min'>('full');
   const [selected, setSelected] = useState<string | null>(null);
 
+  // A stored selection must not outlive the node it names. When a resize hides the node's
+  // column or a data update removes it, the effective selection becomes null immediately so
+  // the first paint is never stale; the stored state is then cleared with a guarded reset.
+  const effectiveId = useMemo(
+    () => (selected && shown.some((node) => node.id === selected) ? selected : null),
+    [selected, shown],
+  );
+  useEffect(() => {
+    if (selected !== null && effectiveId === null) setSelected(null);
+  }, [selected, effectiveId]);
+
   const measure = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -160,17 +171,17 @@ export function Topology({
     ...COLUMNS.map((_, index) => shown.filter((node) => node.column === index).length),
   );
 
-  const selectedNode = shown.find((node) => node.id === selected) ?? null;
+  const selectedNode = shown.find((node) => node.id === effectiveId) ?? null;
   const touches = (edge: PlacedEdge): boolean =>
-    selected !== null && (edge.from === selected || edge.to === selected);
+    effectiveId !== null && (edge.from === effectiveId || edge.to === effectiveId);
 
   /** Every relationship touching the selection, written out. Nothing here is abbreviated. */
   const relationships = useMemo(() => {
-    if (!selected) return [];
+    if (!effectiveId) return [];
     const rows: Array<{ id: string; from: string; to: string; why: string; kind: TopologyEdge['kind'] }> = [];
     for (const node of shown) {
       for (const edge of node.edges ?? []) {
-        if (edge.from !== selected && node.id !== selected) continue;
+        if (edge.from !== effectiveId && node.id !== effectiveId) continue;
         const from = shown.find((n) => n.id === edge.from);
         rows.push({
           id: `${edge.from}->${node.id}`,
@@ -182,7 +193,7 @@ export function Topology({
       }
     }
     return rows;
-  }, [selected, shown]);
+  }, [effectiveId, shown]);
 
   return (
     <>
@@ -196,7 +207,7 @@ export function Topology({
         <svg className={styles.svg} aria-hidden="true">
           {edges.map((edge) => {
             const lit = touches(edge);
-            const dimmed = selected !== null && !lit;
+            const dimmed = effectiveId !== null && !lit;
             return (
               <g key={edge.id}>
                 <path
@@ -252,9 +263,9 @@ export function Topology({
                       <Node
                         key={node.id}
                         node={node}
-                        selected={node.id === selected}
-                        dimmed={selected !== null && node.id !== selected}
-                        onSelect={() => setSelected(node.id === selected ? null : node.id)}
+                        selected={node.id === effectiveId}
+                        dimmed={effectiveId !== null && node.id !== effectiveId}
+                        onSelect={() => setSelected(node.id === effectiveId ? null : node.id)}
                       />
                     ))
                   )}

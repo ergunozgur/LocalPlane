@@ -408,6 +408,57 @@ function observationPosts(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>) {
 }
 
 describe('explicit systemd observation', () => {
+  it.each(['pending', 'failed'] as const)('reports no retained records with a cold %s first GET and recovers with GET only', async (initial) => {
+    const first = deferred<Response>();
+    const post = deferred<Response>();
+    let reads = 0;
+    let recover = false;
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const path = urlOf(input);
+      if (path === '/api/v1/systemd/observations/refresh') return post.promise;
+      if (path === '/api/v1/systemd/units') {
+        reads += 1;
+        if (reads === 1 && initial === 'pending') return first.promise;
+        return Promise.resolve(recover ? response(unitListWith([unitOf('service', 'obj_svc', 'sshd.service')]))
+          : response({ error: { code: 'store_busy', message: 'store busy', detail: {} } }, 503));
+      }
+      return Promise.resolve(response(BACKEND[path] ?? {}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+    if (initial === 'failed') await screen.findByText('Stored unit records could not be re-read');
+    fireEvent.click(await screen.findByRole('button', { name: 'Observe units' }));
+    expect(screen.getByText(/No stored records are currently visible/)).toBeInTheDocument();
+    expect(screen.queryByText(/prior stored records remain visible|last visible records remain on screen/i)).not.toBeInTheDocument();
+    await act(async () => post.resolve(response({ error: { code: 'unavailable', message: 'failed', detail: {} } }, 503)));
+    await screen.findByText('Systemd units observation request failed');
+    await screen.findByText('Stored unit records could not be re-read');
+    expect(screen.queryByText(/prior stored records remain visible|last visible records remain on screen/i)).not.toBeInTheDocument();
+    recover = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Re-read stored records' }));
+    await screen.findByRole('link', { name: 'sshd.service' });
+    expect(observationPosts(fetchMock)).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([, init]) => (init?.method ?? 'GET') !== 'GET')).toHaveLength(1);
+  });
+  it('treats a malformed nested issue as uncertain while retaining systemd rows', async () => {
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const path = urlOf(input);
+      if (path === '/api/v1/systemd/observations/refresh') return Promise.resolve(response({
+        host_id: 'host_1', sweep_id: 'swp_obs', status: 'ok', unit_count: 1, issues: [null], provider_version: '1', listed_count: 1, selected_count: 1, inventory_limit: null, inventory_complete: true, truncated: false, cap_reached: false, inventory_method: 'list', agent_unit_resolution: null,
+      }));
+      return Promise.resolve(response(path === '/api/v1/systemd/units'
+        ? unitListWith([unitOf('service', 'obj_svc', 'sshd.service')], 'swp_before')
+        : BACKEND[path] ?? {}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSystem();
+    await screen.findByRole('link', { name: 'sshd.service' });
+    fireEvent.click(screen.getByRole('button', { name: 'Observe units' }));
+    await screen.findByText('Systemd units observation outcome is uncertain');
+    expect(screen.getByRole('link', { name: 'sshd.service' })).toBeInTheDocument();
+    await waitFor(() => expect(unitReads(fetchMock).length).toBeGreaterThan(1));
+    expect(observationPosts(fetchMock)).toHaveLength(1);
+  });
   it('issues one POST on click and guards rapid activation', async () => {
     const baseUnits = [unitOf('service', 'obj_svc', 'sshd.service')];
     const fetchMock = vi.fn<typeof fetch>((input, init) => {
