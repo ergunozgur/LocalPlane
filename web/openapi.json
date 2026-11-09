@@ -281,6 +281,56 @@
         ]
       }
     },
+    "/api/v1/installation": {
+      "get": {
+        "tags": [
+          "installation"
+        ],
+        "summary": "Get Installation",
+        "description": "Authenticated, read-only identity of what is running and what this store holds.\n\nIt does not handshake-ingest into the store, does not write an observation and does not\nderive the agent's identity from a configured socket. An unreachable agent is a typed\nerror plus at most a clearly labelled recorded snapshot; a provider snapshot is a\ncapability claim with its own source and time, not proof that a provider works now.",
+        "operationId": "get_installation_api_v1_installation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/host": {
       "get": {
         "tags": [
@@ -6895,6 +6945,835 @@
           "confidence"
         ],
         "title": "Identity"
+      },
+      "InstallationAgent": {
+        "properties": {
+          "reachable": {
+            "type": "boolean",
+            "title": "Reachable"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "live",
+              "recorded",
+              "unavailable"
+            ],
+            "title": "Source"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agent_instance_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Instance Id"
+          },
+          "agent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Version"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "build": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationBuild"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The agent's own manifest identity. Null when an older agent reports none."
+          },
+          "maintenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationMaintenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reachable",
+          "source",
+          "as_of",
+          "error",
+          "agent_instance_id",
+          "agent_version",
+          "pid",
+          "started_at",
+          "build",
+          "maintenance"
+        ],
+        "title": "InstallationAgent"
+      },
+      "InstallationBuild": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "packaged",
+              "unbundled",
+              "invalid",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "process": {
+            "type": "string",
+            "title": "Process"
+          },
+          "build_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build Id",
+            "description": "Content digest over the verified manifest, or null when unbundled."
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "source_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Commit"
+          },
+          "source_tree": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Tree",
+            "description": "The exact clean Git tree, only when the build was from a clean tree."
+          },
+          "source_dirty": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Dirty"
+          },
+          "source_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Digest",
+            "description": "Canonical digest over installed source, migrations and console files."
+          },
+          "manifest_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Sha256"
+          },
+          "console_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Console Digest"
+          },
+          "file_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Count"
+          },
+          "migration_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Migration Count"
+          },
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationDependency"
+            },
+            "type": "array",
+            "title": "Dependencies"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationPlatform"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons",
+            "description": "Machine-readable reasons the identity is unknown, unbundled or invalid."
+          },
+          "loaded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Loaded At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "process",
+          "build_id",
+          "version",
+          "source_commit",
+          "source_tree",
+          "source_dirty",
+          "source_digest",
+          "manifest_sha256",
+          "console_digest",
+          "file_count",
+          "migration_count",
+          "dependencies",
+          "platform",
+          "reasons",
+          "loaded_at"
+        ],
+        "title": "InstallationBuild",
+        "description": "What one process actually loaded, not what a package version claims."
+      },
+      "InstallationConsole": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "matched",
+              "mismatched",
+              "unavailable",
+              "unknown"
+            ],
+            "title": "Status"
+          },
+          "actual_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Digest",
+            "description": "Digest of the asset bytes loaded at backend startup."
+          },
+          "manifest_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Digest"
+          },
+          "matches": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches"
+          },
+          "asset_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Count"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "actual_digest",
+          "manifest_digest",
+          "matches",
+          "asset_count",
+          "reasons"
+        ],
+        "title": "InstallationConsole"
+      },
+      "InstallationDependency": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256",
+            "description": "Content hash when the builder recorded one; null when it did not."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "sha256"
+        ],
+        "title": "InstallationDependency"
+      },
+      "InstallationMaintenance": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "clear",
+              "active",
+              "closed",
+              "unknown",
+              "disabled"
+            ],
+            "title": "Status"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationMaintenanceRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id",
+            "description": "A digest of the shared directory, not the directory path."
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "active",
+          "window",
+          "refusal",
+          "root_id",
+          "as_of"
+        ],
+        "title": "InstallationMaintenance"
+      },
+      "InstallationMaintenanceRefusal": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "detail"
+        ],
+        "title": "InstallationMaintenanceRefusal"
+      },
+      "InstallationPlatform": {
+        "properties": {
+          "os": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Os"
+          },
+          "architecture": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Architecture"
+          },
+          "python": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Python"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "os",
+          "architecture",
+          "python"
+        ],
+        "title": "InstallationPlatform"
+      },
+      "InstallationProviders": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "agent_cached",
+              "recorded",
+              "unavailable"
+            ],
+            "title": "Source"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "as_of",
+          "capabilities",
+          "reasons"
+        ],
+        "title": "InstallationProviders"
+      },
+      "InstallationSchema": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "matched",
+              "mismatched",
+              "unknown",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "applied": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationSchemaMigration"
+            },
+            "type": "array",
+            "title": "Applied",
+            "description": "Rows actually present in schema_migrations on this store."
+          },
+          "manifest_migrations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Manifest Migrations",
+            "description": "Filename to SHA-256 from the release manifest; empty when unbundled."
+          },
+          "matches": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "applied",
+          "manifest_migrations",
+          "matches",
+          "reasons"
+        ],
+        "title": "InstallationSchema"
+      },
+      "InstallationSchemaMigration": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "checksum": {
+            "type": "string",
+            "title": "Checksum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "name",
+          "checksum"
+        ],
+        "title": "InstallationSchemaMigration"
+      },
+      "InstallationStatus": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "backend": {
+            "$ref": "#/components/schemas/InstallationBuild"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/InstallationAgent"
+          },
+          "console": {
+            "$ref": "#/components/schemas/InstallationConsole"
+          },
+          "schema_identity": {
+            "$ref": "#/components/schemas/InstallationSchema"
+          },
+          "maintenance": {
+            "$ref": "#/components/schemas/InstallationMaintenance"
+          },
+          "providers": {
+            "$ref": "#/components/schemas/InstallationProviders"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gaps",
+            "description": "Unknown, unbundled, unavailable or mismatched facts worth surfacing."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "generated_at",
+          "backend",
+          "agent",
+          "console",
+          "schema_identity",
+          "maintenance",
+          "providers",
+          "gaps"
+        ],
+        "title": "InstallationStatus",
+        "description": "Authenticated read-only installation diagnostics.\n\nReachability and identity are separate claims. A live agent says what it is; an\nunreachable agent contributes a typed error and, at most, a clearly labelled recorded\nidentity. No field here is inferred from a configured path, and no field is proof that\na provider works now."
+      },
+      "InstallationWindow": {
+        "properties": {
+          "window_id": {
+            "type": "string",
+            "title": "Window Id"
+          },
+          "generation": {
+            "type": "integer",
+            "title": "Generation"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "closed"
+            ],
+            "title": "State"
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Opened At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "accepted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "release_build_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Build Id"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "window_id",
+          "generation",
+          "state",
+          "opened_at",
+          "closed_at",
+          "accepted_at",
+          "release_build_id",
+          "snapshot_id",
+          "reason",
+          "outcome"
+        ],
+        "title": "InstallationWindow"
       },
       "Intent": {
         "properties": {

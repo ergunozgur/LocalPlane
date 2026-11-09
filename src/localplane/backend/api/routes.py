@@ -54,9 +54,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+from functools import wraps
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, Security
+from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
 from localplane import __version__
@@ -104,9 +106,34 @@ from localplane.protocol.wire import (
 )
 from localplane.protocol.storage import OUTPUT_BYTES
 
+class MaintenanceRoute(APIRoute):
+    """Acquire admission inside the worker thread that actually runs the endpoint."""
+
+    def __init__(self, path, endpoint, **kwargs):
+        if not getattr(endpoint, "_maintenance_wrapped", False):
+            original = endpoint
+
+            @wraps(original)
+            def guarded(*args, **values):
+                from localplane.backend.app import classify_request
+
+                request = values["request"]
+                if classify_request(request.method, request.url.path) == "read":
+                    return original(*args, **values)
+                with request.app.state.maintenance.admit(
+                    f"{request.method} {request.url.path}"
+                ):
+                    return original(*args, **values)
+
+            guarded._maintenance_wrapped = True
+            endpoint = guarded
+        super().__init__(path, endpoint, **kwargs)
+
+
 session_router = APIRouter(prefix="/api/v1")
 router = APIRouter(
     prefix="/api/v1",
+    route_class=MaintenanceRoute,
     dependencies=[Depends(require_authentication)],
     responses={
         401: {"model": schemas.ErrorResponse},
@@ -126,6 +153,7 @@ _AGENT_ERROR_STATUS: dict[str, int] = {
     ErrorCode.AGENT_UNAVAILABLE: 503,
     ErrorCode.TIMEOUT: 504,
     ErrorCode.CAPABILITY_UNAVAILABLE: 503,
+    ErrorCode.MAINTENANCE_ACTIVE: 503,
     ErrorCode.UNAUTHORIZED_PEER: 502,
     ErrorCode.PROVIDER_ERROR: 502,
     ErrorCode.INTERNAL_ERROR: 502,
@@ -135,6 +163,8 @@ _AGENT_ERROR_STATUS: dict[str, int] = {
 
 
 def _status_for(error: AgentError) -> int:
+    if error.code.startswith("maintenance_"):
+        return 503
     return _AGENT_ERROR_STATUS.get(error.code, 502)
 
 
@@ -298,6 +328,327 @@ def get_status(request: Request) -> schemas.BackendStatus:
         database=schemas.DatabaseStatus(
             path=str(context.database.path), schema_versions=versions
         ),
+    )
+
+
+# ------------------------------------------------------------------------- installation
+
+
+def _identity_time(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value:
+        return datetime.fromisoformat(value)
+    return _now()
+
+
+def _installation_build(data: Any, process: str) -> schemas.InstallationBuild:
+    if data is None:
+        return schemas.InstallationBuild(
+            status="unavailable",
+            process=process,
+            build_id=None,
+            version=None,
+            source_commit=None,
+            source_tree=None,
+            source_dirty=None,
+            source_digest=None,
+            manifest_sha256=None,
+            console_digest=None,
+            file_count=None,
+            migration_count=None,
+            dependencies=[],
+            platform=None,
+            reasons=["build_identity_not_reported"],
+            loaded_at=_now(),
+        )
+    try:
+        if hasattr(data, "as_dict"):
+            data = data.as_dict()
+        return schemas.InstallationBuild.model_validate(data)
+    except ValidationError:
+        return schemas.InstallationBuild(
+            status="unavailable",
+            process=process,
+            build_id=None,
+            version=None,
+            source_commit=None,
+            source_tree=None,
+            source_dirty=None,
+            source_digest=None,
+            manifest_sha256=None,
+            console_digest=None,
+            file_count=None,
+            migration_count=None,
+            dependencies=[],
+            platform=None,
+            reasons=["build_identity_malformed"],
+            loaded_at=_now(),
+        )
+
+
+def _installation_maintenance(data: Any) -> schemas.InstallationMaintenance:
+    if data is None:
+        return schemas.InstallationMaintenance(
+            status="unknown",
+            active=True,
+            window=None,
+            refusal=schemas.InstallationMaintenanceRefusal(
+                code="maintenance_state_unavailable",
+                message="the component did not report its maintenance state",
+                detail={},
+            ),
+            root_id=None,
+            as_of=_now(),
+        )
+    try:
+        if hasattr(data, "as_dict"):
+            data = data.as_dict()
+        return schemas.InstallationMaintenance.model_validate(data)
+    except ValidationError:
+        return schemas.InstallationMaintenance(
+            status="unknown",
+            active=True,
+            window=None,
+            refusal=schemas.InstallationMaintenanceRefusal(
+                code="maintenance_state_malformed",
+                message="the component's maintenance state was not a valid record",
+                detail={},
+            ),
+            root_id=None,
+            as_of=_now(),
+        )
+
+
+def _installation_schema(context: AppContext) -> schemas.InstallationSchema:
+    rows = context.database.query(
+        "SELECT version, name, checksum FROM schema_migrations ORDER BY version"
+    )
+    applied = [
+        schemas.InstallationSchemaMigration(
+            version=row["version"], name=row["name"], checksum=row["checksum"]
+        )
+        for row in rows
+    ]
+    build = context.build_identity
+    manifest = dict(build.migrations) if build.packaged else {}
+    if not build.packaged:
+        return schemas.InstallationSchema(
+            status="unknown",
+            applied=applied,
+            manifest_migrations={},
+            matches=None,
+            reasons=["release_manifest_not_configured"],
+        )
+    if not manifest:
+        return schemas.InstallationSchema(
+            status="unknown",
+            applied=applied,
+            manifest_migrations={},
+            matches=None,
+            reasons=["release_manifest_declares_no_migrations"],
+        )
+    expected = dict(manifest)
+    reasons: list[str] = []
+    for row in applied:
+        filename = f"{row.version:04d}_{row.name}.sql"
+        declared = expected.pop(filename, None)
+        if declared is None:
+            reasons.append(f"applied_migration_not_in_manifest:{filename}")
+        elif declared != row.checksum:
+            reasons.append(f"migration_checksum_mismatch:{filename}")
+    for filename in sorted(expected):
+        reasons.append(f"manifest_migration_not_applied:{filename}")
+    return schemas.InstallationSchema(
+        status="matched" if not reasons else "mismatched",
+        applied=applied,
+        manifest_migrations=manifest,
+        matches=not reasons,
+        reasons=reasons,
+    )
+
+
+def _installation_console(context: AppContext) -> schemas.InstallationConsole:
+    actual = context.console_identity
+    build = context.build_identity
+    if actual.status != "loaded" or actual.actual_digest is None:
+        return schemas.InstallationConsole(
+            status="unavailable",
+            actual_digest=None,
+            manifest_digest=build.console_digest,
+            matches=None,
+            asset_count=None,
+            reasons=["console_not_configured"],
+        )
+    if not build.packaged or build.console_digest is None:
+        return schemas.InstallationConsole(
+            status="unknown",
+            actual_digest=actual.actual_digest,
+            manifest_digest=build.console_digest,
+            matches=None,
+            asset_count=actual.asset_count,
+            reasons=["release_manifest_not_configured"],
+        )
+    matches = actual.actual_digest == build.console_digest
+    return schemas.InstallationConsole(
+        status="matched" if matches else "mismatched",
+        actual_digest=actual.actual_digest,
+        manifest_digest=build.console_digest,
+        matches=matches,
+        asset_count=actual.asset_count,
+        reasons=[] if matches else ["console_digest_mismatch"],
+    )
+
+
+def _capabilities_from_hello(payloads: Any) -> tuple[list[schemas.Capability], list[str]]:
+    capabilities: list[schemas.Capability] = []
+    reasons: list[str] = []
+    if not isinstance(payloads, list):
+        return capabilities, ["agent_capability_payload_malformed"]
+    for payload in payloads:
+        try:
+            capabilities.append(views.capability_view_from_payload(payload))
+        except (KeyError, TypeError, ValueError):
+            reasons.append("agent_capability_entry_malformed")
+    return capabilities, reasons
+
+
+def _installation_providers(
+    context: AppContext, hello: dict[str, Any] | None, recorded: Any, now: datetime
+) -> schemas.InstallationProviders:
+    if hello is not None:
+        capabilities, reasons = _capabilities_from_hello(hello.get("capabilities"))
+        captured = hello.get("capabilities_as_of")
+        if not captured:
+            reasons.append("agent_capability_time_unknown")
+        try:
+            captured_at = datetime.fromisoformat(captured) if isinstance(captured, str) and captured else None
+        except ValueError:
+            captured_at = None
+            reasons.append("agent_capability_time_malformed")
+        return schemas.InstallationProviders(
+            source="agent_cached", as_of=captured_at, capabilities=capabilities, reasons=reasons
+        )
+    if recorded is None:
+        return schemas.InstallationProviders(
+            source="unavailable",
+            as_of=now,
+            capabilities=[],
+            reasons=["agent_unavailable"],
+        )
+    records = context.ingestor.agents.capabilities(recorded.agent_instance_id)
+    return schemas.InstallationProviders(
+        source="recorded",
+        as_of=_identity_time(recorded.last_contact_at),
+        capabilities=[views.capability_view(record) for record in records],
+        reasons=["agent_unavailable_using_recorded_capabilities"],
+    )
+
+
+@router.get(
+    "/installation",
+    response_model=schemas.InstallationStatus,
+    tags=["installation"],
+)
+def get_installation(request: Request) -> schemas.InstallationStatus:
+    """Authenticated, read-only identity of what is running and what this store holds.
+
+    It does not handshake-ingest into the store, does not write an observation and does not
+    derive the agent's identity from a configured socket. An unreachable agent is a typed
+    error plus at most a clearly labelled recorded snapshot; a provider snapshot is a
+    capability claim with its own source and time, not proof that a provider works now.
+    """
+    context = _context(request)
+    now = _now()
+    gaps: list[str] = []
+    backend = _installation_build(context.build_identity, "backend")
+    maintenance = _installation_maintenance(context.maintenance.state())
+    console = _installation_console(context)
+    schema = _installation_schema(context)
+
+    hello: dict[str, Any] | None = None
+    agent_error: AgentError | None = None
+    try:
+        hello = context.client.hello()
+    except AgentError as exc:
+        agent_error = exc
+    recorded = context.ingestor.agents.most_recent()
+
+    if hello is not None:
+        payload = hello.get("agent", {}) if isinstance(hello.get("agent"), dict) else {}
+        agent = schemas.InstallationAgent(
+            reachable=True,
+            source="live",
+            as_of=now,
+            error=None,
+            agent_instance_id=payload.get("agent_instance_id"),
+            agent_version=payload.get("agent_version"),
+            pid=payload.get("pid"),
+            started_at=(
+                _identity_time(payload.get("started_at"))
+                if payload.get("started_at") is not None
+                else None
+            ),
+            build=_installation_build(payload.get("build"), "agent"),
+            maintenance=_installation_maintenance(payload.get("maintenance")),
+        )
+    elif recorded is not None:
+        agent = schemas.InstallationAgent(
+            reachable=False,
+            source="recorded",
+            as_of=_identity_time(recorded.last_contact_at),
+            error=schemas.ErrorBody(**agent_error.as_dict()) if agent_error else None,
+            agent_instance_id=recorded.agent_instance_id,
+            agent_version=recorded.agent_version,
+            pid=recorded.pid,
+            started_at=_identity_time(recorded.started_at),
+            build=None,
+            maintenance=None,
+        )
+        gaps.append("agent_unavailable_identity_is_recorded")
+    else:
+        agent = schemas.InstallationAgent(
+            reachable=False,
+            source="unavailable",
+            as_of=now,
+            error=schemas.ErrorBody(**agent_error.as_dict()) if agent_error else None,
+            agent_instance_id=None,
+            agent_version=None,
+            pid=None,
+            started_at=None,
+            build=None,
+            maintenance=None,
+        )
+        gaps.append("agent_unavailable_no_recorded_identity")
+
+    providers = _installation_providers(context, hello, recorded, now)
+
+    if backend.status != "packaged":
+        gaps.append(f"backend_build_{backend.status}")
+    if agent.source != "live":
+        gaps.append("agent_identity_" + agent.source)
+    if agent.build is None or agent.build.status != "packaged":
+        gaps.append("agent_build_identity_unknown")
+    if console.status != "matched":
+        gaps.append("console_" + console.status)
+    if schema.status != "matched":
+        gaps.append("schema_" + schema.status)
+    if maintenance.status in {"active", "unknown"}:
+        gaps.append("maintenance_" + maintenance.status)
+    if maintenance.refusal is not None:
+        gaps.append(maintenance.refusal.code)
+    if providers.source != "agent_cached":
+        gaps.append("providers_" + providers.source)
+
+    return schemas.InstallationStatus(
+        generated_at=now,
+        backend=backend,
+        agent=agent,
+        console=console,
+        schema_identity=schema,
+        maintenance=maintenance,
+        providers=providers,
+        gaps=gaps,
     )
 
 

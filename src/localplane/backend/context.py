@@ -15,6 +15,34 @@ from localplane.backend.operations import OPERATIONS, build_executors
 from localplane.backend.provenance import ProvenanceService
 from localplane.backend.runs import RunService
 from localplane.backend.systemd_lifecycle_context import SystemdLifecycleContextService
+from localplane.build_identity import BuildIdentity, ConsoleIdentity
+from localplane.maintenance import MaintenanceController
+
+
+class _AdmittedExecutor:
+    """Hold the shared maintenance lease around the executor's actual host write.
+
+    The request middleware already takes the same lease for the whole request, so this is
+    deliberately a second, narrow hold at the exact call that can reach a host: a timeout,
+    a background continuation or a direct service call cannot move the real dispatch outside
+    the barrier just because the request object returned. Nested shared locks on the same
+    file are harmless; the exclusive transition waits for both.
+    """
+
+    def __init__(self, executor: object, maintenance: MaintenanceController) -> None:
+        self._executor = executor
+        self._maintenance = maintenance
+
+    def __getattr__(self, name: str):
+        attribute = getattr(self._executor, name)
+        if name not in {"mutate", "arm_guard"}:
+            return attribute
+
+        def guarded(*args, **kwargs):
+            with self._maintenance.admit(f"executor.{name}"):
+                return attribute(*args, **kwargs)
+
+        return guarded
 
 
 @dataclass(frozen=True)
@@ -30,10 +58,21 @@ class AppContext:
     systemd_lifecycle_context: SystemdLifecycleContextService
     runs: RunService
     changes: ChangeService
+    maintenance: MaintenanceController
+    build_identity: BuildIdentity
+    console_identity: ConsoleIdentity
 
     @classmethod
-    def build(cls, settings: Settings, database: Database) -> "AppContext":
-        client = AgentClient(settings.agent_socket, settings.agent_timeout_s)
+    def build(
+        cls,
+        settings: Settings,
+        database: Database,
+        *,
+        maintenance: MaintenanceController,
+        build_identity: BuildIdentity,
+        console_identity: ConsoleIdentity,
+    ) -> "AppContext":
+        client = AgentClient(settings.agent_socket, settings.agent_timeout_s, maintenance=maintenance)
         # One provenance service and one management service, shared. The ingestor uses
         # management to keep findings level with new evidence; the API uses it to adopt and
         # release. They must agree about what "current enough to adopt" means and about who
@@ -51,7 +90,14 @@ class AppContext:
         # observation coordinator, which is to say they hold the one path in this product
         # that can change a host, so they are built here where their dependencies exist.
         changes = ChangeService(
-            database, runs, build_executors(client, coordinator, ingestor.objects)
+            database,
+            runs,
+            {
+                operation: _AdmittedExecutor(executor, maintenance)
+                for operation, executor in build_executors(
+                    client, coordinator, ingestor.objects
+                ).items()
+            },
         )
         # Management-path evidence shares the observation freshness horizon rather than
         # carrying its own. Two settings would eventually differ, and the state they would
@@ -75,4 +121,7 @@ class AppContext:
             systemd_lifecycle_context=systemd_lifecycle_context,
             runs=runs,
             changes=changes,
+            maintenance=maintenance,
+            build_identity=build_identity,
+            console_identity=console_identity,
         )

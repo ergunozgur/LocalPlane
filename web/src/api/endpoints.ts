@@ -26,6 +26,7 @@ export const endpoints = {
 
   /* ------------------------------------------------------------------ status & identity */
   status: (o?: Opts) => request<T.BackendStatus>('/status', o),
+  installation: (o?: Opts) => request<unknown>('/installation', o),
   host: (o?: Opts) => request<T.Host>('/host', o),
   agent: (o?: Opts) => request<T.AgentStatus>('/agent', o),
   capabilities: (o?: Opts) => request<T.Capabilities>('/agent/capabilities', o),

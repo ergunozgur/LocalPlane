@@ -184,6 +184,7 @@ class ErrorCode(StrEnum):
     MESSAGE_TOO_LARGE = ipc.MESSAGE_TOO_LARGE
     UNAUTHORIZED_PEER = ipc.UNAUTHORIZED_PEER
     CAPABILITY_UNAVAILABLE = "capability_unavailable"
+    MAINTENANCE_ACTIVE = "maintenance_active"
     PROVIDER_ERROR = "provider_error"
     INTERNAL_ERROR = ipc.INTERNAL_ERROR
     AGENT_UNAVAILABLE = "agent_unavailable"

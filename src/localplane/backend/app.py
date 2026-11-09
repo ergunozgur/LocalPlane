@@ -22,9 +22,18 @@ from localplane.backend.agent_client import AgentError
 from localplane.backend.api.routes import router, session_router
 from localplane.backend.auth import Authentication, load_master_secret, require_authentication
 from localplane.backend.config import Settings
-from localplane.backend.console import install_console
+from localplane.backend.console import install_console, load_console
 from localplane.backend.context import AppContext
 from localplane.backend.db.database import Database, open_database
+from localplane.backend.serving_files import ServingConfigurationError
+from localplane.build_identity import (
+    BuildIdentityError,
+    console_identity_from_loaded,
+    load_build_identity,
+    require_usable,
+    unavailable_console,
+)
+from localplane.maintenance import MaintenanceController, MaintenanceRefused
 
 LOG = logging.getLogger("localplane.backend.app")
 
@@ -92,6 +101,91 @@ Eight things are worth knowing before reading a response:
 """
 
 
+_CONTROL_WRITE_TEMPLATES = (
+    "/api/v1/network/interfaces/{object_id}/adopt",
+    "/api/v1/network/interfaces/{object_id}/release",
+    "/api/v1/network/interfaces/{object_id}/intent/revise",
+    "/api/v1/network/interfaces/{object_id}/intent/adopt-runtime",
+    "/api/v1/runs",
+    "/api/v1/runs/{run_id}/confirm",
+    "/api/v1/runs/{run_id}/self-impact-override",
+    "/api/v1/runs/{run_id}/apply",
+    "/api/v1/runs/{run_id}/guard/keep",
+    "/api/v1/runs/{run_id}/cancel",
+    "/api/v1/changes/{change_id}/recovery/confirm",
+    "/api/v1/changes/{change_id}/recovery/assess",
+    "/api/v1/changes/{change_id}/recovery/retry",
+    "/api/v1/changes/{change_id}/recovery/resolve",
+)
+"""Every route that can establish, confirm, dispatch or resolve authority."""
+
+_RECORD_WRITE_TEMPLATES = (
+    "/api/v1/agent",
+    "/api/v1/agent/capabilities",
+    "/api/v1/network/observations/refresh",
+    "/api/v1/systemd/observations/refresh",
+    "/api/v1/docker/containers/observations/refresh",
+    "/api/v1/management-path/observations/refresh",
+)
+"""Routes that write LocalPlane's records even though they change no host state.
+
+The agent hello endpoints are here because the accepted session decision records them as
+state-changing GETs: they ingest the host and agent rows. An observation refresh is a
+record write even when the provider read fails, because a failed sweep is itself recorded.
+Neither may race an offline snapshot.
+"""
+
+_READ_POST_TEMPLATES = (
+    "/api/v1/storage/filesystems/observe",
+    "/api/v1/systemd/units/{object_id}/journal",
+    "/api/v1/docker/containers/{object_id}/logs",
+    "/api/v1/docker/containers/{object_id}/stats",
+)
+"""Read-only POSTs: an explicit observation or evidence read, retained in memory only."""
+
+
+def _template_pattern(template: str) -> re.Pattern[str]:
+    pieces = []
+    for part in template.split("/"):
+        if part.startswith("{") and part.endswith("}"):
+            pieces.append(r"[^/]+")
+        else:
+            pieces.append(re.escape(part))
+    return re.compile("^" + "/".join(pieces) + "$")
+
+
+_CONTROL_WRITE_PATTERNS = tuple(_template_pattern(t) for t in _CONTROL_WRITE_TEMPLATES)
+_RECORD_WRITE_PATTERNS = tuple(_template_pattern(t) for t in _RECORD_WRITE_TEMPLATES)
+_READ_POST_PATTERNS = tuple(_template_pattern(t) for t in _READ_POST_TEMPLATES)
+
+
+def classify_request(method: str, path: str) -> str:
+    """Classify one request for maintenance admission.
+
+    ``read`` may run under an active window; ``record`` and ``control`` may not. A new
+    POST under the API defaults to ``record`` rather than ``read`` so forgetting to
+    classify one cannot let it write into a snapshot. The API inventory test asserts every
+    registered route is in an explicit list, so the default is a safety net, not a design.
+    """
+    verb = method.upper()
+    path = path.rstrip("/") or "/"
+    if path in {"/api/v1/session", "/api/v1/installation"}:
+        return "read"
+    if verb in {"GET", "HEAD"}:
+        if path in {"/api/v1/agent", "/api/v1/agent/capabilities"}:
+            return "record"
+        return "read"
+    if any(pattern.fullmatch(path) for pattern in _CONTROL_WRITE_PATTERNS):
+        return "control"
+    if any(pattern.fullmatch(path) for pattern in _RECORD_WRITE_PATTERNS):
+        return "record"
+    if any(pattern.fullmatch(path) for pattern in _READ_POST_PATTERNS):
+        return "read"
+    if path.startswith("/api/v1/"):
+        return "record"
+    return "read"
+
+
 def create_app(
     settings: Settings | None = None,
     database: Database | None = None,
@@ -100,34 +194,67 @@ def create_app(
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     owns_database = database is None
+    settings.validate_install()
+    try:
+        build_identity = load_build_identity(
+            settings.release_manifest,
+            process="backend",
+            release_root=settings.release_root,
+        )
+        require_usable(build_identity)
+    except BuildIdentityError as exc:
+        raise ServingConfigurationError(
+            "release_identity_invalid",
+            f"The configured release manifest is unusable ({exc}). Refusing to serve with a false build identity.",
+        ) from None
+    maintenance = MaintenanceController(settings.maintenance_root(), service="backend")
+
+    loaded_console = None
+    console_identity = unavailable_console()
+    if settings.console_dir is not None:
+        loaded_console = load_console(settings.console_dir)
+        index, assets = loaded_console
+        console_identity = console_identity_from_loaded(
+            index.body, {name: asset.body for name, asset in assets.items()}
+        )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        active_authentication = authentication or Authentication(
-            load_master_secret(settings.auth_secret_path),
-            bind_host=settings.bind_host,
-            development_origin=settings.development_origin,
-        )
-        app.state.authentication = active_authentication
-        db = database if database is not None else open_database(settings.database_path)
-        context = AppContext.build(settings, db)
-        app.state.context = context
-        LOG.info(
-            "backend started",
-            extra={
-                "database": str(db.path),
-                "agent_socket": str(settings.agent_socket),
-                "version": __version__,
-            },
-        )
-        _settle_interrupted_changes(context)
-        _initial_observation(context, settings)
+        lease = maintenance.service_lifetime() if maintenance.enabled else None
         try:
-            yield
+            with maintenance.startup_lease() as state:
+                active_authentication = authentication or Authentication(
+                    load_master_secret(settings.auth_secret_path),
+                    bind_host=settings.bind_host,
+                    development_origin=settings.development_origin,
+                )
+                app.state.authentication = active_authentication
+                db = database if database is not None else open_database(settings.database_path)
+                context = AppContext.build(
+                    settings, db, maintenance=maintenance, build_identity=build_identity,
+                    console_identity=console_identity,
+                )
+                app.state.context = context
+                app.state.maintenance = maintenance
+                LOG.info("backend started", extra={"database": str(db.path),
+                         "agent_socket": str(settings.agent_socket), "version": __version__,
+                         "build_status": build_identity.status, "build_id": build_identity.build_id,
+                         "maintenance": state.status})
+                if state.fenced or state.refusal is not None:
+                    LOG.warning("startup observation skipped: maintenance fence is not clear",
+                                extra={"maintenance": state.status})
+                else:
+                    _settle_interrupted_changes(context)
+                    _initial_observation(context, settings)
+            try:
+                yield
+            finally:
+                if owns_database:
+                    db.close()
+                LOG.info("backend stopped")
         finally:
-            if owns_database:
-                db.close()
-            LOG.info("backend stopped")
+            if lease is not None:
+                lease.release()
 
     app = FastAPI(
         title="LocalPlane",
@@ -138,8 +265,45 @@ def create_app(
         redoc_url=None,
         openapi_url=None,
     )
+    app.state.build_identity = build_identity
+    app.state.console_identity = console_identity
+    app.state.maintenance = maintenance
     app.include_router(session_router)
     app.include_router(router)
+
+    @app.exception_handler(MaintenanceRefused)
+    async def maintenance_refused(request: Request, exc: MaintenanceRefused):
+        return JSONResponse(status_code=503, content={"error": exc.as_body()},
+                            headers={"Cache-Control": "no-store"})
+
+    @app.middleware("http")
+    async def maintenance_admission(request: Request, call_next):
+        """Hold the shared control lease for every record or control write.
+
+        The lock is held for the whole synchronous handler, including the actual executor
+        call inside an apply, and the agent takes the same lock around its own provider
+        call. A maintenance transition's exclusive acquisition therefore drains writers in
+        both processes rather than trusting one process's request counter or SIGTERM.
+        """
+        classification = classify_request(request.method, request.url.path)
+        if classification == "read":
+            return await call_next(request)
+        controller = getattr(request.app.state, "maintenance", None)
+        if controller is None or not controller.enabled:
+            return await call_next(request)
+        admission = controller.admit(f"{request.method.upper()} {request.url.path}")
+        try:
+            admission.__enter__()
+        except MaintenanceRefused as exc:
+            return JSONResponse(
+                status_code=503,
+                content={"error": exc.as_body()},
+                headers={"Cache-Control": "no-store"},
+            )
+        try:
+            return await call_next(request)
+        finally:
+            admission.__exit__(None, None, None)
 
     @app.middleware("http")
     async def journal_privacy_boundary(request: Request, call_next):
@@ -186,7 +350,7 @@ def create_app(
 
     app.add_exception_handler(HTTPException, _http_exception_handler)
     if settings.console_dir is not None:
-        install_console(app, settings.console_dir)
+        install_console(app, settings.console_dir, loaded=loaded_console)
     return app
 
 

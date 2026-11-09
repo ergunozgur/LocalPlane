@@ -40,11 +40,14 @@ from __future__ import annotations
 import os
 import threading
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from localplane import __version__
+from localplane.build_identity import BuildIdentity
+from localplane.maintenance import MaintenanceController, MaintenanceRefused, executor_result_proven
 from localplane.agent.capabilities import DiscoveredCapability, discover_capabilities
 from localplane.agent.guard import GuardRefusal, GuardRegistry
 from localplane.agent.identity import HostIdentity, HostIdentityUnavailable, identify_host
@@ -134,8 +137,12 @@ class AgentService:
         journal_provider: Any | None = None,
         guard_timer: Callable[[float, Callable[[], None]], Any] | None = None,
         guard_clock: Callable[[], datetime] | None = None,
+        build_identity: BuildIdentity | None = None,
+        maintenance: MaintenanceController | None = None,
     ) -> None:
         self._root = Path(root)
+        self._build = build_identity
+        self._maintenance = maintenance
         self._storage = storage_provider if storage_provider is not None else COLLECTOR
         self._journal = journal_provider if journal_provider is not None else JOURNAL_COLLECTOR
         self._sysfs_net = Path(sysfs_net)
@@ -203,6 +210,7 @@ class AgentService:
         )
         self._routes = LinuxRouteProvider(query=route_query)
         self._capabilities: tuple[DiscoveredCapability, ...] = self._discover()
+        self._capabilities_as_of = _now()
         # The host side of the connection guard. It is given this service's own typed
         # MTU write and nothing else, so a guard can dispatch exactly the mutation the
         # agent could already be asked for and there is no second path to the helper.
@@ -213,9 +221,11 @@ class AgentService:
         # real. What is scripted is the passage of time and nothing else.
         self._guards = GuardRegistry(
             self._instance_id,
-            self._set_interface_mtu,
+            lambda **kwargs: self._set_interface_mtu(**kwargs, guard_admitted=True),
             clock=guard_clock,
             timer_factory=guard_timer,
+            admission_factory=lambda: self._admit(str(Method.NETWORK_ARM_MTU_GUARD)),
+            marker_factory=lambda: self._begin_executor("agent.guard"),
         )
 
         self._handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
@@ -268,6 +278,24 @@ class AgentService:
             )
         return handler(params)
 
+    def _admit(self, operation: str):
+        """The agent's shared side of the maintenance barrier, or a no-op.
+
+        Every mutating handler takes this for the *actual* provider or helper call. The
+        agent's autonomous guard firing goes through :meth:`_set_interface_mtu`, which
+        takes it too, so an armed deadline cannot write into a snapshot even though no
+        backend request is in flight to hold the request-level lease.
+        """
+        if self._maintenance is None:
+            return nullcontext()
+        return self._maintenance.admit(operation)
+
+    def _begin_executor(self, operation: str):
+        if self._maintenance is None:
+            from localplane.maintenance import ExecutorToken
+            return ExecutorToken(None, None)
+        return self._maintenance.begin_executor(operation)
+
     # ------------------------------------------------------------------------- methods
 
     def _agent_hello(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -276,6 +304,7 @@ class AgentService:
             "agent": self._agent_facts(),
             "host": self._identity().as_dict(),
             "capabilities": [c.as_dict() for c in self._capabilities],
+            "capabilities_as_of": self._capabilities_as_of,
         }
 
     def _host_identify(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -288,6 +317,7 @@ class AgentService:
         # Re-probed rather than replayed: a capability that became available since start
         # should be reported as available, and one that disappeared should not be claimed.
         self._capabilities = self._discover()
+        self._capabilities_as_of = _now()
         return {"capabilities": [c.as_dict() for c in self._capabilities]}
 
     def _network_observe_interfaces(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -434,6 +464,7 @@ class AgentService:
         expected_current_mtu: int,
         desired_mtu: int,
         expected_interface_name: str | None,
+        guard_admitted: bool = False,
     ) -> dict[str, Any]:
         """The mutation itself, and the one place a helper failure becomes an outcome.
 
@@ -443,14 +474,42 @@ class AgentService:
         request had written, and that disagreement is the exact thing this vocabulary
         exists to prevent.
         """
+        marker = None
         try:
-            return self._helper.set_interface_mtu(
-                attempt_id=attempt_id,
-                ifindex=ifindex,
-                expected_current_mtu=expected_current_mtu,
-                desired_mtu=desired_mtu,
-                expected_interface_name=expected_interface_name,
-            )
+            with (nullcontext() if guard_admitted else self._admit(str(Method.NETWORK_SET_INTERFACE_MTU))):
+                if not guard_admitted:
+                    marker = self._begin_executor("agent.mtu")
+                result = self._helper.set_interface_mtu(
+                    attempt_id=attempt_id,
+                    ifindex=ifindex,
+                    expected_current_mtu=expected_current_mtu,
+                    desired_mtu=desired_mtu,
+                    expected_interface_name=expected_interface_name,
+                )
+                if marker is not None and executor_result_proven(str(Method.NETWORK_SET_INTERFACE_MTU),
+                    {"attempt_id": attempt_id, "ifindex": ifindex,
+                     "expected_current_mtu": expected_current_mtu, "desired_mtu": desired_mtu}, result):
+                    marker.settle()
+                return result
+        except MaintenanceRefused as exc:
+            # Nothing was handed to the helper: the admission lock and witness check both
+            # happen before the request frame exists. This is a provable negative.
+            return {
+                "outcome": str(MutationOutcome.NOT_WRITTEN),
+                "reason": exc.code,
+                "attempt_id": attempt_id,
+                "ifindex": ifindex,
+                "expected_current_mtu": expected_current_mtu,
+                "desired_mtu": desired_mtu,
+                "provider": None,
+                "provider_version": None,
+                "method": str(Method.NETWORK_SET_INTERFACE_MTU),
+                "observed_name": None,
+                "observed_mtu": None,
+                "kernel_errno": None,
+                "kernel_error": None,
+                "detail": {"maintenance": exc.as_dict()},
+            }
         except HelperError as exc:
             # The one branch in this agent where a transport failure is not simply a
             # failure. `dispatched` says whether the request bytes had already been
@@ -520,15 +579,20 @@ class AgentService:
                 ErrorCode.INVALID_PARAMS, "expected_interface_name must be a string"
             )
         try:
-            armed = self._guards.arm(
-                guard_id=_require_str(params.get("guard_id"), "guard_id"),
-                attempt_id=_require_str(params.get("attempt_id"), "attempt_id"),
-                ifindex=_require_int(params.get("ifindex"), "ifindex"),
-                expected_interface_name=expected_interface_name,
-                guarded_mtu=_require_int(params.get("guarded_mtu"), "guarded_mtu"),
-                restore_mtu=_require_int(params.get("restore_mtu"), "restore_mtu"),
-                window_s=_require_int(params.get("window_s"), "window_s"),
-            )
+            with self._admit(str(Method.NETWORK_ARM_MTU_GUARD)):
+                armed = self._guards.arm(
+                    guard_id=_require_str(params.get("guard_id"), "guard_id"),
+                    attempt_id=_require_str(params.get("attempt_id"), "attempt_id"),
+                    ifindex=_require_int(params.get("ifindex"), "ifindex"),
+                    expected_interface_name=expected_interface_name,
+                    guarded_mtu=_require_int(params.get("guarded_mtu"), "guarded_mtu"),
+                    restore_mtu=_require_int(params.get("restore_mtu"), "restore_mtu"),
+                    window_s=_require_int(params.get("window_s"), "window_s"),
+                )
+        except MaintenanceRefused as exc:
+            raise ProtocolError(
+                exc.code, exc.message, exc.detail
+            ) from None
         except GuardRefusal as refusal:
             raise ProtocolError(
                 ErrorCode.INVALID_PARAMS, refusal.code, refusal.detail
@@ -674,7 +738,17 @@ class AgentService:
                 {"action": action, "supported": list(DOCKER_LIFECYCLE_ACTIONS)},
             )
 
-        result = self._docker.lifecycle(container_id, action)
+        try:
+            with self._admit(str(Method.DOCKER_CONTAINER_LIFECYCLE)):
+                marker = self._begin_executor("agent.docker_lifecycle")
+                result = self._docker.lifecycle(container_id, action)
+                if executor_result_proven(str(Method.DOCKER_CONTAINER_LIFECYCLE), params,
+                                          {**result.as_dict(), "attempt_id": attempt_id}):
+                    marker.settle()
+        except MaintenanceRefused as exc:
+            raise ProtocolError(
+                exc.code, exc.message, exc.detail
+            ) from None
         return {
             "agent_instance_id": self._instance_id,
             "host_id": self._identity().host_id,
@@ -890,28 +964,38 @@ class AgentService:
                  "required_suffix": SYSTEMD_SERVICE_LIFECYCLE_UNIT_SUFFIX},
             ) from exc
 
-        with self._lifecycle_receipts_lock:
-            if attempt_id in self._lifecycle_receipts:
-                raise ProtocolError(ErrorCode.INVALID_PARAMS, "duplicate lifecycle attempt", {})
-            if len(self._lifecycle_receipts) >= 4096:
-                # No receipt was registered and the provider cannot be called on this path.
-                # A fully correlated reply lets the backend distinguish this definite refusal
-                # from a lost or malformed response, without making room by evicting receipts.
-                return {
-                    "agent_instance_id": self._instance_id,
-                    "host_id": self._identity().host_id,
-                    "mutation": {
-                        "attempt_id": attempt_id, "unit_id": unit_id, "action": action,
-                        "outcome": "not_written", "reason": "lifecycle_receipt_capacity_exhausted",
-                        "provider": PROVIDER_SYSTEMD, "provider_version": None,
-                    },
-                }
-            self._lifecycle_receipts[attempt_id] = (unit_id, action, "active")
         try:
-            result = self._systemd.dispatch_service_lifecycle(unit_id, action)
-        finally:
-            with self._lifecycle_receipts_lock:
-                self._lifecycle_receipts[attempt_id] = (unit_id, action, "completed")
+            with self._admit(str(Method.SYSTEMD_SERVICE_LIFECYCLE)):
+                with self._lifecycle_receipts_lock:
+                    if attempt_id in self._lifecycle_receipts:
+                        raise ProtocolError(ErrorCode.INVALID_PARAMS, "duplicate lifecycle attempt", {})
+                    if len(self._lifecycle_receipts) >= 4096:
+                        # No receipt was registered and the provider cannot be called on this path.
+                        # A fully correlated reply lets the backend distinguish this definite refusal
+                        # from a lost or malformed response, without making room by evicting receipts.
+                        return {
+                            "agent_instance_id": self._instance_id,
+                            "host_id": self._identity().host_id,
+                            "mutation": {
+                                "attempt_id": attempt_id, "unit_id": unit_id, "action": action,
+                                "outcome": "not_written", "reason": "lifecycle_receipt_capacity_exhausted",
+                                "provider": PROVIDER_SYSTEMD, "provider_version": None,
+                            },
+                        }
+                    self._lifecycle_receipts[attempt_id] = (unit_id, action, "active")
+                try:
+                    marker = self._begin_executor("agent.systemd_lifecycle")
+                    result = self._systemd.dispatch_service_lifecycle(unit_id, action)
+                    if executor_result_proven(str(Method.SYSTEMD_SERVICE_LIFECYCLE), params,
+                                              {**result.as_dict(), "attempt_id": attempt_id}):
+                        marker.settle()
+                finally:
+                    with self._lifecycle_receipts_lock:
+                        self._lifecycle_receipts[attempt_id] = (unit_id, action, "completed")
+        except MaintenanceRefused as exc:
+            raise ProtocolError(
+                exc.code, exc.message, exc.detail
+            ) from None
         return {
             "agent_instance_id": self._instance_id,
             "host_id": self._identity().host_id,
@@ -988,6 +1072,16 @@ class AgentService:
         it says exactly that rather than implying a separation it has not made.
         """
         euid = os.geteuid()
+        maintenance = None
+        if self._maintenance is not None:
+            try:
+                maintenance = self._maintenance.state().as_dict()
+            except Exception:  # noqa: BLE001 - a diagnostic read must still answer
+                maintenance = {"status": "unknown", "active": True, "window": None,
+                               "refusal": {"code": "maintenance_state_unavailable",
+                                           "message": "agent maintenance state is unknown",
+                                           "detail": {}},
+                               "root_id": None, "as_of": _now()}
         return {
             "agent_instance_id": self._instance_id,
             "agent_version": __version__,
@@ -1008,6 +1102,8 @@ class AgentService:
             "root": str(self._root),
             "docker_socket": str(self._docker_socket),
             "helper_socket": str(self._helper_socket),
+            "build": self._build.as_dict() if self._build is not None else None,
+            "maintenance": maintenance,
         }
 
     def _require_capability(self, capability: str) -> None:

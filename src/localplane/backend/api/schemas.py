@@ -193,6 +193,154 @@ class Capabilities(Model):
     capabilities: list[Capability]
 
 
+# ------------------------------------------------------------------------ installation
+
+
+class InstallationDependency(Model):
+    name: str
+    version: str
+    sha256: str | None = Field(
+        description="Content hash when the builder recorded one; null when it did not."
+    )
+
+
+class InstallationPlatform(Model):
+    os: str | None
+    architecture: str | None
+    python: str | None
+
+
+class InstallationBuild(Model):
+    """What one process actually loaded, not what a package version claims."""
+
+    status: Literal["packaged", "unbundled", "invalid", "unavailable"]
+    process: str
+    build_id: str | None = Field(
+        description="Content digest over the verified manifest, or null when unbundled."
+    )
+    version: str | None
+    source_commit: str | None
+    source_tree: str | None = Field(
+        description="The exact clean Git tree, only when the build was from a clean tree."
+    )
+    source_dirty: bool | None
+    source_digest: str | None = Field(
+        description="Canonical digest over installed source, migrations and console files."
+    )
+    manifest_sha256: str | None
+    console_digest: str | None
+    file_count: int | None
+    migration_count: int | None
+    dependencies: list[InstallationDependency]
+    platform: InstallationPlatform | None
+    reasons: list[str] = Field(
+        description="Machine-readable reasons the identity is unknown, unbundled or invalid."
+    )
+    loaded_at: datetime
+
+
+class InstallationWindow(Model):
+    window_id: str
+    generation: int
+    state: Literal["active", "closed"]
+    opened_at: datetime
+    closed_at: datetime | None
+    accepted_at: datetime | None
+    release_build_id: str | None
+    snapshot_id: str | None
+    reason: str | None
+    outcome: str | None
+
+
+class InstallationMaintenanceRefusal(Model):
+    code: str
+    message: str
+    detail: dict[str, Any]
+
+
+class InstallationMaintenance(Model):
+    status: Literal["clear", "active", "closed", "unknown", "disabled"]
+    active: bool
+    window: InstallationWindow | None
+    refusal: InstallationMaintenanceRefusal | None
+    root_id: str | None = Field(
+        description="A digest of the shared directory, not the directory path."
+    )
+    as_of: datetime
+
+
+class InstallationSchemaMigration(Model):
+    version: int
+    name: str
+    checksum: str
+
+
+class InstallationSchema(Model):
+    status: Literal["matched", "mismatched", "unknown", "unavailable"]
+    applied: list[InstallationSchemaMigration] = Field(
+        description="Rows actually present in schema_migrations on this store."
+    )
+    manifest_migrations: dict[str, str] = Field(
+        description="Filename to SHA-256 from the release manifest; empty when unbundled."
+    )
+    matches: bool | None
+    reasons: list[str]
+
+
+class InstallationConsole(Model):
+    status: Literal["matched", "mismatched", "unavailable", "unknown"]
+    actual_digest: str | None = Field(
+        description="Digest of the asset bytes loaded at backend startup."
+    )
+    manifest_digest: str | None
+    matches: bool | None
+    asset_count: int | None
+    reasons: list[str]
+
+
+class InstallationAgent(Model):
+    reachable: bool
+    source: Literal["live", "recorded", "unavailable"]
+    as_of: datetime
+    error: ErrorBody | None
+    agent_instance_id: str | None
+    agent_version: str | None
+    pid: int | None
+    started_at: datetime | None
+    build: InstallationBuild | None = Field(
+        description="The agent's own manifest identity. Null when an older agent reports none."
+    )
+    maintenance: InstallationMaintenance | None
+
+
+class InstallationProviders(Model):
+    source: Literal["agent_cached", "recorded", "unavailable"]
+    as_of: datetime | None
+    capabilities: list[Capability]
+    reasons: list[str]
+
+
+class InstallationStatus(Model):
+    """Authenticated read-only installation diagnostics.
+
+    Reachability and identity are separate claims. A live agent says what it is; an
+    unreachable agent contributes a typed error and, at most, a clearly labelled recorded
+    identity. No field here is inferred from a configured path, and no field is proof that
+    a provider works now.
+    """
+
+    generated_at: datetime
+    backend: InstallationBuild
+    agent: InstallationAgent
+    console: InstallationConsole
+    schema_identity: InstallationSchema
+    maintenance: InstallationMaintenance
+    providers: InstallationProviders
+    gaps: list[str] = Field(
+        description="Unknown, unbundled, unavailable or mismatched facts worth surfacing."
+    )
+
+
 # --------------------------------------------------------------------------- network
 
 

@@ -5,6 +5,12 @@
 LocalPlane is a pre-release Python backend/agent with a React/Vite Operator Console. The
 commands below are local development workflows, not production deployment instructions.
 
+The [versioned installation contract](installation.md) separates ordinary-user builds
+from administrator file/unit operations. [Maintenance](maintenance-and-update.md)
+uses the shared external controller and offline SQLite backup rather than the
+application's migrating database opener. Focused maintenance fixture tests do not
+prove real service/executor exclusion or an installed update journey.
+
 ## Requirements
 
 - Linux

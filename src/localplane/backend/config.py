@@ -12,6 +12,14 @@ from localplane.backend.domain.states import DEFAULT_FRESHNESS_TTL_S
 ENV_PREFIX = "LOCALPLANE_"
 
 
+class SettingsError(ValueError):
+    """A configured setting cannot be used safely."""
+
+    def __init__(self, code: str, message: str):
+        self.code = code
+        super().__init__(f"{code}: {message}")
+
+
 @dataclass(frozen=True)
 class Settings:
     database_path: Path
@@ -26,6 +34,9 @@ class Settings:
     tls_cert_path: Path | None = None
     tls_key_path: Path | None = None
     console_dir: Path | None = None
+    maintenance_dir: Path | None = None
+    release_manifest: Path | None = None
+    release_root: Path | None = None
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Settings":
@@ -51,4 +62,39 @@ class Settings:
             tls_cert_path=optional_path("TLS_CERT_PATH"),
             tls_key_path=optional_path("TLS_KEY_PATH"),
             console_dir=optional_path("CONSOLE_DIR"),
+            maintenance_dir=optional_path("MAINTENANCE_DIR"),
+            release_manifest=optional_path("RELEASE_MANIFEST"),
+            release_root=optional_path("RELEASE_ROOT"),
         )
+
+    def maintenance_root(self) -> Path | None:
+        """The one shared maintenance directory, or ``None`` for a fixture process.
+
+        An explicitly configured directory is always used, including for an in-memory
+        store. Without one, a packaged installation is refused rather than silently
+        creating a second fence that the agent and the CLI would not share; a development
+        or fixture backend has no maintenance fence unless explicitly configured.
+        """
+        if self.maintenance_dir is not None:
+            return self.maintenance_dir
+        if self.release_manifest is not None:
+            raise SettingsError(
+                "maintenance_root_required",
+                "LOCALPLANE_MAINTENANCE_DIR is required when a release manifest is configured",
+            )
+        return None
+
+    def validate_install(self) -> None:
+        """Refuse a configured release that cannot state where its shared fence lives."""
+        if self.release_manifest is not None:
+            if not self.release_manifest.is_absolute():
+                raise SettingsError(
+                    "release_manifest_must_be_absolute",
+                    "LOCALPLANE_RELEASE_MANIFEST must be an absolute path",
+                )
+            self.maintenance_root()
+        if self.release_root is not None and not self.release_root.is_absolute():
+            raise SettingsError(
+                "release_root_must_be_absolute",
+                "LOCALPLANE_RELEASE_ROOT must be an absolute path",
+            )

@@ -131,8 +131,8 @@ def load_console(path: Path) -> tuple[Asset, dict[str, Asset]]:
         ) from None
 
 
-def install_console(app: FastAPI, path: Path) -> None:
-    index, assets = load_console(path)
+def install_console(app: FastAPI, path: Path, *, loaded: tuple[Asset, dict[str, Asset]] | None = None) -> None:
+    index, assets = loaded if loaded is not None else load_console(path)
 
     def response(request: Request, asset: Asset, *, document: bool = False) -> Response:
         # No encoded separators/dot segments, even if an ASGI server decoded
