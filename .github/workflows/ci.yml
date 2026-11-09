@@ -26,7 +26,52 @@ jobs:
         run: python -m pip install -e '.[dev]'
 
       - name: Python tests (non-live)
-        run: python -m pytest -m 'not live'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Maintenance fixtures must retain the CLI's trusted-ancestor contract.
+          private_tmp="$(python - <<'PY'
+          import os
+          from pathlib import Path
+          import stat
+          import tempfile
+
+          uid = os.geteuid()
+
+          def safe_directory(path):
+              if not path.is_absolute() or ".." in path.parts:
+                  raise ValueError("Temporary ancestry must be absolute without traversal")
+              for part in [*reversed(path.parents), path]:
+                  info = part.lstat()
+                  if (not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode)
+                          or info.st_mode & 0o022 or info.st_uid not in (0, uid)):
+                      raise ValueError("Temporary ancestry is not trusted")
+
+          for name in ("RUNNER_TEMP", "HOME"):
+              raw = os.environ.get(name)
+              if not raw or "\n" in raw or "\r" in raw:
+                  continue
+              parent = Path(raw)
+              try:
+                  safe_directory(parent)
+                  if parent.lstat().st_uid != uid:
+                      continue
+                  private = Path(tempfile.mkdtemp(prefix="lp-", dir=parent))
+                  safe_directory(private)
+                  info = private.lstat()
+                  if info.st_uid != uid or stat.S_IMODE(info.st_mode) != 0o700:
+                      raise ValueError("Temporary directory is not private")
+              except (OSError, ValueError):
+                  continue
+              print(private)
+              break
+          else:
+              raise SystemExit("No trusted runner temporary directory is available")
+          PY
+          )"
+          trap 'rm -rf -- "$private_tmp"' EXIT
+          export TMPDIR="$private_tmp" TMP="$private_tmp" TEMP="$private_tmp"
+          python -m pytest -m 'not live' --basetemp "$private_tmp/p"
 
       - name: Set up Node
         uses: actions/setup-node@v4

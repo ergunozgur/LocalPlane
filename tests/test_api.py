@@ -494,6 +494,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
         "/api/v1/storage/filesystems/observe",
         "/api/v1/session",
         "/api/v1/status",
+        "/api/v1/installation",
         "/api/v1/host",
         "/api/v1/agent",
         "/api/v1/agent/capabilities",
@@ -540,6 +541,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
         "/api/v1/changes/{change_id}/recovery/retry",
         "/api/v1/changes/{change_id}/recovery/resolve",
     }
+    assert set(paths["/api/v1/installation"]) == {"get"}
     assess = paths["/api/v1/changes/{change_id}/recovery/assess"]["post"]
     assert "requestBody" not in assess
     assert {(item["name"], item["in"]) for item in assess["parameters"]} == {
