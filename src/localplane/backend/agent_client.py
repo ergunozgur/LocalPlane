@@ -22,10 +22,12 @@ on who is asking.
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
 from localplane import ipc
+from localplane.maintenance import MaintenanceRefused, executor_result_proven
 from localplane.protocol.wire import (
     CODEC, PROTOCOL_VERSION, SYSTEMD_LIFECYCLE_CLIENT_TIMEOUT_S, ErrorCode, Method,
 )
@@ -35,6 +37,23 @@ LOG = logging.getLogger("localplane.backend.agent_client")
 # The provider bounds the inventory itself at 30 seconds.  Leave enough transport margin
 # for framing the bounded response; ordinary agent calls keep the configured default.
 SYSTEMD_INVENTORY_CLIENT_TIMEOUT_S = 35.0
+
+
+def _guard_correlated(guard: Any, request: dict[str, Any], holder: Any) -> bool:
+    return (isinstance(guard, dict) and isinstance(holder, str) and bool(holder) and
+            guard.get("holder_id") == holder and all(
+                key in request and type(guard.get(key)) is type(request[key]) and guard.get(key) == request[key]
+                for key in ("guard_id", "attempt_id", "ifindex", "guarded_mtu", "restore_mtu", "window_s")))
+
+
+def _guard_finished(guard: dict[str, Any]) -> bool:
+    if guard.get("phase") == "disarmed":
+        return True
+    if guard.get("phase") != "fired":
+        return False
+    request = {"attempt_id": guard.get("attempt_id"), "ifindex": guard.get("ifindex"),
+               "expected_current_mtu": guard.get("guarded_mtu"), "desired_mtu": guard.get("restore_mtu")}
+    return executor_result_proven(str(Method.NETWORK_SET_INTERFACE_MTU), request, guard.get("mutation"))
 
 
 class AgentError(RuntimeError):
@@ -73,9 +92,12 @@ class AgentError(RuntimeError):
 class AgentClient:
     """Typed calls to the agent. Every method here maps to one protocol method."""
 
-    def __init__(self, socket_path: str | Path, timeout_s: float = 10.0) -> None:
+    def __init__(self, socket_path: str | Path, timeout_s: float = 10.0, *, maintenance=None) -> None:
         self.socket_path = Path(socket_path)
         self.timeout_s = timeout_s
+        self.maintenance = maintenance
+        self._guard_markers = {}
+        self._guard_markers_lock = threading.Lock()
 
     # ------------------------------------------------------------------- typed methods
 
@@ -293,16 +315,46 @@ class AgentClient:
         *,
         timeout_s: float | None = None,
     ) -> dict[str, Any]:
-        return ipc.call(
-            self.socket_path,
-            CODEC,
-            self.timeout_s if timeout_s is None else timeout_s,
-            method,
-            params,
-            AgentError,
-            unavailable=ErrorCode.AGENT_UNAVAILABLE,
-            timeout_code=ErrorCode.TIMEOUT,
-        )
+        writing = method in {Method.NETWORK_SET_INTERFACE_MTU, Method.NETWORK_ARM_MTU_GUARD,
+                             Method.DOCKER_CONTAINER_LIFECYCLE, Method.SYSTEMD_SERVICE_LIFECYCLE}
+        try:
+            token = self.maintenance.begin_executor("backend.agent_dispatch") if writing and self.maintenance else None
+        except MaintenanceRefused as exc:
+            raise AgentError(exc.code, exc.message, exc.detail, dispatched=False) from None
+        try:
+            result = ipc.call(
+                self.socket_path, CODEC, self.timeout_s if timeout_s is None else timeout_s,
+                method, params, AgentError, unavailable=ErrorCode.AGENT_UNAVAILABLE,
+                timeout_code=ErrorCode.TIMEOUT,
+            )
+        except AgentError:
+            # The transport marks dispatched only after a buffered write completes;
+            # an error during that write cannot prove the peer saw no full frame.
+            # Retain even a reported pre-dispatch failure unless independently proven.
+            raise
+        if token is not None:
+            if method == Method.NETWORK_ARM_MTU_GUARD:
+                guard = result.get("guard")
+                holder = result.get("agent_instance_id")
+                if _guard_correlated(guard, params or {}, holder):
+                    if _guard_finished(guard):
+                        token.settle()
+                    elif guard.get("phase") == "armed":
+                        with self._guard_markers_lock:
+                            self._guard_markers[guard["guard_id"]] = (token, dict(params or {}), holder)
+            elif (isinstance(result.get("agent_instance_id"), str) and result["agent_instance_id"] and
+                  executor_result_proven(str(method), params or {}, result.get("mutation"))):
+                token.settle()
+        if method in {Method.NETWORK_DISARM_MTU_GUARD, Method.NETWORK_MTU_GUARD_STATUS}:
+            guard = result.get("guard")
+            if isinstance(guard, dict) and guard.get("guard_id") == (params or {}).get("guard_id"):
+                with self._guard_markers_lock:
+                    existing = self._guard_markers.get(guard["guard_id"])
+                    if (existing is not None and result.get("agent_instance_id") == existing[2] and
+                            _guard_correlated(guard, existing[1], existing[2]) and _guard_finished(guard)):
+                        self._guard_markers.pop(guard["guard_id"])
+                        existing[0].settle()
+        return result
 
     def protocol_version(self) -> str:
         return PROTOCOL_VERSION

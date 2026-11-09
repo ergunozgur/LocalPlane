@@ -134,9 +134,15 @@ not root.
   unresolved work
 - [Development](docs/development.md) — local setup, validation, contracts, and repository
   layout
+- [Versioned installation](docs/installation.md) — immutable bundle and explicit administrator steps
+- [Maintenance and recovery](docs/maintenance-and-update.md) — offline backup, update, compatible revert and same-window restore
 - [Operator Console](web/README.md) — frontend behavior and development commands
 
-## Quick start
+## Development quick start
+
+These commands start a developer checkout, not a self-contained installed release.
+For the versioned bundle contract and its required runtime validation, see
+[installation](docs/installation.md).
 
 Requirements: Linux and Python 3.11 or newer. Docker and systemd support depend on the host
 and the agent's available provider permissions.

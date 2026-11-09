@@ -6,6 +6,13 @@ LocalPlane is in early development and pre-release. This page separates what exi
 the foundations it provides, designs that are accepted but not built, longer-term direction,
 and questions that remain unresolved.
 
+Versioned installation and offline maintenance tooling are under development; the
+[installation contract](installation.md) and [recovery procedure](maintenance-and-update.md)
+describe their required boundaries. Do not infer installed-runtime acceptance from
+source, mocked fixtures or offline identity checks. Matching bundle/controller,
+direct-HTTPS installation, update/failure/recovery and rendered diagnostics proof
+remain required before declaring that journey supported.
+
 ## Status vocabulary
 
 | Status | Meaning |

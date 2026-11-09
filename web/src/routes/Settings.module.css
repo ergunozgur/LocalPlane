@@ -6,3 +6,66 @@
   display: block;
   max-width: 72ch;
 }
+
+.section {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  margin: 14px 0 8px;
+}
+
+.section:first-child {
+  margin-top: 0;
+}
+
+.error {
+  font-size: 12px;
+  color: var(--crimson);
+  line-height: 1.5;
+  max-width: 80ch;
+}
+
+.reRead {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.reRead:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reRead:focus-visible, .schemaDetails summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.installation { min-width: 0; }
+.componentGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.componentGrid section { min-width: 0; }
+.schemaDetails { margin: 10px 0; }
+.schemaDetails summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+.evidenceStamp { display: block; color: var(--faint); font-size: 11px; margin-top: 3px; }
+
+@media (max-width: 720px) {
+  .componentGrid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+}
+
+@media (max-width: 390px) {
+  .reRead {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}

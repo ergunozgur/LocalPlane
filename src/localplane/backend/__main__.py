@@ -26,7 +26,7 @@ import sys
 import uvicorn
 
 from localplane.backend.app import create_app
-from localplane.backend.config import Settings
+from localplane.backend.config import Settings, SettingsError
 from localplane.backend.serving_files import ServingConfigurationError
 from localplane.backend.tls import server_config, validate_transport
 from localplane.log import configure_logging
@@ -36,9 +36,10 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     configure_logging(settings.log_level)
     try:
+        settings.validate_install()
         validate_transport(settings)
         config = server_config(settings, create_app(settings), int(os.environ.get("LOCALPLANE_PORT", "8080")))
-    except ServingConfigurationError as exc:
+    except (ServingConfigurationError, SettingsError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     uvicorn.Server(config).run()

@@ -19,6 +19,9 @@ export type Capability = S['Capability'];
 export type ErrorBody = S['ErrorBody'];
 export type SessionStatus = S['SessionStatus'];
 export type StorageObservation = S['StorageObservation'];
+export type Installation = S['InstallationStatus'];
+export type InstallationBuild = S['InstallationBuild'];
+export type InstallationMaintenance = S['InstallationMaintenance'];
 export type StorageMount = S['StorageMount'];
 export type StorageCounters = S['StorageCounters'];
 

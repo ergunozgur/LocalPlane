@@ -36,6 +36,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
+from localplane.maintenance import executor_result_proven
+
 LOG = logging.getLogger("localplane.agent.guard")
 
 #: The longest window this component will hold, whatever it is asked for. A guard is a
@@ -78,6 +80,8 @@ class _Guard:
     fired_at: str | None = None
     mutation: dict[str, Any] | None = None
     timer: threading.Timer | None = field(default=None, repr=False)
+    admission: Any = field(default=None, repr=False)
+    marker: Any = field(default=None, repr=False)
 
     def report(self, holder_id: str) -> dict[str, Any]:
         return {
@@ -112,6 +116,8 @@ class GuardRegistry:
         mutate: Callable[..., dict[str, Any]],
         clock: Callable[[], datetime] | None = None,
         timer_factory: Callable[[float, Callable[[], None]], Any] | None = None,
+        admission_factory: Callable[[], Any] | None = None,
+        marker_factory: Callable[[], Any] | None = None,
     ) -> None:
         self._holder_id = holder_id
         #: The one thing this registry can do to the host, injected rather than reached for:
@@ -120,6 +126,8 @@ class GuardRegistry:
         self._mutate = mutate
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._timer_factory = timer_factory or _real_timer
+        self._admission_factory = admission_factory
+        self._marker_factory = marker_factory
         self._lock = threading.RLock()
         self._armed: dict[str, _Guard] = {}
         self._settled: OrderedDict[str, _Guard] = OrderedDict()
@@ -176,8 +184,26 @@ class GuardRegistry:
                 armed_at=now,
                 expires_at=now + timedelta(seconds=window_s),
             )
-            guard.timer = self._timer_factory(float(window_s), lambda: self._fire(guard_id))
+            admission = self._admission_factory() if self._admission_factory else None
+            if admission is not None:
+                admission.__enter__()
+            guard.admission = admission
+            try:
+                guard.marker = self._marker_factory() if self._marker_factory else None
+            except BaseException:
+                if admission is not None:
+                    admission.__exit__(None, None, None)
+                raise
             self._armed[guard_id] = guard
+            try:
+                guard.timer = self._timer_factory(float(window_s), lambda: self._fire(guard_id))
+            except BaseException:
+                self._armed.pop(guard_id, None)
+                if guard.marker is not None:
+                    guard.marker.settle()
+                if admission is not None:
+                    admission.__exit__(None, None, None)
+                raise
             LOG.info(
                 "connection guard armed",
                 extra={
@@ -207,7 +233,7 @@ class GuardRegistry:
                     guard.timer.cancel()
                     guard.timer = None
                 guard.phase = "disarmed"
-                self._settle(guard)
+                self._settle(guard, proven=True)
                 LOG.info("connection guard disarmed", extra={"guard_id": guard_id})
                 return guard.report(self._holder_id)
             settled = self._settled.get(guard_id)
@@ -264,7 +290,10 @@ class GuardRegistry:
                 desired_mtu=guard.restore_mtu,
                 expected_interface_name=guard.expected_interface_name,
             )
-            self._settle(guard)
+            self._settle(guard, proven=executor_result_proven("network.set_interface_mtu", {
+                "attempt_id": guard.attempt_id, "ifindex": guard.ifindex,
+                "expected_current_mtu": guard.guarded_mtu, "desired_mtu": guard.restore_mtu,
+            }, guard.mutation))
             LOG.warning(
                 "connection guard reversal recorded",
                 extra={
@@ -276,9 +305,15 @@ class GuardRegistry:
 
     # ---------------------------------------------------------------------- internals
 
-    def _settle(self, guard: _Guard) -> None:
+    def _settle(self, guard: _Guard, *, proven: bool) -> None:
         self._armed.pop(guard.guard_id, None)
         self._settled[guard.guard_id] = guard
+        if proven and guard.marker is not None:
+            guard.marker.settle()
+            guard.marker = None
+        if guard.admission is not None:
+            guard.admission.__exit__(None, None, None)
+            guard.admission = None
         while len(self._settled) > SETTLED_MEMORY:
             self._settled.popitem(last=False)
 

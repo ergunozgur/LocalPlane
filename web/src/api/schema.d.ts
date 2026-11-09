@@ -63,6 +63,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/installation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Installation
+         * @description Authenticated, read-only identity of what is running and what this store holds.
+         *
+         *     It does not handshake-ingest into the store, does not write an observation and does not
+         *     derive the agent's identity from a configured socket. An unreachable agent is a typed
+         *     error plus at most a clearly labelled recorded snapshot; a provider snapshot is a
+         *     capability claim with its own source and time, not proof that a provider works now.
+         */
+        get: operations["get_installation_api_v1_installation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/host": {
         parameters: {
             query?: never;
@@ -2714,6 +2739,266 @@ export interface components {
             value: string;
             /** Confidence */
             confidence: string;
+        };
+        /** InstallationAgent */
+        InstallationAgent: {
+            /** Reachable */
+            reachable: boolean;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "live" | "recorded" | "unavailable";
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            error: components["schemas"]["ErrorBody"] | null;
+            /** Agent Instance Id */
+            agent_instance_id: string | null;
+            /** Agent Version */
+            agent_version: string | null;
+            /** Pid */
+            pid: number | null;
+            /** Started At */
+            started_at: string | null;
+            /** @description The agent's own manifest identity. Null when an older agent reports none. */
+            build: components["schemas"]["InstallationBuild"] | null;
+            maintenance: components["schemas"]["InstallationMaintenance"] | null;
+        };
+        /**
+         * InstallationBuild
+         * @description What one process actually loaded, not what a package version claims.
+         */
+        InstallationBuild: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "packaged" | "unbundled" | "invalid" | "unavailable";
+            /** Process */
+            process: string;
+            /**
+             * Build Id
+             * @description Content digest over the verified manifest, or null when unbundled.
+             */
+            build_id: string | null;
+            /** Version */
+            version: string | null;
+            /** Source Commit */
+            source_commit: string | null;
+            /**
+             * Source Tree
+             * @description The exact clean Git tree, only when the build was from a clean tree.
+             */
+            source_tree: string | null;
+            /** Source Dirty */
+            source_dirty: boolean | null;
+            /**
+             * Source Digest
+             * @description Canonical digest over installed source, migrations and console files.
+             */
+            source_digest: string | null;
+            /** Manifest Sha256 */
+            manifest_sha256: string | null;
+            /** Console Digest */
+            console_digest: string | null;
+            /** File Count */
+            file_count: number | null;
+            /** Migration Count */
+            migration_count: number | null;
+            /** Dependencies */
+            dependencies: components["schemas"]["InstallationDependency"][];
+            platform: components["schemas"]["InstallationPlatform"] | null;
+            /**
+             * Reasons
+             * @description Machine-readable reasons the identity is unknown, unbundled or invalid.
+             */
+            reasons: string[];
+            /**
+             * Loaded At
+             * Format: date-time
+             */
+            loaded_at: string;
+        };
+        /** InstallationConsole */
+        InstallationConsole: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "matched" | "mismatched" | "unavailable" | "unknown";
+            /**
+             * Actual Digest
+             * @description Digest of the asset bytes loaded at backend startup.
+             */
+            actual_digest: string | null;
+            /** Manifest Digest */
+            manifest_digest: string | null;
+            /** Matches */
+            matches: boolean | null;
+            /** Asset Count */
+            asset_count: number | null;
+            /** Reasons */
+            reasons: string[];
+        };
+        /** InstallationDependency */
+        InstallationDependency: {
+            /** Name */
+            name: string;
+            /** Version */
+            version: string;
+            /**
+             * Sha256
+             * @description Content hash when the builder recorded one; null when it did not.
+             */
+            sha256: string | null;
+        };
+        /** InstallationMaintenance */
+        InstallationMaintenance: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "clear" | "active" | "closed" | "unknown" | "disabled";
+            /** Active */
+            active: boolean;
+            window: components["schemas"]["InstallationWindow"] | null;
+            refusal: components["schemas"]["InstallationMaintenanceRefusal"] | null;
+            /**
+             * Root Id
+             * @description A digest of the shared directory, not the directory path.
+             */
+            root_id: string | null;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+        };
+        /** InstallationMaintenanceRefusal */
+        InstallationMaintenanceRefusal: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            };
+        };
+        /** InstallationPlatform */
+        InstallationPlatform: {
+            /** Os */
+            os: string | null;
+            /** Architecture */
+            architecture: string | null;
+            /** Python */
+            python: string | null;
+        };
+        /** InstallationProviders */
+        InstallationProviders: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "agent_cached" | "recorded" | "unavailable";
+            /** As Of */
+            as_of: string | null;
+            /** Capabilities */
+            capabilities: components["schemas"]["Capability"][];
+            /** Reasons */
+            reasons: string[];
+        };
+        /** InstallationSchema */
+        InstallationSchema: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "matched" | "mismatched" | "unknown" | "unavailable";
+            /**
+             * Applied
+             * @description Rows actually present in schema_migrations on this store.
+             */
+            applied: components["schemas"]["InstallationSchemaMigration"][];
+            /**
+             * Manifest Migrations
+             * @description Filename to SHA-256 from the release manifest; empty when unbundled.
+             */
+            manifest_migrations: {
+                [key: string]: string;
+            };
+            /** Matches */
+            matches: boolean | null;
+            /** Reasons */
+            reasons: string[];
+        };
+        /** InstallationSchemaMigration */
+        InstallationSchemaMigration: {
+            /** Version */
+            version: number;
+            /** Name */
+            name: string;
+            /** Checksum */
+            checksum: string;
+        };
+        /**
+         * InstallationStatus
+         * @description Authenticated read-only installation diagnostics.
+         *
+         *     Reachability and identity are separate claims. A live agent says what it is; an
+         *     unreachable agent contributes a typed error and, at most, a clearly labelled recorded
+         *     identity. No field here is inferred from a configured path, and no field is proof that
+         *     a provider works now.
+         */
+        InstallationStatus: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            backend: components["schemas"]["InstallationBuild"];
+            agent: components["schemas"]["InstallationAgent"];
+            console: components["schemas"]["InstallationConsole"];
+            schema_identity: components["schemas"]["InstallationSchema"];
+            maintenance: components["schemas"]["InstallationMaintenance"];
+            providers: components["schemas"]["InstallationProviders"];
+            /**
+             * Gaps
+             * @description Unknown, unbundled, unavailable or mismatched facts worth surfacing.
+             */
+            gaps: string[];
+        };
+        /** InstallationWindow */
+        InstallationWindow: {
+            /** Window Id */
+            window_id: string;
+            /** Generation */
+            generation: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "closed";
+            /**
+             * Opened At
+             * Format: date-time
+             */
+            opened_at: string;
+            /** Closed At */
+            closed_at: string | null;
+            /** Accepted At */
+            accepted_at: string | null;
+            /** Release Build Id */
+            release_build_id: string | null;
+            /** Snapshot Id */
+            snapshot_id: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Outcome */
+            outcome: string | null;
         };
         /**
          * Intent
@@ -6021,6 +6306,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackendStatus"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_installation_api_v1_installation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationStatus"];
                 };
             };
             /** @description Unauthorized */

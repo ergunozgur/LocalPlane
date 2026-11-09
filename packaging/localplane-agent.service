@@ -1,0 +1,25 @@
+[Unit]
+Description=LocalPlane host agent
+After=network.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_GROUP@
+EnvironmentFile=@CONFIG_ROOT@/environment
+ExecStart=@RELEASE_ROOT@/bin/localplane-agent
+RuntimeDirectory=@RUNTIME_NAME@
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
+Restart=no
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=@STATE_ROOT@ @RUNTIME_ROOT@
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target
