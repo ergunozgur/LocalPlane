@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "LocalPlane",
-    "description": "\nLocalPlane's observation and management surface.\n\n**Exactly two endpoints in this API can result in a host write:**\n`POST /api/v1/runs/{id}/apply` and\n`POST /api/v1/changes/{id}/recovery/retry`.\nEverything else reads, or writes LocalPlane's own records. `POST\n/api/v1/network/observations/refresh` reads sysfs and rtnetlink and asks Docker,\nNetworkManager and Tailscale what they say they own; `POST\n/api/v1/systemd/observations/refresh` reads the bounded loaded-unit estate through the\nofficial systemd D-Bus API; `adopt`, `release`, `intent/revise`, `intent/adopt-runtime`,\n`POST /runs`, `cancel` and `confirm` write records and nothing else.\nNo endpoint here brings a link up or down, configures an address, changes a route, a\nfirewall rule, a DNS setting, a sysctl or anything in any of those daemons.\n\n`apply` can execute only the closed typed operation already fixed by its published Run:\nreconcile a managed interface's retained MTU through the fixed helper path, or ask Docker\nto start, stop or restart one validated container through Docker's own closed API, or ask\nsystemd to start, stop or restart one validated service unit through the official D-Bus API.\n`recovery/retry` can only re-attempt the original Change's required end state, after a fresh\nobservation and any required authority. Neither endpoint takes a request body, so there is\nno parameter for a value, target, operation, verb, interface, command or provider on either\nsurface.\n\nEight things are worth knowing before reading a response:\n\n* **Management, ownership, reconciliation, health and freshness are independent.** A managed\n  object can be failed. An observed object can be healthy. A drifted object can be perfectly\n  healthy, and an in-sync one can be down.\n* **Ownership is not a management state.** A bridge the Docker daemon runs is still\n  `observed` — LocalPlane watches it — and what its ownership changes is\n  `ownership.adoption`, which refuses to make LocalPlane answerable for it. Every claim is\n  evidence-backed and none is made from an interface's name; `unknown` is a real answer and\n  says which source left it that way.\n* **`null` means unknown.** It is never a zero, an empty string or a default. The speed of\n  a link with no carrier is `null` because the kernel does not know it.\n* **Observed objects do not drift.** `reconciliation` is `null` unless the object is\n  managed, which is not the same as `in_sync`. A managed object whose controlled value\n  could not be read is `unknown`, which is not `drifted` either.\n* **Drift and findings are different claims.** `reconciliation` is a comparison recomputed\n  on every read. A finding is the durable record that LocalPlane noticed, when it first\n  noticed, and how it ended.\n* **Intent can be revised, and revising is not applying.** A managed object's desired state\n  may be replaced by a new immutable version — either with values the operator supplies or\n  by declaring the observed runtime correct. Management does not move, the version replaced\n  is kept, and the host is not touched. A drift that ends this way is resolved\n  `intent_revised`, never as though anything had been put right.\n* **A Run is not a Change.** A Run plans a typed operation and publishes an immutable\n  preview of what it would involve; a Change is the record that LocalPlane entered the path\n  on which a host write may occur. Planning, confirming and arming all happen without a\n  Change, because none of them can have moved anything. A preview may exist while execution\n  is blocked — that is the useful case — and where LocalPlane cannot prove something, such\n  as whether an interface carries the path it is being reached over, the preview says\n  `unknown` rather than guessing, and execution stays blocked.\n* **\"Written\" and \"we do not know\" are different answers.** A change carries\n  `mutation.outcome` — `not_written`, `written` or `write_unknown` — and the third is never\n  resolved by reading the value back: that answers what the host holds now, which is a\n  different question from whether this write occurred. A kernel acknowledgement is also not\n  success; only a fresh observation through the ordinary path can prove the intended value.\n  A change that cannot be proved safe ends `recovery_required`, which is a truthful ending\n  and not an error, and it holds the object's write lock until somebody looks.\n",
+    "description": "\nLocalPlane's observation and management surface.\n\n**Exactly two endpoints in this API can result in a host write:**\n`POST /api/v1/runs/{id}/apply` and\n`POST /api/v1/changes/{id}/recovery/retry`.\nOther routes read or write LocalPlane's own records; explicit connectivity diagnostics\ncan perform policy-restricted DNS queries and numeric TCP handshakes. `POST\n/api/v1/network/observations/refresh` reads sysfs and rtnetlink and asks Docker,\nNetworkManager and Tailscale what they say they own; `POST\n/api/v1/systemd/observations/refresh` reads the bounded loaded-unit estate through the\nofficial systemd D-Bus API; `adopt`, `release`, `intent/revise`, `intent/adopt-runtime`,\n`POST /runs`, `cancel` and `confirm` write records and nothing else.\nNo endpoint here brings a link up or down, configures an address, changes a route, a\nfirewall rule, a DNS setting, a sysctl or anything in any of those daemons.\n\n`apply` can execute only the closed typed operation already fixed by its published Run:\nreconcile a managed interface's retained MTU through the fixed helper path, or ask Docker\nto start, stop or restart one validated container through Docker's own closed API, or ask\nsystemd to start, stop or restart one validated service unit through the official D-Bus API.\n`recovery/retry` can only re-attempt the original Change's required end state, after a fresh\nobservation and any required authority. Neither endpoint takes a request body, so there is\nno parameter for a value, target, operation, verb, interface, command or provider on either\nsurface.\n\nEight things are worth knowing before reading a response:\n\n* **Management, ownership, reconciliation, health and freshness are independent.** A managed\n  object can be failed. An observed object can be healthy. A drifted object can be perfectly\n  healthy, and an in-sync one can be down.\n* **Ownership is not a management state.** A bridge the Docker daemon runs is still\n  `observed` — LocalPlane watches it — and what its ownership changes is\n  `ownership.adoption`, which refuses to make LocalPlane answerable for it. Every claim is\n  evidence-backed and none is made from an interface's name; `unknown` is a real answer and\n  says which source left it that way.\n* **`null` means unknown.** It is never a zero, an empty string or a default. The speed of\n  a link with no carrier is `null` because the kernel does not know it.\n* **Observed objects do not drift.** `reconciliation` is `null` unless the object is\n  managed, which is not the same as `in_sync`. A managed object whose controlled value\n  could not be read is `unknown`, which is not `drifted` either.\n* **Drift and findings are different claims.** `reconciliation` is a comparison recomputed\n  on every read. A finding is the durable record that LocalPlane noticed, when it first\n  noticed, and how it ended.\n* **Intent can be revised, and revising is not applying.** A managed object's desired state\n  may be replaced by a new immutable version — either with values the operator supplies or\n  by declaring the observed runtime correct. Management does not move, the version replaced\n  is kept, and the host is not touched. A drift that ends this way is resolved\n  `intent_revised`, never as though anything had been put right.\n* **A Run is not a Change.** A Run plans a typed operation and publishes an immutable\n  preview of what it would involve; a Change is the record that LocalPlane entered the path\n  on which a host write may occur. Planning, confirming and arming all happen without a\n  Change, because none of them can have moved anything. A preview may exist while execution\n  is blocked — that is the useful case — and where LocalPlane cannot prove something, such\n  as whether an interface carries the path it is being reached over, the preview says\n  `unknown` rather than guessing, and execution stays blocked.\n* **\"Written\" and \"we do not know\" are different answers.** A change carries\n  `mutation.outcome` — `not_written`, `written` or `write_unknown` — and the third is never\n  resolved by reading the value back: that answers what the host holds now, which is a\n  different question from whether this write occurred. A kernel acknowledgement is also not\n  success; only a fresh observation through the ordinary path can prove the intended value.\n  A change that cannot be proved safe ends `recovery_required`, which is a truthful ending\n  and not an error, and it holds the object's write lock until somebody looks.\n",
     "version": "0.1.0"
   },
   "paths": {
@@ -478,6 +478,340 @@
             "BrowserSession": []
           }
         ]
+      }
+    },
+    "/api/v1/network/interfaces/{object_id}/connectivity": {
+      "get": {
+        "tags": [
+          "network"
+        ],
+        "summary": "Get Connectivity",
+        "description": "Read retained connectivity evidence only; never trigger a provider read.",
+        "operationId": "get_connectivity_api_v1_network_interfaces__object_id__connectivity_get",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "object_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Object Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectivitySnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/network/interfaces/{object_id}/connectivity/observations/refresh": {
+      "post": {
+        "tags": [
+          "network"
+        ],
+        "summary": "Refresh Connectivity",
+        "description": "Explicit passive provider observation, stored and reread; never an active probe.",
+        "operationId": "refresh_connectivity_api_v1_network_interfaces__object_id__connectivity_observations_refresh_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "object_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Object Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectivitySnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/network/interfaces/{object_id}/connectivity/route": {
+      "post": {
+        "tags": [
+          "network"
+        ],
+        "summary": "Connectivity Route",
+        "description": "A numeric route lookup; availability does not imply packet reachability.",
+        "operationId": "connectivity_route_api_v1_network_interfaces__object_id__connectivity_route_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "object_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Object Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/network/interfaces/{object_id}/connectivity/diagnostics": {
+      "post": {
+        "tags": [
+          "network"
+        ],
+        "summary": "Connectivity Diagnostic",
+        "description": "One explicit, independently guarded action, never a management-path proof.",
+        "operationId": "connectivity_diagnostic_api_v1_network_interfaces__object_id__connectivity_diagnostics_post",
+        "security": [
+          {
+            "MasterBearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "object_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Object Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/DnsRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TcpRequest"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "kind",
+                  "mapping": {
+                    "dns": "#/components/schemas/DnsRequest",
+                    "tcp": "#/components/schemas/TcpRequest"
+                  }
+                },
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DnsResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TcpResult"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "kind",
+                    "mapping": {
+                      "dns": "#/components/schemas/DnsResult",
+                      "tcp": "#/components/schemas/TcpResult"
+                    }
+                  },
+                  "title": "Response Connectivity Diagnostic Api V1 Network Interfaces  Object Id  Connectivity Diagnostics Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/network/interfaces": {
@@ -3950,6 +4284,29 @@
         "title": "AgentStatus",
         "description": "Whether the agent is answering *now*, and what was last recorded about it."
       },
+      "AppliedSection": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/ConnectivityEvidence"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectivityApplied"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "title": "AppliedSection"
+      },
       "BackendStatus": {
         "properties": {
           "status": {
@@ -4936,6 +5293,29 @@
         "title": "ChangeVerification",
         "description": "Whether a fresh reading proved the wanted value. Never the mutation's own word."
       },
+      "ClientResolverSection": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/ConnectivityEvidence"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectivityClientResolver"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "title": "ClientResolverSection"
+      },
       "ConfirmRunRequest": {
         "properties": {
           "preview_id": {
@@ -4981,6 +5361,1240 @@
         ],
         "title": "ConfirmRunRequest",
         "description": "Satisfy the confirmation a published plan requires.\n\n``preview_id`` is **required** and must be the preview this Run published. A digest is\nnot enough: two identical concurrent plans share one, so a confirmation keyed on content\ncould not say which of them an operator looked at. ``expected_preview_digest`` is an\noptional cross-check on *what* was confirmed, not a substitute for saying *which*.\n\nNothing else is accepted. There is no field here for an MTU, an interface, a command, a\nprovider or an actor, and ``extra`` is forbidden on every model in this file, so a\nrequest carrying one is refused at the edge rather than ignored."
+      },
+      "ConnectivityAddress": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address"
+        ],
+        "title": "ConnectivityAddress"
+      },
+      "ConnectivityApplied": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "addresses": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityAddress"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addresses"
+          },
+          "routes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityRoute"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routes"
+          },
+          "dns_servers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dns Servers"
+          },
+          "search_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Domains"
+          },
+          "routing_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityResolverDomain"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routing Domains"
+          },
+          "ip_settings": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityIPSettings"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Settings"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "ConnectivityApplied"
+      },
+      "ConnectivityClientResolver": {
+        "properties": {
+          "client_nameservers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Nameservers"
+          },
+          "client_mode": {
+            "type": "string",
+            "enum": [
+              "stub",
+              "direct",
+              "unknown"
+            ],
+            "title": "Client Mode",
+            "default": "unknown"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConnectivityClientResolver"
+      },
+      "ConnectivityEvidence": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "provider_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Version"
+          },
+          "agent_instance_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Instance Id"
+          },
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Id"
+          },
+          "vantage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vantage"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "freshness": {
+            "type": "string",
+            "enum": [
+              "current",
+              "stale",
+              "unknown"
+            ],
+            "title": "Freshness",
+            "default": "unknown"
+          },
+          "completeness": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ],
+            "title": "Completeness",
+            "default": "unknown"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "not_observed",
+              "unavailable",
+              "unsupported",
+              "changed"
+            ],
+            "title": "Status",
+            "default": "not_observed"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gaps"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConnectivityEvidence"
+      },
+      "ConnectivityIPSettings": {
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "ipv4",
+              "ipv6"
+            ],
+            "title": "Family"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "ignore_auto_dns": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ignore Auto Dns"
+          },
+          "dns_priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dns Priority"
+          },
+          "route_metric": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Metric"
+          },
+          "gateway": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway"
+          },
+          "dns_servers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dns Servers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "family"
+        ],
+        "title": "ConnectivityIPSettings"
+      },
+      "ConnectivityKernel": {
+        "properties": {
+          "addresses": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityAddress"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addresses"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConnectivityKernel"
+      },
+      "ConnectivityNexthop": {
+        "properties": {
+          "gateway": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway"
+          },
+          "interface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interface"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          },
+          "ifindex": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ifindex"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConnectivityNexthop"
+      },
+      "ConnectivityPolicy": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "missing",
+              "invalid",
+              "unsafe",
+              "unreadable"
+            ],
+            "title": "Status"
+          },
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "dns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dns"
+          },
+          "tcp": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TcpPolicyTarget"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tcp"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "control_plane_complete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Plane Complete"
+          },
+          "address_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Count"
+          },
+          "tcp_status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "disabled",
+              "missing_declaration",
+              "incomplete_declaration",
+              "policy_unavailable"
+            ],
+            "title": "Tcp Status",
+            "default": "policy_unavailable"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "digest",
+          "dns",
+          "tcp"
+        ],
+        "title": "ConnectivityPolicy"
+      },
+      "ConnectivityProfile": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uuid"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "device_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Identity"
+          },
+          "device_ifindex": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Ifindex"
+          },
+          "active_connection_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Connection Identity"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "saved",
+              "unsaved",
+              "generated",
+              "external",
+              "unknown"
+            ],
+            "title": "State",
+            "default": "unknown"
+          },
+          "unsaved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unsaved"
+          },
+          "generated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated"
+          },
+          "external": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External"
+          },
+          "addresses": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityAddress"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addresses"
+          },
+          "routes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityRoute"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routes"
+          },
+          "dns_servers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dns Servers"
+          },
+          "search_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Domains"
+          },
+          "routing_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityResolverDomain"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routing Domains"
+          },
+          "ip_settings": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityIPSettings"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Settings"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "ConnectivityProfile"
+      },
+      "ConnectivityResolver": {
+        "properties": {
+          "global_servers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Global Servers"
+          },
+          "global_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Global Domains"
+          },
+          "global_routing_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityResolverDomain"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Global Routing Domains"
+          },
+          "current_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Server"
+          },
+          "current_server_ifindex": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Server Ifindex"
+          },
+          "links": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityResolverLink"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Links"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConnectivityResolver"
+      },
+      "ConnectivityResolverDomain": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "route_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Only"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ConnectivityResolverDomain"
+      },
+      "ConnectivityResolverLink": {
+        "properties": {
+          "interface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interface"
+          },
+          "servers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Servers"
+          },
+          "domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domains"
+          },
+          "routing_domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityResolverDomain"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routing Domains"
+          },
+          "current_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Server"
+          },
+          "dns_default_route": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dns Default Route"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConnectivityResolverLink"
+      },
+      "ConnectivityRoute": {
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "ipv4",
+              "ipv6"
+            ],
+            "title": "Family"
+          },
+          "destination": {
+            "type": "string",
+            "title": "Destination"
+          },
+          "table": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table"
+          },
+          "route_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Type"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric"
+          },
+          "nexthops": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityNexthop"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nexthops"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "family",
+          "destination"
+        ],
+        "title": "ConnectivityRoute"
+      },
+      "ConnectivityRule": {
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "ipv4",
+              "ipv6"
+            ],
+            "title": "Family"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "table": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "fwmark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fwmark"
+          },
+          "fwmask": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fwmask"
+          },
+          "incoming_interface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incoming Interface"
+          },
+          "outgoing_interface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outgoing Interface"
+          },
+          "uid_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uid Range"
+          },
+          "suppress_prefix_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suppress Prefix Length"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "family"
+        ],
+        "title": "ConnectivityRule"
+      },
+      "ConnectivitySnapshot": {
+        "properties": {
+          "object_id": {
+            "type": "string",
+            "title": "Object Id"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ProfileSection"
+          },
+          "applied": {
+            "$ref": "#/components/schemas/AppliedSection"
+          },
+          "kernel": {
+            "$ref": "#/components/schemas/KernelSection"
+          },
+          "routes": {
+            "$ref": "#/components/schemas/RoutesSection"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/RulesSection"
+          },
+          "resolver": {
+            "$ref": "#/components/schemas/ResolverSection"
+          },
+          "client_resolver": {
+            "$ref": "#/components/schemas/ClientResolverSection"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/ConnectivityPolicy"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "object_id",
+          "profile",
+          "applied",
+          "kernel",
+          "routes",
+          "rules",
+          "resolver",
+          "client_resolver",
+          "policy"
+        ],
+        "title": "ConnectivitySnapshot"
       },
       "ConsultedSource": {
         "properties": {
@@ -5989,6 +7603,154 @@
           "schema_versions"
         ],
         "title": "DatabaseStatus"
+      },
+      "DnsRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "dns",
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "record_type": {
+            "type": "string",
+            "enum": [
+              "A",
+              "AAAA"
+            ],
+            "title": "Record Type"
+          },
+          "policy_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Policy Digest"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "name",
+          "record_type",
+          "policy_digest"
+        ],
+        "title": "DnsRequest"
+      },
+      "DnsResult": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "dns",
+            "title": "Kind",
+            "default": "dns"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "record_type": {
+            "type": "string",
+            "enum": [
+              "A",
+              "AAAA"
+            ],
+            "title": "Record Type"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "resolved",
+              "no_data",
+              "not_found",
+              "server_failure",
+              "refused",
+              "timeout",
+              "unavailable",
+              "denied",
+              "policy_mismatch",
+              "busy",
+              "rate_limited",
+              "error"
+            ],
+            "title": "Outcome"
+          },
+          "vantage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vantage"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "answers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answers"
+          },
+          "truncated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Truncated"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "record_type",
+          "outcome",
+          "detail"
+        ],
+        "title": "DnsResult"
       },
       "DockerContainer": {
         "properties": {
@@ -8177,6 +9939,29 @@
         ],
         "title": "KeepGuardedRunRequest",
         "description": "Keep a guarded change. One field, and it names nothing.\n\nThere is deliberately no object id, no value, no interface, no deadline and no guard id\nhere: what authorises keeping a guarded change is not something a caller can send, it is\nthe management path this request itself re-proves over the object that was changed. A\nbody that could name anything would be a body that could name the wrong thing."
+      },
+      "KernelSection": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/ConnectivityEvidence"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectivityKernel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "title": "KernelSection"
       },
       "Link": {
         "properties": {
@@ -10665,6 +12450,29 @@
         "title": "PlannedChange",
         "description": "WHAT would change, in one of two shapes.\n\n``kind`` says which, and it is the field to read first. A **field** change moves one\ncontrolled value to another and fills `field` / `value_type` / `current` / `desired`. An\n**action** asks for a declared verb to be carried out and fills `action` /\n`observed_state` / `expected_state`; it has no desired *value*, because there is no\nretained value for it to reconcile towards.\n\nThe unused half is null rather than absent, so the shape of the document does not change\nbetween operations — but nothing outside the half `kind` names carries any meaning."
       },
+      "ProfileSection": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/ConnectivityEvidence"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectivityProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "title": "ProfileSection"
+      },
       "ProtectionReasonView": {
         "properties": {
           "reason": {
@@ -11478,6 +13286,29 @@
         ],
         "title": "RefreshResult"
       },
+      "ResolverSection": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/ConnectivityEvidence"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectivityResolver"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "title": "ResolverSection"
+      },
       "RiskFactor": {
         "properties": {
           "code": {
@@ -11675,6 +13506,248 @@
         ],
         "title": "RouteEvidenceView",
         "description": "What the kernel answered when asked for the route to the peer. Facts only.\n\n`oif_index` is the kernel's interface index. The agent does not turn it into a name or\nan object: correlating it with a LocalPlane object is a judgement, and judgements are\nthe backend's."
+      },
+      "RouteRequest": {
+        "properties": {
+          "destination": {
+            "type": "string",
+            "title": "Destination"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "destination"
+        ],
+        "title": "RouteRequest"
+      },
+      "RouteResult": {
+        "properties": {
+          "object_id": {
+            "type": "string",
+            "title": "Object Id"
+          },
+          "destination": {
+            "type": "string",
+            "title": "Destination"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "no_route",
+              "prohibited",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "gateway": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway"
+          },
+          "egress_interface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Egress Interface"
+          },
+          "egress_ifindex": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Egress Ifindex"
+          },
+          "egress_object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Egress Object Id"
+          },
+          "agent_instance_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Instance Id"
+          },
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Id"
+          },
+          "provider_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Version"
+          },
+          "query_context": {
+            "type": "string",
+            "title": "Query Context",
+            "default": "Unmarked lookup in the agent network namespace; no source or interface binding."
+          },
+          "table": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table"
+          },
+          "route_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Type"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "object_id",
+          "destination",
+          "status",
+          "detail"
+        ],
+        "title": "RouteResult"
+      },
+      "RoutesSection": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/ConnectivityEvidence"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityRoute"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "title": "RoutesSection"
+      },
+      "RulesSection": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/ConnectivityEvidence"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectivityRule"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "title": "RulesSection"
       },
       "Run": {
         "properties": {
@@ -12771,6 +14844,25 @@
           "expires_at"
         ],
         "title": "SessionStatus"
+      },
+      "SocketEndpoint": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "port": {
+            "type": "integer",
+            "title": "Port"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address",
+          "port"
+        ],
+        "title": "SocketEndpoint"
       },
       "Statistics": {
         "properties": {
@@ -15082,6 +17174,161 @@
           "path"
         ],
         "title": "SystemdWatchedPath"
+      },
+      "TcpPolicyTarget": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "port": {
+            "type": "integer",
+            "title": "Port"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address",
+          "port"
+        ],
+        "title": "TcpPolicyTarget"
+      },
+      "TcpRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "tcp",
+            "title": "Kind"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "port": {
+            "type": "integer",
+            "maximum": 65535,
+            "minimum": 1,
+            "title": "Port"
+          },
+          "policy_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Policy Digest"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "address",
+          "port",
+          "policy_digest"
+        ],
+        "title": "TcpRequest"
+      },
+      "TcpResult": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "tcp",
+            "title": "Kind",
+            "default": "tcp"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "port": {
+            "type": "integer",
+            "title": "Port"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "connected",
+              "refused",
+              "timeout",
+              "no_route",
+              "permission_denied",
+              "unavailable",
+              "denied",
+              "policy_mismatch",
+              "busy",
+              "rate_limited",
+              "error"
+            ],
+            "title": "Outcome"
+          },
+          "vantage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vantage"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "local": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SocketEndpoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "remote": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SocketEndpoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address",
+          "port",
+          "outcome",
+          "detail"
+        ],
+        "title": "TcpResult"
       },
       "TransitionResult": {
         "properties": {

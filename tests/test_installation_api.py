@@ -8,6 +8,12 @@ from localplane.maintenance import MaintenanceController
 from tests.conftest import AuthenticatedTestClient, create_authenticated_app
 
 
+@pytest.fixture(autouse=True)
+def isolate_policy_loading(monkeypatch):
+    from localplane.protocol.diagnostic_policy import LoadedDiagnosticPolicy
+    monkeypatch.setattr("localplane.backend.app.load_diagnostic_policy", lambda: LoadedDiagnosticPolicy("unsafe", None))
+
+
 def test_fenced_startup_and_route_inventory(tmp_path, monkeypatch):
     root = tmp_path / "maintenance"
     ctl = MaintenanceController(root, service="test")
@@ -38,6 +44,7 @@ def test_fenced_startup_and_route_inventory(tmp_path, monkeypatch):
                         "/api/v1/systemd/units/example/journal",
                         "/api/v1/docker/containers/example/logs",
                         "/api/v1/docker/containers/example/stats",
+                        "/api/v1/network/interfaces/example/connectivity/route",
                     }, (method, path)
         for path in ("/api/v1/runs/example/apply", "/api/v1/runs/example/%61pply",
                      "/api/v1/runs/example/apply/"):

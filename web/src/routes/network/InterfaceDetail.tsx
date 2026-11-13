@@ -41,10 +41,13 @@ import {
 } from '@/domain/vocabulary';
 import { addressLifetimeState, formatAddressLifetime, formatBytes, formatCount, formatTimestamp } from '@/domain/format';
 import { inventoryMembership } from '@/domain/inventory';
+import { ConnectivityWorkspace } from './ConnectivityWorkspace';
+import { useConnectivity } from './useConnectivity';
 import styles from './InterfaceDetail.module.css';
 
 export function InterfaceDetail(): JSX.Element {
   const { objectId = '' } = useParams();
+  const connectivity = useConnectivity(objectId);
 
   const { resource: iface } = useResource(
     `interface:${objectId}`,
@@ -241,6 +244,11 @@ export function InterfaceDetail(): JSX.Element {
                 }
               />
             ),
+          },
+          {
+            id: 'connectivity',
+            label: 'Connectivity',
+            render: () => <ConnectivityWorkspace controller={connectivity} iface={data} managementPath={managementPath} protection={protection} />,
           },
           {
             id: 'intent',

@@ -131,6 +131,28 @@ class AgentClient:
         """
         return self.call(Method.NETWORK_OBSERVE_ROUTE, {"destination": destination})
 
+    def connectivity_route(self, destination: str) -> dict[str, Any]:
+        """Explicit numeric destination; distinct from management-path evidence."""
+        return self.call(Method.NETWORK_CONNECTIVITY_ROUTE, {"destination": destination})
+
+    def observe_connectivity(self, ifindex: int) -> dict[str, Any]:
+        """Explicit passive request; the backend has not yet connected this to storage."""
+        return self.call(Method.NETWORK_CONNECTIVITY_OBSERVE, {"ifindex": ifindex}, timeout_s=35.0)
+
+    def diagnostic_preflight(self, params: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
+        """Closed passive preparation; it never executes the diagnostic."""
+        return self.call(Method.NETWORK_DIAGNOSTIC_PREFLIGHT, params, timeout_s=min(timeout_s, 5.0))
+
+    def diagnostic_status(self, *, expected_host_id: str, expected_agent_instance_id: str, ticket: str, timeout_s: float = 1.0) -> dict[str, Any]:
+        return self.call(Method.NETWORK_DIAGNOSTIC_STATUS, {"expected_host_id": expected_host_id,
+                         "expected_agent_instance_id": expected_agent_instance_id, "ticket": ticket}, timeout_s=min(timeout_s, 1.0))
+
+    def diagnostic_execute(self, kind: str, params: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
+        if kind not in ("dns", "tcp"):
+            raise ValueError("invalid diagnostic kind")
+        method = Method.NETWORK_DIAGNOSTIC_DNS if kind == "dns" else Method.NETWORK_DIAGNOSTIC_TCP
+        return self.call(method, params, timeout_s=min(timeout_s, 5.0))
+
     def set_interface_mtu(
         self,
         *,

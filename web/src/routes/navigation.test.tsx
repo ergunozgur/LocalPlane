@@ -201,6 +201,7 @@ describe('interface detail', () => {
     await screen.findByRole('tab', { name: /Overview/ });
     for (const label of [
       'Addressing',
+      'Connectivity',
       'Intent and drift',
       'Protection',
       'Provenance',

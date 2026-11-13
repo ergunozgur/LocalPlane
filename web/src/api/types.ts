@@ -53,6 +53,20 @@ export type Intent = S['Intent'];
 export type IntentSummary = S['IntentSummary'];
 export type ReconciliationResult = S['ReconciliationResult'];
 export type ReconciliationState = S['ReconciliationState'];
+export type ConnectivitySnapshot = S['ConnectivitySnapshot'];
+export type ConnectivityEvidence = S['ConnectivityEvidence'];
+export type ConnectivityRoute = S['ConnectivityRoute'];
+export type ConnectivityRule = S['ConnectivityRule'];
+export type ConnectivityProfile = S['ConnectivityProfile'];
+export type ConnectivityApplied = S['ConnectivityApplied'];
+export type ConnectivityIPSettings = S['ConnectivityIPSettings'];
+export type ConnectivityPolicy = S['ConnectivityPolicy'];
+export type RouteRequest = S['RouteRequest'];
+export type RouteResult = S['RouteResult'];
+export type DnsRequest = S['DnsRequest'];
+export type TcpRequest = S['TcpRequest'];
+export type DnsResult = S['DnsResult'];
+export type TcpResult = S['TcpResult'];
 
 /* --------------------------------------------------------------- protection & provenance */
 export type ObjectProtection = S['ObjectProtection'];

@@ -33,6 +33,14 @@ export const endpoints = {
 
   /* -------------------------------------------------------------------------- network */
   interfaces: (o?: Opts) => request<T.NetworkInterfaceList>('/network/interfaces', o),
+  connectivity: (id: string, o?: Opts) =>
+    request<T.ConnectivitySnapshot>(`/network/interfaces/${encodeURIComponent(id)}/connectivity`, o),
+  observeConnectivity: (id: string) =>
+    request<T.ConnectivitySnapshot>(`/network/interfaces/${encodeURIComponent(id)}/connectivity/observations/refresh`, { method: 'POST' }),
+  connectivityRoute: (id: string, body: T.RouteRequest) =>
+    request<T.RouteResult>(`/network/interfaces/${encodeURIComponent(id)}/connectivity/route`, { method: 'POST', body }),
+  connectivityDiagnostic: (id: string, body: T.DnsRequest | T.TcpRequest) =>
+    request<T.DnsResult | T.TcpResult>(`/network/interfaces/${encodeURIComponent(id)}/connectivity/diagnostics`, { method: 'POST', body }),
   interfaceDetail: (id: string, o?: Opts) =>
     request<T.NetworkInterface>(`/network/interfaces/${encodeURIComponent(id)}`, o),
   interfaceProtection: (id: string, o?: Opts) =>

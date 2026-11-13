@@ -34,6 +34,7 @@ from localplane.build_identity import (
     unavailable_console,
 )
 from localplane.maintenance import MaintenanceController, MaintenanceRefused
+from localplane.protocol.diagnostic_policy import load_diagnostic_policy
 
 LOG = logging.getLogger("localplane.backend.app")
 
@@ -43,7 +44,8 @@ LocalPlane's observation and management surface.
 **Exactly two endpoints in this API can result in a host write:**
 `POST /api/v1/runs/{id}/apply` and
 `POST /api/v1/changes/{id}/recovery/retry`.
-Everything else reads, or writes LocalPlane's own records. `POST
+Other routes read or write LocalPlane's own records; explicit connectivity diagnostics
+can perform policy-restricted DNS queries and numeric TCP handshakes. `POST
 /api/v1/network/observations/refresh` reads sysfs and rtnetlink and asks Docker,
 NetworkManager and Tailscale what they say they own; `POST
 /api/v1/systemd/observations/refresh` reads the bounded loaded-unit estate through the
@@ -126,6 +128,8 @@ _RECORD_WRITE_TEMPLATES = (
     "/api/v1/systemd/observations/refresh",
     "/api/v1/docker/containers/observations/refresh",
     "/api/v1/management-path/observations/refresh",
+    "/api/v1/network/interfaces/{object_id}/connectivity/observations/refresh",
+    "/api/v1/network/interfaces/{object_id}/connectivity/diagnostics",
 )
 """Routes that write LocalPlane's records even though they change no host state.
 
@@ -140,6 +144,7 @@ _READ_POST_TEMPLATES = (
     "/api/v1/systemd/units/{object_id}/journal",
     "/api/v1/docker/containers/{object_id}/logs",
     "/api/v1/docker/containers/{object_id}/stats",
+    "/api/v1/network/interfaces/{object_id}/connectivity/route",
 )
 """Read-only POSTs: an explicit observation or evidence read, retained in memory only."""
 
@@ -229,6 +234,10 @@ def create_app(
                     development_origin=settings.development_origin,
                 )
                 app.state.authentication = active_authentication
+                app.state.diagnostic_policy = load_diagnostic_policy()
+                from localplane.backend.diagnostics import Admission
+                from localplane.backend.api.routes import _BACKEND_DIAGNOSTICS
+                app.state.diagnostic_admission = Admission(_BACKEND_DIAGNOSTICS)
                 db = database if database is not None else open_database(settings.database_path)
                 context = AppContext.build(
                     settings, db, maintenance=maintenance, build_identity=build_identity,

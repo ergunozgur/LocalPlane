@@ -67,6 +67,7 @@ CAPABILITY_STORAGE_OBSERVE: Final = "storage.filesystems.observe"
 CAPABILITY_NETWORK_OBSERVE: Final = "network.observe"
 CAPABILITY_NETWORK_PROVIDERS_OBSERVE: Final = "network.providers.observe"
 CAPABILITY_NETWORK_ROUTE_OBSERVE: Final = "network.route.observe"
+CAPABILITY_NETWORK_CONNECTIVITY_OBSERVE: Final = "network.connectivity.observe"
 CAPABILITY_NETWORK_INTERFACE_SET_MTU: Final = "network.interface.set_mtu"
 CAPABILITY_NETWORK_INTERFACE_MTU_GUARD: Final = "network.interface.mtu_guard"
 CAPABILITY_DOCKER_CONTAINERS_OBSERVE: Final = "docker.containers.observe"
@@ -79,6 +80,11 @@ CAPABILITY_SYSTEMD_SERVICE_LIFECYCLE_CONTEXT_OBSERVE: Final = (
 )
 
 CAPABILITIES: Final[dict[str, CapabilityDefinition]] = {
+    CAPABILITY_NETWORK_CONNECTIVITY_OBSERVE: CapabilityDefinition(
+        capability=CAPABILITY_NETWORK_CONNECTIVITY_OBSERVE, version=1,
+        summary="On-demand passive connectivity collection; source access and backend persistence are not established at startup.",
+        mutating=False,
+    ),
     CAPABILITY_SYSTEMD_UNIT_JOURNAL: CapabilityDefinition(
         capability=CAPABILITY_SYSTEMD_UNIT_JOURNAL,
         version=1,
