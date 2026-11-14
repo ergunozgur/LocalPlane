@@ -151,7 +151,96 @@ it('reading, disclosing, rerendering and policy changes in the snapshot presenta
   const fetch = vi.spyOn(globalThis, 'fetch');
   const { rerender, unmount } = render(view());
   await openFamily(screen.getByRole('region', { name: 'Profile configuration' }), 'IPv4', 'auto');
+  await userEvent.click(screen.getByText('How to compare configuration sources'));
+  await userEvent.click(screen.getByText('Resolver scope and domain details'));
   rerender(view({ ...FAMILY_CONNECTIVITY, policy: { status: 'missing', digest: null, dns: [], tcp: [], tcp_status: 'policy_unavailable' } }));
   unmount();
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it('gives repeated mechanics named disclosures without hiding freshness, gaps or core caveats', async () => {
+  render(view());
+  for (const name of ['How to compare configuration sources', 'Resolver scope and domain details']) {
+    const summary = screen.getByText(name);
+    expect(summary.closest('details')).not.toHaveAttribute('open');
+    await userEvent.click(summary);
+    expect(summary.closest('details')).toHaveAttribute('open');
+  }
+  expect(screen.getByText(/DNS priority is not an IP route metric/)).toBeInTheDocument();
+  const resolver = screen.getByRole('region', { name: 'Resolver evidence' });
+  for (const text of ['current-server scope not exposed', 'stale']) {
+    expect(within(resolver).getByText(text).closest('details')).toBeNull();
+  }
+  expect(screen.getByText(/Current server is not proof/).closest('details')).toBeNull();
+  expect(screen.getByText(/Stored evidence, not live health/).closest('details')).toBeNull();
+});
+
+it('labels profile flags and each next-hop value independently, preserving false and unknown', () => {
+  render(view({ ...FAMILY_CONNECTIVITY, profile: { ...FAMILY_CONNECTIVITY.profile,
+    value: { ...FAMILY_CONNECTIVITY.profile.value!, unsaved: false, generated: null, external: true },
+  } }));
+  const profile = screen.getByRole('region', { name: 'Profile configuration' });
+  expect(row(profile, 'Unsaved')).toHaveTextContent('false');
+  expect(within(row(profile, 'Generated')).getByRole('img', { name: 'not known' })).toBeInTheDocument();
+  expect(row(profile, 'External')).toHaveTextContent('true');
+  const routes = screen.getByRole('table', { name: 'Installed routes' });
+  const nextHop = within(routes).getAllByRole('row')[1]!;
+  expect(row(nextHop, 'Gateway')).toHaveTextContent('192.168.50.1');
+  expect(row(nextHop, 'Interface')).toHaveTextContent('eth0');
+  expect(row(nextHop, 'Ifindex')).toHaveTextContent('2');
+  expect(within(row(nextHop, 'Weight')).getByRole('img', { name: 'not known' })).toBeInTheDocument();
+});
+
+it('keeps full long identifiers and IPv6 values in the rendered text', () => {
+  const identity = '/org/freedesktop/NetworkManager/ActiveConnection/12345678901234567890';
+  const uuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  render(view({ ...FAMILY_CONNECTIVITY, profile: { ...FAMILY_CONNECTIVITY.profile,
+    value: { ...FAMILY_CONNECTIVITY.profile.value!, uuid, active_connection_identity: identity },
+  } }));
+  const profile = screen.getByRole('region', { name: 'Profile configuration' });
+  expect(row(profile, 'Profile UUID')).toHaveTextContent(uuid);
+  expect(row(profile, 'Active connection identity')).toHaveTextContent(identity);
+  expect(screen.getByRole('table', { name: 'Installed routes' })).toHaveTextContent('fd00::1');
+});
+
+it('preserves separate labelled multi-hop facts with full long IPv6 and interface values', () => {
+  const gateway = '2001:0db8:1234:5678:90ab:cdef:1234:5678';
+  const interfaceName = 'enx020000000012';
+  render(view({ ...FAMILY_CONNECTIVITY, routes: { ...FAMILY_CONNECTIVITY.routes, value: [{
+    family: 'ipv6', destination: '2001:db8:1234:5678::/64', table: '200',
+    nexthops: [
+      { gateway, interface: interfaceName, ifindex: 123, weight: 10, object_id: 'obj_long_egress' },
+      { gateway: 'fd00::1', interface: 'eth1', ifindex: 3, weight: 20, object_id: null },
+    ],
+  }] } }));
+  const routes = screen.getByRole('table', { name: 'Installed routes' });
+  const hops = within(routes).getAllByRole('listitem');
+  expect(hops).toHaveLength(2);
+  expect(row(hops[0]!, 'Gateway')).toHaveTextContent(gateway);
+  expect(row(hops[0]!, 'Interface')).toHaveTextContent(interfaceName);
+  expect(within(hops[0]!).getByRole('link', { name: interfaceName })).toHaveAttribute('href', '/network/obj_long_egress?tab=connectivity');
+  expect(row(hops[0]!, 'Ifindex')).toHaveTextContent('123');
+  expect(row(hops[0]!, 'Weight')).toHaveTextContent('10');
+  expect(row(hops[1]!, 'Gateway')).toHaveTextContent('fd00::1');
+  expect(row(hops[1]!, 'Interface')).toHaveTextContent('eth1');
+  expect(row(hops[1]!, 'Ifindex')).toHaveTextContent('3');
+  expect(row(hops[1]!, 'Weight')).toHaveTextContent('20');
+  expect(within(hops[1]!).queryByRole('link')).not.toBeInTheDocument();
+});
+
+it.each([null, []])('distinguishes unknown inventories from reported empty inventories (%j)', (entries) => {
+  render(view({ ...FAMILY_CONNECTIVITY,
+    routes: { ...FAMILY_CONNECTIVITY.routes, value: entries },
+    rules: { ...FAMILY_CONNECTIVITY.rules, value: entries },
+    resolver: { ...FAMILY_CONNECTIVITY.resolver, value: { ...FAMILY_CONNECTIVITY.resolver.value, links: entries } },
+  }));
+  if (entries === null) {
+    expect(screen.getByText('Route entries unknown; this is not an empty route inventory.')).toBeInTheDocument();
+    expect(screen.getByText('Routing rules unknown, not empty.')).toBeInTheDocument();
+    expect(screen.getByText('Per-link resolver evidence unknown.')).toBeInTheDocument();
+  } else {
+    expect(within(screen.getByRole('region', { name: 'Installed routes' })).getByText('No route entries reported in this section. See source completeness above.')).toBeInTheDocument();
+    expect(screen.getByText('No rules reported. See source completeness above.')).toBeInTheDocument();
+    expect(screen.getByText('No per-link resolver entries reported. See source completeness above.')).toBeInTheDocument();
+  }
 });

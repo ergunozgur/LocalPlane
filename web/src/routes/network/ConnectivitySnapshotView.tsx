@@ -7,6 +7,7 @@ import { Value } from '@/components/semantic/UnknownValue';
 import { Disclosure } from '@/components/semantic/Evidence';
 import { ConnectivityEvidencePlate, type ConnectivityEvidence } from './ConnectivityPanel';
 import styles from './ConnectivityPanel.module.css';
+import local from './ConnectivitySnapshotView.module.css';
 
 function list(items: readonly string[] | null | undefined): string | null {
   return items === null || items === undefined ? null : items.length ? items.join(', ') : 'None reported';
@@ -33,7 +34,7 @@ function FamilySettings({ settings, kind }: { settings: ConnectivityIPSettings[]
           <KeyValue label="Ignore automatic DNS"><Value value={setting.ignore_auto_dns === null || setting.ignore_auto_dns === undefined ? null : setting.ignore_auto_dns ? 'yes' : 'no'} /></KeyValue>
           <KeyValue label="Family DNS contribution"><Value value={list(setting.dns_servers)} mono /></KeyValue>
         </KeyValueList>
-        <p className={styles.note}>{setting.method === 'auto' ? 'Automatic configuration can supply runtime addresses, routes and DNS even when configured lists are empty. ' : ''}These are family-specific configuration inputs, not current kernel or resolver selection. DNS priority is not an IP route metric; priorities are not compared here to choose a resolver.</p>
+        {setting.method === 'auto' ? <p className={styles.note}>Automatic configuration can supply runtime addresses, routes and DNS even when configured lists are empty.</p> : null}
       </section>
     </Disclosure>;
   })}</>;
@@ -48,7 +49,7 @@ function evidenceView(evidence: ApiEvidence, readAt: Date): ConnectivityEvidence
     source: evidence.source ?? null, observedAt: evidence.observed_at ?? null,
     age: Number.isFinite(age) && age >= 0 ? `${Math.floor(age / 1000)}s at stored read` : null,
     freshness: evidence.freshness,
-    detail: `${evidence.status} · completeness ${evidence.completeness}. Stored evidence, not a live health verdict.`,
+    detail: `${evidence.status} · completeness ${evidence.completeness}.`,
     gaps: evidence.gaps ?? [], facts: [
       { label: 'Provider version', value: evidence.provider_version ?? null },
       { label: 'Vantage', value: evidence.vantage ?? null },
@@ -64,7 +65,12 @@ export function ConnectivityRoutes({ routes, title }: { routes: ConnectivityRout
   return <DataTable caption={title} rows={routes.map((route, row) => ({ ...route, row }))} rowKey={(r) => String(r.row)} columns={[
     { key: 'family', header: 'Family', render: (r) => r.family },
     { key: 'destination', header: 'Prefix / destination', render: (r) => <span className="mono">{r.destination}</span> },
-    { key: 'nexthops', header: 'Gateway / interface / ifindex / weight', render: (r) => r.nexthops === null || r.nexthops === undefined ? <Value value={null} /> : !r.nexthops.length ? 'None reported' : <ul className={styles.hops}>{r.nexthops.map((hop, i) => <li key={i}><Value value={hop.gateway} mono /> / {hop.object_id ? <Link to={`/network/${encodeURIComponent(hop.object_id)}?tab=connectivity`}>{hop.interface ?? hop.object_id}</Link> : <Value value={hop.interface} mono />} / <Value value={hop.ifindex} mono /> / <Value value={hop.weight} mono /></li>)}</ul> },
+    { key: 'nexthops', header: 'Next hops', render: (r) => r.nexthops === null || r.nexthops === undefined ? <Value value={null} /> : !r.nexthops.length ? 'None reported' : <ul className={local.hops}>{r.nexthops.map((hop, i) => <li key={i}><KeyValueList>
+      <KeyValue label="Gateway"><Value value={hop.gateway} mono /></KeyValue>
+      <KeyValue label="Interface">{hop.object_id ? <Link className="mono" to={`/network/${encodeURIComponent(hop.object_id)}?tab=connectivity`}>{hop.interface ?? hop.object_id}</Link> : <Value value={hop.interface} mono />}</KeyValue>
+      <KeyValue label="Ifindex"><Value value={hop.ifindex} mono /></KeyValue>
+      <KeyValue label="Weight"><Value value={hop.weight} mono /></KeyValue>
+    </KeyValueList></li>)}</ul> },
     { key: 'table', header: 'Table', render: (r) => <Value value={r.table} mono /> },
     { key: 'metric', header: 'Metric', render: (r) => <Value value={r.metric} mono /> },
     { key: 'type', header: 'Type', render: (r) => <Value value={r.route_type} mono /> },
@@ -84,7 +90,9 @@ function ConfigurationFacts({ value, kind }: { value: ConnectivityProfile | Conn
         <KeyValue label="Profile name"><Value value={profile.name} /></KeyValue>
         <KeyValue label="Profile state"><Value value={profile.state} /></KeyValue>
         <KeyValue label="Profile version"><Value value={profile.version} mono /></KeyValue>
-        <KeyValue label="Unsaved / generated / external"><Value value={profile.unsaved === null || profile.unsaved === undefined ? null : String(profile.unsaved)} /> / <Value value={profile.generated === null || profile.generated === undefined ? null : String(profile.generated)} /> / <Value value={profile.external === null || profile.external === undefined ? null : String(profile.external)} /></KeyValue>
+        <KeyValue label="Unsaved"><Value value={profile.unsaved === null || profile.unsaved === undefined ? null : String(profile.unsaved)} /></KeyValue>
+        <KeyValue label="Generated"><Value value={profile.generated === null || profile.generated === undefined ? null : String(profile.generated)} /></KeyValue>
+        <KeyValue label="External"><Value value={profile.external === null || profile.external === undefined ? null : String(profile.external)} /></KeyValue>
         <KeyValue label="Device identity"><Value value={profile.device_identity} mono /></KeyValue>
         <KeyValue label="Device ifindex"><Value value={profile.device_ifindex} mono /></KeyValue>
         <KeyValue label="Active connection identity"><Value value={profile.active_connection_identity} mono /></KeyValue>
@@ -95,7 +103,7 @@ function ConfigurationFacts({ value, kind }: { value: ConnectivityProfile | Conn
       <KeyValue label="Search domains"><Value value={list(value.search_domains)} mono /></KeyValue>
       <KeyValue label="DNS routing domains"><Value value={domains(value.routing_domains)} mono /></KeyValue>
     </KeyValueList>
-    <p className={styles.note}>Empty configured addresses, routes or DNS describe only this configuration contribution. Automatic configuration may supply different runtime addresses, routes and resolver facts; empty configured DNS is not global DNS absence. No drift or default metric is inferred. Configuration methods and priority semantics are shown only when supplied by the typed contract.</p>
+    <p className={styles.note}>Configuration contribution only; empty configured DNS is not global DNS absence.</p>
     <FamilySettings settings={value.ip_settings} kind={kind} />
     </PlateBody>
     <ConnectivityRoutes routes={value.routes} title={kind === 'profile' ? 'Profile routes' : 'Applied routes'} />
@@ -103,12 +111,17 @@ function ConfigurationFacts({ value, kind }: { value: ConnectivityProfile | Conn
 }
 
 export function ConnectivitySnapshotView({ snapshot: s, readAt }: { snapshot: ConnectivitySnapshot; readAt: Date }): JSX.Element {
-  return <>
+  return <div className={local.snapshot}>
+    <p className={styles.note}>Stored evidence, not live health. Each source has its own observation time, freshness and gaps.</p>
     <div className={styles.comparison}>
       <ConnectivityEvidencePlate title="Profile configuration" evidence={evidenceView(s.profile.evidence, readAt)}><ConfigurationFacts value={s.profile.value} kind="profile" /></ConnectivityEvidencePlate>
       <ConnectivityEvidencePlate title="Applied configuration" evidence={evidenceView(s.applied.evidence, readAt)}><ConfigurationFacts value={s.applied.value} kind="applied" /></ConnectivityEvidencePlate>
       <ConnectivityEvidencePlate title="Observed kernel facts" evidence={{ ...evidenceView(s.kernel.evidence, readAt), facts: [...evidenceView(s.kernel.evidence, readAt).facts, { label: 'Addresses', value: list(s.kernel.value?.addresses?.map((a) => `${a.address}/${a.prefix ?? '?'}`)) }] }} />
     </div>
+    <Disclosure summary="How to compare configuration sources">
+      <p className={styles.note}>Profile, applied and kernel facts are independent readings, not a drift verdict. Empty configured addresses, routes or DNS describe only that contribution; automatic configuration may supply different runtime values.</p>
+      <p className={styles.note}>Family methods and priorities are shown only when reported. DNS priority is not an IP route metric, and no default metric or resolver selection is inferred. See the Connectivity diagnostics documentation for provider and collection mechanics.</p>
+    </Disclosure>
     <ConnectivityEvidencePlate title="Installed routes" evidence={evidenceView(s.routes.evidence, readAt)}><ConnectivityRoutes routes={s.routes.value} title="Installed routes" /></ConnectivityEvidencePlate>
     <ConnectivityEvidencePlate title="Routing rules" evidence={evidenceView(s.rules.evidence, readAt)}>
       {s.rules.value === null || s.rules.value === undefined ? <PlateBody><p className={styles.warning}>Routing rules unknown, not empty.</p></PlateBody> : !s.rules.value.length ? <PlateBody><p className={styles.note}>No rules reported. See source completeness above.</p></PlateBody> : <DataTable caption="Routing rules" rows={s.rules.value.map((rule, row) => ({ ...rule, row }))} rowKey={(r) => String(r.row)} columns={[
@@ -136,9 +149,12 @@ export function ConnectivitySnapshotView({ snapshot: s, readAt }: { snapshot: Co
         <KeyValue label="Resolver-selected current server"><Value value={s.resolver.value?.current_server} mono /></KeyValue>
         <KeyValue label="Current-server scope ifindex"><Value value={s.resolver.value?.current_server_ifindex} mono /></KeyValue>
       </KeyValueList>
-      <p className={styles.note}>Current-server scope is resolver-global for ifindex 0 or link-scoped for a reported positive ifindex. A missing scope stays unknown; the server is not silently added to the global server list or identified as the server that answered a diagnostic.</p>
-      <p className={styles.note}>Domains prefixed with ~ are route-only domains. DNS default-route is not the IP default route. Current server does not prove which server answered a query. Profile and applied DNS contributions are shown separately above.</p></PlateBody>
-      {s.resolver.value?.links === null || s.resolver.value?.links === undefined ? <PlateBody><p className={styles.warning}>Per-link resolver evidence unknown.</p></PlateBody> : <DataTable caption="Per-link resolver" rows={s.resolver.value.links.map((link, row) => ({ ...link, row }))} rowKey={(r) => String(r.row)} columns={[
+      <p className={styles.note}>Current server is not proof of the server that answered a diagnostic. DNS default-route is not the IP default route.</p>
+      <Disclosure summary="Resolver scope and domain details">
+        <p className={styles.note}>Current-server scope is resolver-global for ifindex 0 or link-scoped for a reported positive ifindex. Missing scope stays unknown; the server is not added to the global server list.</p>
+        <p className={styles.note}>Domains prefixed with ~ are route-only domains. Profile and applied DNS contributions are separate from resolver observations. A client stub (such as 127.0.0.53) is not an upstream server.</p>
+      </Disclosure></PlateBody>
+      {s.resolver.value?.links === null || s.resolver.value?.links === undefined ? <PlateBody><p className={styles.warning}>Per-link resolver evidence unknown.</p></PlateBody> : !s.resolver.value.links.length ? <PlateBody><p className={styles.note}>No per-link resolver entries reported. See source completeness above.</p></PlateBody> : <DataTable caption="Per-link resolver" rows={s.resolver.value.links.map((link, row) => ({ ...link, row }))} rowKey={(r) => String(r.row)} columns={[
         { key: 'interface', header: 'Interface', render: (r) => <Value value={r.interface} mono /> },
         { key: 'servers', header: 'Servers', render: (r) => <Value value={list(r.servers)} mono /> },
         { key: 'domains', header: 'Domains (including route-only)', render: (r) => <Value value={list(r.domains)} mono /> },
@@ -151,6 +167,6 @@ export function ConnectivitySnapshotView({ snapshot: s, readAt }: { snapshot: Co
       { label: 'Client mode', value: s.client_resolver.value?.client_mode ?? null },
       { label: 'Client nameservers', value: list(s.client_resolver.value?.client_nameservers) },
     ] }} />
-    <p className={styles.note}>A client stub (such as 127.0.0.53) is not an upstream server. Missing NetworkManager or resolver evidence does not invalidate independently observed kernel facts.</p>
-  </>;
+    <p className={styles.note}>A client stub is not an upstream server. Missing provider evidence does not invalidate independent kernel facts.</p>
+  </div>;
 }

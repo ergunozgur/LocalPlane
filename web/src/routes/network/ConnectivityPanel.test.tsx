@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
   ConnectivityEvidencePlate, ConnectivityPanel, ConnectivityPolicy, ConnectivityResult,
@@ -62,6 +63,18 @@ describe('connectivity comparison evidence', () => {
 });
 
 describe('diagnostic policy presentation', () => {
+  it('keeps prerequisites and topology recovery visible while making policy metadata discoverable', async () => {
+    render(<ConnectivityPolicy policy={{ state: 'ready', dnsNames: ['host.example'], tcpEndpoints: ['192.0.2.20:443'] }} />);
+    expect(screen.getByText(/DNS name and TCP IP:port authorizations are independent/)).toBeVisible();
+    expect(screen.getByText(/administrator-attested v2 control-plane declaration/)).toBeVisible();
+    expect(screen.getByText(/Before changing management topology/)).toBeVisible();
+    expect(screen.getByText(/After the topology change/)).toBeVisible();
+    const disclosure = screen.getByText('Policy metadata and checks');
+    await userEvent.click(disclosure);
+    expect(screen.getByText('Loaded policy version')).toBeVisible();
+    expect(screen.getByText(/Configured TCP allow entries may still be rejected/)).toBeVisible();
+  });
+
   it('discloses administrator topology attestation and the actual startup-only TCP disable/re-enable procedure without inventing metadata', () => {
     render(<ConnectivityPolicy policy={{ state: 'ready', dnsNames: [], tcpEndpoints: [] }} />);
     expect(screen.getByText(/administrator-attested v2 control-plane declaration/)).toHaveTextContent('not automatic discovery');

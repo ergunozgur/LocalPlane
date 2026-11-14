@@ -1,0 +1,17 @@
+.snapshot { display: contents; }
+
+/* Keep the existing KeyValue treatment, with a shared label track in each group.
+   Both tracks may wrap; long identities never need truncation or smaller text. */
+.snapshot dl > div {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+}
+.snapshot dt { white-space: normal; overflow-wrap: anywhere; }
+
+/* Let DataTable's existing overflow wrapper scroll rather than compressing a
+   next hop into a few characters. Keep labels whole and leave room for values;
+   long IPv6 addresses can still wrap in the value track without losing text. */
+.hops { margin: 0; padding: 0; list-style: none; min-width: 32ch; }
+.hops > li + li { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--rule2); }
+.hops dl > div { grid-template-columns: 10ch minmax(20ch, 1fr); gap: 0 8px; }
+.hops dt { white-space: nowrap; overflow-wrap: normal; }
+.snapshot td { overflow-wrap: anywhere; }

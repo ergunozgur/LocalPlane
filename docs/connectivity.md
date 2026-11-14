@@ -1,9 +1,40 @@
 # Connectivity diagnostics
 
-The connectivity API distinguishes profile, applied, kernel, route, rule and resolver
-evidence. A missing reading is not an empty configuration. Route selection does not
-establish reachability or identify the operator's management path. The connectivity
-observation is explicit and stores independent section evidence. Reading the workspace
+## Reading the workspace
+
+Profile configuration, applied configuration and observed kernel facts are independent
+readings, not an automatic drift verdict. Each section retains its own source,
+observation time, freshness, completeness and gaps. Stored evidence is not live health.
+Unknown fields and unavailable sections are not empty inventories; a reported empty
+list describes only that source at its observation time.
+
+Configuration methods, gateways, route metrics, DNS priorities and ignore-automatic-DNS
+flags are shown per IP family when reported. Automatic configuration can supply runtime
+addresses, routes and DNS even when configured lists are empty. Empty configured DNS
+does not mean global DNS absence. A configured route metric of `-1` means
+automatic/provider-selected; it does not establish an effective metric. DNS priority is
+not an IP route metric, and the workspace does not compare priorities to choose a resolver.
+The **How to compare configuration sources** disclosure keeps these distinctions near
+the three configuration plates; the family disclosures retain the actual values.
+
+Resolver evidence separates global servers and domains, per-link contributions,
+resolver-selected current server, and client resolver configuration. Current-server
+scope ifindex `0` means resolver-global; a positive ifindex means link-scoped. Missing
+scope stays unknown: a current server is neither silently added to the global list nor
+proof of which server answered a diagnostic. Domains prefixed with `~` are route-only;
+explicit routing-domain entries retain their reported route-only flag. DNS default-route
+is not the IP default route. A client stub such as `127.0.0.53` is not an upstream server.
+The **Resolver scope and domain details** disclosure provides the local interpretation.
+
+Route and rule inventories describe installed entries, not a reimplementation of kernel
+selection. Next hops retain separately labelled gateway, interface, ifindex and weight;
+unknown metrics or selectors are not assumed zero or absent. Interface links require
+authoritative identity evidence, not a matching display name.
+
+## Observation and explicit diagnostics
+
+Route selection does not establish reachability or identify the operator's management
+path. Connectivity observation is explicit and stores section evidence. Reading the workspace
 does not trigger a refresh. A failed latest refresh is unavailable, not an empty result.
 An interrupted or timed-out refresh may still be running. Read the stored evidence before
 explicitly retrying; the agent refuses a second collection while the first remains active.
@@ -25,6 +56,8 @@ agent, inventory and ifindex plus durable hardware identity. A name alone never 
 that relationship; changing, stale or unavailable associations remain unknown while
 independently valid route facts are retained.
 
+## Provider and collection mechanics
+
 Profile evidence uses NetworkManager's read-only device and settings interfaces where
 available. Applied-connection collection is enabled for NetworkManager 1.46.0; other
 versions remain unavailable until their secret-exclusion behavior is verified. IP-family settings retain the provider's actual method, metric, gateway,
@@ -33,6 +66,8 @@ as empty. Resolved's global and per-link observations are independently qualifie
 the client resolver file. Legacy resolver properties do not establish server port, TLS
 name, or the server that answered a query. The route and rule inventories may be partial
 when an address family or a provider field is unavailable.
+
+## Administrator-provisioned target policy
 
 Active diagnostics require an administrator-controlled target policy. Both backend and
 agent load the policy once at startup. The default is
@@ -80,6 +115,15 @@ dispatch. Backend and agent independently validate their loaded policy; the agen
 the strict live inventory immediately before connecting. Two matching snapshots reduce
 an observation race but cannot make a subsequent connection atomic with topology changes.
 No policy is provisioned by the application.
+
+## Execution bounds and retained results
+
+DNS-name and TCP IP:port authorizations are independent: resolving an approved name does
+not authorize a connection to its answers. Each action requires explicit submission;
+reading evidence, opening details, changing a target or returning to the workspace
+does not start a diagnostic. Retained earlier output describes its submitted target,
+not a newly selected target. Results in the current workspace are not durable diagnostic
+history across reloads.
 
 Both boundaries admit at most one diagnostic at a time across DNS and TCP and at most
 six starts per rolling minute. The response budget is five seconds, including passive

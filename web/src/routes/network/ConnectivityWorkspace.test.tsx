@@ -54,7 +54,7 @@ describe('generated snapshot presentation', () => {
     expect(screen.getByText('127.0.0.53')).toBeInTheDocument();
     expect(screen.getByText('optional resolver property absent')).toBeInTheDocument();
     expect(screen.getByText('stale')).toBeInTheDocument();
-    expect(screen.getByText(/Current server does not prove which server answered/)).toBeInTheDocument();
+    expect(screen.getByText(/Current server (does not prove which server answered|is not proof of the server that answered a diagnostic)/)).toBeInTheDocument();
     expect(screen.getByText(/Management-path and protection statements above come from their independent assessments/)).toBeInTheDocument();
     expect(screen.getByText(/unresolved ·/)).toBeInTheDocument();
   });
@@ -226,6 +226,7 @@ describe('policy and deliberate forms', () => {
     await ready();
     vi.mocked(endpoints.connectivityDiagnostic).mockResolvedValue(TCP);
     await userEvent.selectOptions(screen.getByLabelText('Configured TCP endpoint'), '[2001:db8::20]:443');
+    expect(screen.getByText('Selected pair:').parentElement).toHaveTextContent('[2001:db8::20]:443');
     await userEvent.click(screen.getByRole('button', { name: 'Check TCP endpoint' }));
     expect(await screen.findByText('TCP handshake · refused')).toBeInTheDocument();
     expect(screen.getByText('[2001:db8::2]:12345')).toBeInTheDocument();
@@ -249,6 +250,21 @@ describe('policy and deliberate forms', () => {
     expect(await screen.findByText('Route lookup · selected')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Destination result' })).getByRole('link', { name: 'eth1' })).toHaveAttribute('href', '/network/obj_egress?tab=connectivity');
     expect(input).toHaveValue('192.0.2.2');
+    const result = screen.getByRole('region', { name: 'Destination result' });
+    expect(within(result).getByText(/Earlier result/)).toHaveTextContent('submitted target, not necessarily the current selection');
+    expect(within(result).getByText('192.0.2.1')).toBeInTheDocument();
+  });
+
+  it('keeps an earlier DNS target and record type explicit after the selection changes', async () => {
+    await ready();
+    await userEvent.selectOptions(screen.getByLabelText('Authorized DNS name'), DNS.name);
+    await userEvent.click(screen.getByRole('button', { name: 'Resolve name' }));
+    await screen.findByText('DNS lookup · resolved');
+    await userEvent.selectOptions(screen.getByLabelText('DNS record type'), 'AAAA');
+    const result = screen.getByRole('region', { name: 'Destination result' });
+    expect(within(result).getByText(/Earlier result/)).toBeInTheDocument();
+    expect(within(result).getByText(`${DNS.name} (A)`)).toBeInTheDocument();
+    expect(endpoints.connectivityDiagnostic).toHaveBeenCalledTimes(1);
   });
 
   it('retains inputs and last result through a failed subsequent action and stored read', async () => {
@@ -262,7 +278,7 @@ describe('policy and deliberate forms', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('fixture route error');
     expect(screen.getByText('Route lookup · selected')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Destination result' })).getByText(/Latest request failed/)).toHaveTextContent('fixture route error');
-    expect(screen.getByText('Last completed destination action · 2026-11-09T12:01:00Z')).toBeInTheDocument();
+    expect(screen.getByText(/Earlier result · last completed destination action · 2026-11-09T12:01:00Z/)).toBeInTheDocument();
     expect(input).toHaveValue('192.0.2.1');
     vi.mocked(endpoints.connectivity).mockRejectedValue(new Error('fixture stored error'));
     await userEvent.click(screen.getByRole('button', { name: 'Re-read stored evidence' }));
@@ -314,7 +330,7 @@ describe('policy and deliberate forms', () => {
     const result = screen.getByRole('region', { name: 'Destination result' });
     expect(within(result).getByRole('status')).toHaveTextContent('New action pending · route · 192.0.2.2');
     expect(within(result).getByRole('status')).toHaveTextContent('previous evidence, not this attempt');
-    expect(within(result).getByText('Last completed destination action · 2026-11-09T12:01:00Z')).toBeInTheDocument();
+    expect(within(result).getByText(/Earlier result · last completed destination action · 2026-11-09T12:01:00Z/)).toBeInTheDocument();
     expect(within(result).getByText('192.0.2.1')).toBeInTheDocument();
     await act(async () => { resolve({ ...ROUTE, destination: '192.0.2.2', status: 'unavailable', observed_at: '2026-11-09T12:02:00Z' }); });
     expect(await screen.findByText('Route lookup · unavailable')).toBeInTheDocument();

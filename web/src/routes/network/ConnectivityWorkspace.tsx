@@ -74,7 +74,7 @@ export function ConnectivityWorkspace({ controller: c, iface, managementPath, pr
         <button type="button" disabled={busy} onClick={() => c.reread()}>Re-read stored evidence</button>
         <button type="button" disabled={busy} onClick={() => { void c.observe(); }}>Observe connectivity</button>
       </div>
-      <p className={styles.note}>Re-read is GET-only. Observe deliberately collects passive provider evidence, then re-reads stored data; it sends no DNS or TCP diagnostic packets.</p>
+      <p className={styles.note}>Re-read loads stored evidence. Observe collects passive evidence, then re-reads it; neither sends DNS or TCP diagnostic packets.</p>
       <div role="status" aria-live="polite" aria-atomic="true">
         {s.reading ? <p className={styles.state}>Reading stored connectivity evidence…</p> : null}
         {s.pending ? <p className={styles.state}>Waiting for {s.pending === 'observe' ? 'passive observation' : s.pending} result…</p> : null}
@@ -96,7 +96,7 @@ export function ConnectivityWorkspace({ controller: c, iface, managementPath, pr
             {dns.map((name) => <option key={name} value={name}>{name}</option>)}
           </select></label>
           <label className={styles.field}>DNS record type<select value={s.recordType} onChange={(event) => c.update({ recordType: event.target.value === 'AAAA' ? 'AAAA' : 'A' })}><option>A</option><option>AAAA</option></select></label>
-          <p className={styles.note}>Configured host resolver only. Resolver cache, aliases and retries are resolver-controlled.</p>
+          <p className={styles.note}>Uses the configured host resolver.</p>
           <button type="submit" disabled={busy || !current || !activePolicy || !dns.includes(s.dnsName)}>Resolve name</button>
         </form>
         <form aria-label="Configured TCP handshake" onSubmit={(event) => { event.preventDefault(); void c.diagnostic('tcp'); }}>
@@ -105,13 +105,19 @@ export function ConnectivityWorkspace({ controller: c, iface, managementPath, pr
             {s.tcpTarget && !tcp.some((target) => tcpTargetKey(target) === s.tcpTarget) ? <option value={s.tcpTarget} disabled>{s.tcpTarget} — no longer authorized</option> : null}
             {tcp.map((target) => <option key={tcpTargetKey(target)} value={tcpTargetKey(target)}>{tcpTargetKey(target)}</option>)}
           </select></label>
-          <p className={styles.note}>Handshake and close only. No payload, TLS or banner read. A refused connection does not identify the rejector; timeout does not identify a firewall cause.</p>
+          {s.tcpTarget ? <p className={styles.note}>Selected pair: <span className="mono">{s.tcpTarget}</span></p> : null}
+          <p className={styles.note}>Handshake and close only; no payload, TLS or banner read.</p>
           <button type="submit" disabled={busy || !current || !activePolicy || !tcpPolicyReady || !tcp.some((target) => tcpTargetKey(target) === s.tcpTarget)}>Check TCP endpoint</button>
         </form>
       </div>
       <ConnectivityPolicy policy={policyView} metadata={policy ?? null} />
-      <p className={styles.note}>Policy is administrator-provisioned outside the product at /etc/localplane/diagnostic-targets.json. There is no UI policy editor or request override. Backend authorization and resource limits remain authoritative.</p>
-      <p className={styles.note}>Each submission is one independent action. No DNS-to-TCP chaining, background probes, automatic retries or cancellation guarantee. Leaving the view does not cancel execution. Reopening never resubmits an action.</p>
+      <p className={styles.note}>Policy is administrator-provisioned outside the product; there is no UI editor or request override.</p>
+      <p className={styles.note}>Each submission is independent; leaving the view does not cancel execution.</p>
+      <Disclosure summary="Diagnostic mechanics">
+        <p className={styles.note}>Policy location: <span className="mono">/etc/localplane/diagnostic-targets.json</span>. Backend authorization and resource limits remain authoritative.</p>
+        <p className={styles.note}>Resolver cache, aliases and retries are resolver-controlled. A refused connection does not identify the rejector; timeout does not identify a firewall cause.</p>
+        <p className={styles.note}>No DNS-to-TCP chaining, background probes, automatic retries or cancellation guarantee. Reopening never resubmits an action.</p>
+      </Disclosure>
     </PlateBody>
   </Plate>;
 
@@ -122,13 +128,13 @@ export function ConnectivityWorkspace({ controller: c, iface, managementPath, pr
         : s.actionError ? { state: 'error', detail: s.actionError } : { state: 'idle' }}
     configuration={s.snapshot && s.readAt ? <ConnectivitySnapshotView snapshot={s.snapshot} readAt={s.readAt} /> : <p className={styles.note}>Connectivity source layers have not been read. Missing evidence is not an empty configuration.</p>}
     context={<>
-      <KeyValueList>
+      <div className={styles.facts}><KeyValueList>
         <KeyValue label="Selected interface"><span className="mono">{iface.name} · {iface.object_id}</span></KeyValue>
         <KeyValue label="Interface observation"><Value value={iface.observation?.observed_at} mono /></KeyValue>
         <KeyValue label="Stored connectivity read"><Value value={s.readAt?.toISOString()} mono /></KeyValue>
-      </KeyValueList>
+      </KeyValueList></div>
       <ResourceView resource={managementPath} what="management path">
-        {(path) => <><KeyValueList>
+        {(path) => <><div className={styles.facts}><KeyValueList>
           <KeyValue label="Current management path">{path.state} · {path.reason}</KeyValue>
           <KeyValue label="Management interface"><Value value={path.object_name} mono /></KeyValue>
           <KeyValue label="Assessment as of"><Value value={path.as_of} mono /></KeyValue>
@@ -137,7 +143,7 @@ export function ConnectivityWorkspace({ controller: c, iface, managementPath, pr
           <KeyValue label="Current accepted transport peer"><Value value={path.transport.peer_address} mono /></KeyValue>
           <KeyValue label="Current accepted local endpoint"><Value value={path.transport.local_endpoint_address} mono /></KeyValue>
           <KeyValue label="Transport usable for assessment">{path.transport.usable ? 'yes' : 'no'} · <Value value={path.transport.reason} /></KeyValue>
-        </KeyValueList>
+        </KeyValueList></div>
         {path.evidence ? <Disclosure summary="Stored management return-route proof"><KeyValueList>
           <KeyValue label="Stored proof provider / method">{path.evidence.provider} · {path.evidence.method}</KeyValue>
           <KeyValue label="Stored proof transport peer"><Value value={path.evidence.transport_peer_address} mono /></KeyValue>
