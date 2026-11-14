@@ -154,6 +154,7 @@ def test_hello_reports_identity_capabilities_and_privilege(client: AgentClient):
         "network.observe",
         "network.providers.observe",
         "network.route.observe",
+        "network.connectivity.observe",
         "network.interface.set_mtu",
         "network.interface.mtu_guard",
         "docker.containers.observe",
