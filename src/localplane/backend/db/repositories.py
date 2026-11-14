@@ -1242,7 +1242,7 @@ class ProviderObservationRepository:
         rows = self._db.query(
             """
             SELECT o.* FROM provider_observations o
-            WHERE o.host_id = ?
+            WHERE o.host_id = ? AND o.provider != 'linux.connectivity'
               AND o.provider_observation_id = (
                   SELECT provider_observation_id FROM provider_observations
                   WHERE host_id = o.host_id AND provider = o.provider AND source = o.source
@@ -1255,9 +1255,28 @@ class ProviderObservationRepository:
         )
         return [self._to_view(r) for r in rows]
 
+    def latest_connectivity(self, host_id: str, object_id: str):
+        """Newest reserved reading, selected before payload decoding or validation."""
+        return self._db.query_one(
+            """
+            SELECT p.status, p.reason, p.observed_at, p.received_at, p.provider_observation_id,
+                   CASE WHEN length(CAST(p.records AS BLOB)) <= 1048576 THEN p.records ELSE NULL END AS bounded_records,
+                   s.agent_instance_id, s.host_id AS sweep_host, s.capability AS sweep_capability,
+                   s.scope AS sweep_scope, s.object_count AS sweep_object_count, a.host_id AS agent_host
+            FROM provider_observations p
+            LEFT JOIN observation_sweeps s ON s.sweep_id = p.sweep_id
+            LEFT JOIN agent_instances a ON a.agent_instance_id = s.agent_instance_id
+            JOIN objects o ON o.object_id = ? AND o.host_id = p.host_id AND o.kind = 'network.interface'
+            WHERE p.host_id = ? AND p.provider = 'linux.connectivity'
+              AND p.source = ?
+            ORDER BY p.observed_at DESC, p.rowid DESC LIMIT 1
+            """,
+            (object_id, host_id, "network.connectivity.interface:" + object_id),
+        )
+
     def for_sweep(self, sweep_id: str) -> list[ProviderReadingView]:
         rows = self._db.query(
-            "SELECT * FROM provider_observations WHERE sweep_id = ? ORDER BY provider",
+            "SELECT * FROM provider_observations WHERE sweep_id = ? AND provider != 'linux.connectivity' ORDER BY provider",
             (sweep_id,),
         )
         return [self._to_view(r) for r in rows]

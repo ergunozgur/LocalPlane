@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 import uuid
 from contextlib import nullcontext
 from datetime import datetime, timezone
@@ -57,6 +58,12 @@ from localplane.agent.providers.base import CommandRunner
 from localplane.agent.providers.storage import COLLECTOR
 from localplane.agent.providers.journal import COLLECTOR as JOURNAL_COLLECTOR
 from localplane.protocol.journal import response as journal_response, validate as validate_journal, valid_service
+from localplane.protocol.diagnostic_policy import load_diagnostic_policy, tcp_target_permitted
+from localplane.protocol import connectivity as connectivity_wire
+from localplane.agent.diagnostics import DiagnosticExecutor, DiagnosticLimiter, CurrentExclusions
+from localplane.agent.diagnostic_registry import DiagnosticRegistry
+from localplane.agent.providers import diagnostic_exclusions
+from localplane.agent.providers.connectivity_resolved import resolve_dns
 from localplane.agent.providers.collector import NetworkProviderEvidenceCollector
 from localplane.agent.providers.docker import (
     DEFAULT_DOCKER_SOCKET,
@@ -75,6 +82,8 @@ from localplane.agent.providers.linux_route import (
     LinuxRouteProvider,
     RouteQuery,
 )
+from localplane.agent.providers.connectivity_route import connectivity_route_provider
+from localplane.agent.providers.connectivity_collector import collect as collect_connectivity, kernel_identity
 from localplane.agent.providers.linux_socket_diag import LinuxSocketDiag
 from localplane.agent.providers.systemd import (
     SystemdInvalidUnitName,
@@ -113,6 +122,8 @@ from localplane.protocol.wire import (
 )
 
 TRANSPORT_AF_UNIX = "af_unix"
+_CONNECTIVITY_COLLECTION_SLOT = threading.Lock()
+_DIAGNOSTIC_LIMITER = DiagnosticLimiter()
 
 
 class AgentService:
@@ -141,6 +152,8 @@ class AgentService:
         maintenance: MaintenanceController | None = None,
     ) -> None:
         self._root = Path(root)
+        self._diagnostic_policy = load_diagnostic_policy()
+        self._diagnostic_registry = DiagnosticRegistry()
         self._build = build_identity
         self._maintenance = maintenance
         self._storage = storage_provider if storage_provider is not None else COLLECTOR
@@ -209,6 +222,7 @@ class AgentService:
             runner=runner, docker_socket=self._docker_socket
         )
         self._routes = LinuxRouteProvider(query=route_query)
+        self._connectivity_routes = connectivity_route_provider(query=route_query)
         self._capabilities: tuple[DiscoveredCapability, ...] = self._discover()
         self._capabilities_as_of = _now()
         # The host side of the connection guard. It is given this service's own typed
@@ -236,6 +250,12 @@ class AgentService:
             Method.NETWORK_OBSERVE_INTERFACES: self._network_observe_interfaces,
             Method.NETWORK_OBSERVE_PROVIDERS: self._network_observe_providers,
             Method.NETWORK_OBSERVE_ROUTE: self._network_observe_route,
+            Method.NETWORK_CONNECTIVITY_OBSERVE: self._connectivity_observe,
+            Method.NETWORK_CONNECTIVITY_ROUTE: self._connectivity_route,
+            Method.NETWORK_DIAGNOSTIC_DNS: self._diagnostic_dns,
+            Method.NETWORK_DIAGNOSTIC_TCP: self._diagnostic_tcp,
+            Method.NETWORK_DIAGNOSTIC_PREFLIGHT: self._diagnostic_preflight,
+            Method.NETWORK_DIAGNOSTIC_STATUS: self._diagnostic_status,
             Method.NETWORK_SET_INTERFACE_MTU: self._network_set_interface_mtu,
             Method.NETWORK_ARM_MTU_GUARD: self._network_arm_mtu_guard,
             Method.NETWORK_DISARM_MTU_GUARD: self._network_disarm_mtu_guard,
@@ -259,6 +279,164 @@ class AgentService:
             raise RuntimeError(f"protocol methods without a handler: {sorted(missing)}")
 
     # ------------------------------------------------------------------------ dispatch
+
+    @staticmethod
+    def _unavailable_connectivity(params: dict[str, Any], validate: Any) -> dict[str, Any]:
+        try:
+            validate(params)
+        except (ValueError, TypeError) as exc:
+            raise ProtocolError(ErrorCode.INVALID_PARAMS, "invalid connectivity request", {}) from exc
+        return connectivity_wire.unavailable_response()
+
+    def _connectivity_observe(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            parsed = connectivity_wire.observe_request(params)
+        except (ValueError, TypeError) as exc:
+            raise ProtocolError(ErrorCode.INVALID_PARAMS, "invalid connectivity request", {}) from exc
+        if not _CONNECTIVITY_COLLECTION_SLOT.acquire(blocking=False):
+            return {"status": "unavailable", "detail": "A connectivity observation is still running."}
+        try:
+            initial = self._identity()
+            host = initial.host_id
+            try:
+                observation = collect_connectivity(parsed["ifindex"])
+            except Exception:
+                return {"status": "unavailable", "detail": "Connectivity observation could not be collected."}
+            final = self._identity()
+            observed_identity = observation.get("identity")
+            if final.host_id != host or initial.boot_id is None or final.boot_id != initial.boot_id or (observed_identity is not None and observed_identity.get("boot_id") != initial.boot_id):
+                return {"status": "unavailable", "detail": "Host identity changed during connectivity collection."}
+            sections = observation.get("sections")
+            if sections is not None:
+                for section in sections.values():
+                    section["evidence"]["host_id"] = host
+                    section["evidence"]["agent_instance_id"] = self._instance_id
+            return {"host_id": host, "agent_instance_id": self._instance_id, "observation": observation}
+        finally:
+            _CONNECTIVITY_COLLECTION_SLOT.release()
+
+    def _connectivity_route(self, params: dict[str, Any]) -> dict[str, Any]:
+        try:
+            parsed = connectivity_wire.route_request(params)
+        except (ValueError, TypeError) as exc:
+            raise ProtocolError(ErrorCode.INVALID_PARAMS, "invalid connectivity request", {}) from exc
+        self._require_capability(CAPABILITY_NETWORK_ROUTE_OBSERVE)
+        host = self._identity()
+        route = self._connectivity_routes.observe_route(parsed["destination"]).as_dict()
+        egress = None
+        index = (route.get("route") or {}).get("oif_index")
+        if type(index) is int and index > 0 and getattr(host, "boot_id", None):
+            try:
+                before = kernel_identity(index, self._sysfs_net)
+                # The returned lookup is inside the identity guard. These are two
+                # bounded passive kernel queries, not a packet probe or retry.
+                route = self._connectivity_routes.observe_route(parsed["destination"]).as_dict()
+                after = kernel_identity(index, self._sysfs_net)
+                final = self._identity()
+                if (before == after and before["boot_id"] == host.boot_id == final.boot_id
+                        and final.host_id == host.host_id and (route.get("route") or {}).get("oif_index") == index):
+                    egress = before
+            except (OSError, ValueError, TypeError, KeyError):
+                pass  # Route facts survive an unavailable or changing identity read.
+        return {"agent_instance_id": self._instance_id, "host_id": host.host_id,
+                "route": route, "egress_identity": egress}
+
+    def _diagnostic_dns(self, params: dict[str, Any]) -> dict[str, Any]:
+        return self._execute_diagnostic("dns", params)
+
+    def _diagnostic_identity(self, params: dict[str, Any], validator: Any):
+        try:
+            parsed = validator(params)
+        except (ValueError, TypeError) as exc:
+            raise ProtocolError(ErrorCode.INVALID_PARAMS, "invalid diagnostic request", {}) from exc
+        identity = self._identity()
+        if parsed["expected_host_id"] != identity.host_id or parsed["expected_agent_instance_id"] != self._instance_id:
+            raise ProtocolError(ErrorCode.INVALID_PARAMS, "diagnostic host or agent identity changed", {})
+        return parsed, identity
+
+    def _diagnostic_status(self, params: dict[str, Any]) -> dict[str, Any]:
+        parsed, identity = self._diagnostic_identity(params, connectivity_wire.admission_status_request)
+        return {"host_id": identity.host_id, "agent_instance_id": self._instance_id,
+                "ticket": parsed["ticket"], "state": self._diagnostic_registry.status(parsed["ticket"])}
+
+    def _diagnostic_preflight(self, params: dict[str, Any]) -> dict[str, Any]:
+        parsed, identity = self._diagnostic_identity(params, connectivity_wire.preflight_request)
+        try:
+            policy = self._diagnostic_policy.policy
+            if self._diagnostic_policy.status != "valid" or policy is None:
+                return {"status": "denied"}
+            if parsed["policy_digest"] != policy.digest:
+                return {"status": "policy_mismatch"}
+            boot, namespace = diagnostic_exclusions.kernel_context()
+            clock_namespace = diagnostic_exclusions.clock_namespace()
+            deadline = parsed["absolute_monotonic_deadline"]
+            if (namespace != parsed["expected_namespace"] or clock_namespace != parsed["expected_clock_namespace"]
+                    or not identity.boot_id or boot != identity.boot_id or not time.monotonic() < deadline <= time.monotonic() + 5):
+                raise ValueError("unsupported diagnostic context")
+            if parsed["kind"] == "tcp":
+                # Static policy gate only; live sets below and at execution are mandatory.
+                if not tcp_target_permitted(self._diagnostic_policy, policy.digest, parsed["address"], parsed["port"],
+                        local_addresses=(), broadcast_addresses=(), management_addresses=()):
+                    return {"status": "unavailable" if policy.version != 2 or not policy.control_plane_complete else "denied"}
+                snapshot = diagnostic_exclusions.collect(deadline=deadline)
+                if not tcp_target_permitted(self._diagnostic_policy, policy.digest, parsed["address"], parsed["port"],
+                        local_addresses=snapshot.local_addresses, broadcast_addresses=snapshot.broadcast_addresses, management_addresses=()):
+                    return {"status": "denied"}
+            else:
+                if parsed["name"] not in policy.dns:
+                    return {"status": "denied"}
+                snapshot = diagnostic_exclusions.KernelExclusions(boot, namespace, (), ())
+            final = self._identity()
+            if (not identity.boot_id or final.host_id != identity.host_id or final.boot_id != identity.boot_id
+                    or snapshot.boot_id != identity.boot_id or snapshot.network_namespace != namespace
+                    or diagnostic_exclusions.kernel_context() != (boot, namespace)
+                    or diagnostic_exclusions.clock_namespace() != clock_namespace or time.monotonic() >= deadline):
+                raise ValueError("kernel context changed")
+            ticket = self._diagnostic_registry.issue(binding=connectivity_wire.diagnostic_binding(parsed), deadline=deadline)
+            if ticket is None:
+                return {"status": "busy"}
+        except Exception:
+            return {"status": "unavailable"}
+        return {"host_id": identity.host_id, "agent_instance_id": self._instance_id,
+                 "boot_id": snapshot.boot_id, "network_namespace": snapshot.network_namespace,
+                 "clock_namespace": clock_namespace, "ticket": ticket, "policy_digest": policy.digest,
+                 "observed_at": datetime.now(timezone.utc).isoformat(), "complete": True,
+                 "local_addresses": list(snapshot.local_addresses), "broadcast_addresses": list(snapshot.broadcast_addresses)}
+
+    def _diagnostic_tcp(self, params: dict[str, Any]) -> dict[str, Any]:
+        return self._execute_diagnostic("tcp", params)
+
+    def _execute_diagnostic(self, kind: str, params: dict[str, Any]) -> dict[str, Any]:
+        validator = connectivity_wire.dns_request if kind == "dns" else connectivity_wire.tcp_request
+        parsed, identity = self._diagnostic_identity(params, validator)
+        ticket = parsed["ticket"]
+        if not self._diagnostic_registry.begin(ticket, binding=connectivity_wire.diagnostic_binding({**parsed, "kind": kind})):
+            raise ProtocolError(ErrorCode.INVALID_PARAMS, "Diagnostic ticket is unknown, expired, mismatched or already used.", {})
+        proof = True  # Admission failure before entering the executor cannot send traffic.
+        try:
+            with self._admit("agent.diagnostic." + kind):
+                deadline = parsed["absolute_monotonic_deadline"]
+                def exclusions():
+                    snapshot = diagnostic_exclusions.collect(deadline=deadline)
+                    current = self._identity()
+                    if (snapshot.boot_id != identity.boot_id or current.host_id != identity.host_id or current.boot_id != identity.boot_id
+                            or snapshot.network_namespace != parsed["expected_namespace"]
+                            or diagnostic_exclusions.clock_namespace() != parsed["expected_clock_namespace"]):
+                        return None
+                    return CurrentExclusions(snapshot.local_addresses, snapshot.broadcast_addresses, self._diagnostic_policy.policy.control_plane_addresses)
+                if (diagnostic_exclusions.kernel_context() != (identity.boot_id, parsed["expected_namespace"])
+                        or diagnostic_exclusions.clock_namespace() != parsed["expected_clock_namespace"]):
+                    raise ProtocolError(ErrorCode.INVALID_PARAMS, "Diagnostic namespace changed.", {})
+                executor = DiagnosticExecutor(self._diagnostic_policy, _DIAGNOSTIC_LIMITER, exclusions, resolve_dns,
+                                              vantage="agent network namespace " + parsed["expected_namespace"])
+                values = {k: parsed[k] for k in (("name", "record_type", "policy_digest") if kind == "dns" else ("address", "port", "policy_digest"))}
+                proof = False
+                result = getattr(executor, kind)(**values, absolute_monotonic_deadline=deadline)
+                proof = result.completion_proven is True
+                return {"host_id": identity.host_id, "agent_instance_id": self._instance_id,
+                        "ticket": ticket, "completion_proven": proof, "result": result.to_wire()}
+        finally:
+            self._diagnostic_registry.complete(ticket, proof)
 
     @property
     def instance_id(self) -> str:
@@ -366,8 +544,7 @@ class AgentService:
     def _network_observe_route(self, params: dict[str, Any]) -> dict[str, Any]:
         """Ask the kernel which route it would use to reach one address.
 
-        The one parameter is a destination address, and it is the only place in this agent
-        where a value chosen by the caller is used for anything at all. It reaches no
+        The one parameter is a destination address. It reaches no
         command line: it is parsed by :mod:`ipaddress` and sent to the kernel in its packed
         binary form inside an ``RTM_GETROUTE`` message. There is no argv, no shell, no
         executable name and no second message type to ask for.

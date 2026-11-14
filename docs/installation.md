@@ -119,6 +119,18 @@ The key remains service-owned 0400/0600. Store all TLS dependencies beneath the
 configuration root so the recovery snapshot contains the matching set. No reverse
 proxy terminates the operator connection; non-loopback access requires backend TLS.
 
+Active diagnostics are optional and default to no configured targets. Provision the
+separate `/etc/localplane/diagnostic-targets.json` as `root:localplane`, mode `0640`,
+under protected root-owned directories. An alternate absolute path may be selected with
+`LOCALPLANE_DIAGNOSTIC_POLICY_PATH` on both processes. Both load it only at startup;
+there is no policy editor or hot reload. See [Connectivity diagnostics](connectivity.md)
+for the exact v2 format, private-service example and independent DNS/TCP restrictions.
+Before changing management topology, disable loaded TCP diagnostics with an empty TCP
+allowlist and restart both processes; reconcile the administrator-attested control-plane
+deny set and restart both again before re-enabling TCP. A deployment that cannot maintain
+that declaration must remain DNS-only. Saving a new file alone does not disable running
+targets or make an incomplete declaration safe.
+
 Initialize the credential **once**, invoking the installed release's `localplane-auth
 init` wrapper as the service identity with the exact configured secret path. Store
 its one-time output privately; never include it in command packets, logs, captures

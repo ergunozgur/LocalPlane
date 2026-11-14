@@ -13,10 +13,9 @@ dependencies = [
     "uvicorn>=0.30,<0.35",
 ]
 
-# The systemd provider is the agent's sole third-party dependency boundary.  Only
-# localplane.agent.providers.systemd may import Jeepney; the helper, protocol, IPC and log
-# remain standard-library-only, and the backend never imports Jeepney.  Dependency tests
-# enforce these boundaries.
+# Only the named systemd, connectivity_nm and connectivity_resolved agent providers may
+# import Jeepney. The helper, protocol, IPC and log remain standard-library-only, and the
+# backend never imports Jeepney. Dependency tests enforce these boundaries.
 
 [project.optional-dependencies]
 dev = [

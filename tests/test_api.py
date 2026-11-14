@@ -265,6 +265,7 @@ def test_capabilities_are_live_and_carry_their_status(client: TestClient):
         "network.observe",
         "network.providers.observe",
         "network.route.observe",
+        "network.connectivity.observe",
         "network.interface.set_mtu",
         "network.interface.mtu_guard",
         "docker.containers.observe",
@@ -319,6 +320,7 @@ def test_capabilities_fall_back_to_what_was_recorded_and_say_so(
             "network.observe",
             "network.providers.observe",
             "network.route.observe",
+            "network.connectivity.observe",
             "network.interface.set_mtu",
             "network.interface.mtu_guard",
             "docker.containers.observe",
@@ -501,6 +503,10 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
         "/api/v1/network/interfaces",
         "/api/v1/network/interfaces/{object_id}",
         "/api/v1/network/interfaces/{object_id}/evidence",
+        "/api/v1/network/interfaces/{object_id}/connectivity",
+        "/api/v1/network/interfaces/{object_id}/connectivity/observations/refresh",
+        "/api/v1/network/interfaces/{object_id}/connectivity/route",
+        "/api/v1/network/interfaces/{object_id}/connectivity/diagnostics",
         "/api/v1/network/interfaces/{object_id}/provenance",
         "/api/v1/network/interfaces/{object_id}/protection",
         "/api/v1/network/interfaces/{object_id}/adopt",
@@ -550,7 +556,7 @@ def test_the_openapi_document_describes_every_endpoint(client: TestClient):
 
 
 def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
-    """Twenty-three endpoints are not exclusively a `GET`, and exactly two can change the host.
+    """Twenty-six endpoints are not exclusively a `GET`, and exactly two can change the host.
 
     Most of them change nothing at all. **Four read the host and record or return what
     they saw** — the interface sweep, container sweep, systemd sweep, and management-path
@@ -600,7 +606,10 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
     fixed scope and no retention. It grants no lifecycle authority.
     Recovery assessment is the twenty-third: a bodyless observation of the original
     expectation, structurally incapable of dispatching or consuming a grant.
-    The document lists exactly these twenty-three so another cannot appear unnoticed, and
+    Connectivity adds passive collection, numeric kernel route lookup and explicitly
+    authorized DNS/TCP diagnostics. Diagnostics can send packets, not change host
+    configuration; they are not a generic command or a second configuration write path.
+    The document lists exactly these twenty-six so another cannot appear unnoticed, and
     the assertion is an equality rather than a containment for that reason.
 
     There is still deliberately no `/execute`, no `/operations/{name}/execute`, no generic
@@ -618,6 +627,9 @@ def test_every_endpoint_that_is_not_a_get_is_named(client: TestClient):
         "/api/v1/storage/filesystems/observe": ["post"],
         "/api/v1/session": ["delete", "get", "post"],
         "/api/v1/network/observations/refresh": ["post"],
+        "/api/v1/network/interfaces/{object_id}/connectivity/observations/refresh": ["post"],
+        "/api/v1/network/interfaces/{object_id}/connectivity/route": ["post"],
+        "/api/v1/network/interfaces/{object_id}/connectivity/diagnostics": ["post"],
         "/api/v1/docker/containers/observations/refresh": ["post"],
         "/api/v1/systemd/observations/refresh": ["post"],
         "/api/v1/systemd/units/{object_id}/journal": ["post"],

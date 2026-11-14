@@ -71,6 +71,7 @@ from localplane.protocol.capabilities import (
     CAPABILITY_NETWORK_INTERFACE_MTU_GUARD,
     CAPABILITY_NETWORK_INTERFACE_SET_MTU,
     CAPABILITY_NETWORK_OBSERVE,
+    CAPABILITY_NETWORK_CONNECTIVITY_OBSERVE,
     CAPABILITY_NETWORK_PROVIDERS_OBSERVE,
     CAPABILITY_NETWORK_ROUTE_OBSERVE,
     CAPABILITY_SYSTEMD_UNITS_OBSERVE,
@@ -140,6 +141,7 @@ def discover_capabilities(
     return (
         _probe_storage(),
         _probe_journal(),
+        _probe_connectivity(),
         _probe_host_observe(Path(root)),
         _probe_network_observe(Path(sysfs_net), runner),
         _probe_network_providers_observe(runner, docker_socket),
@@ -161,6 +163,16 @@ def _probe_storage() -> DiscoveredCapability:
         CapabilityStatus.DEGRADED if supported else CapabilityStatus.UNAVAILABLE,
         reason="filesystem_access_unverified" if supported else "mechanism_unsupported",
         detail={"scope": "agent mount namespace", "sampling": "on demand; ext4/xfs only"},
+    )
+
+
+def _probe_connectivity() -> DiscoveredCapability:
+    supported = sys.platform == "linux"
+    return _capability(
+        CAPABILITIES[CAPABILITY_NETWORK_CONNECTIVITY_OBSERVE],
+        CapabilityStatus.DEGRADED if supported else CapabilityStatus.UNAVAILABLE,
+        reason="on_demand_access_unverified" if supported else "mechanism_unsupported",
+        detail={"scope": "agent network namespace", "provider_access": "verified independently on explicit observation"},
     )
 
 

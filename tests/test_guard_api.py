@@ -229,6 +229,16 @@ def test_the_openapi_document_offers_no_way_to_name_a_path_a_command_or_a_deadli
     assert journal["required"] == ["acknowledge_sensitive"]
     assert journal.get("additionalProperties") is False
 
+    # Connectivity inputs name a diagnostic destination, never a guard's alternate path.
+    for name, fields in {
+        "RouteRequest": {"destination"},
+        "DnsRequest": {"kind", "name", "record_type", "policy_digest"},
+        "TcpRequest": {"kind", "address", "port", "policy_digest"},
+    }.items():
+        model = spec["components"]["schemas"][name]
+        assert set(model["properties"]) == fields
+        assert model.get("additionalProperties") is False
+
     # Read from what a caller may *send*, which is the request bodies and nothing else.
     # The prose on this API names an argv in order to say there is nowhere to put one, and
     # a response may perfectly well report a route it observed; what must not exist is a
@@ -238,11 +248,14 @@ def test_the_openapi_document_offers_no_way_to_name_a_path_a_command_or_a_deadli
         for operation in methods.values():
             body = (operation.get("requestBody") or {}).get("content") or {}
             for media in body.values():
-                ref = (media.get("schema") or {}).get("$ref")
-                if not ref:
-                    continue
-                model = spec["components"]["schemas"][ref.rsplit("/", 1)[-1]]
-                accepted |= set(model.get("properties") or {})
+                schema = media.get("schema") or {}
+                # Discriminated diagnostic requests publish one closed model per kind.
+                for branch in [schema, *schema.get("oneOf", [])]:
+                    ref = branch.get("$ref")
+                    if not ref:
+                        continue
+                    model = spec["components"]["schemas"][ref.rsplit("/", 1)[-1]]
+                    accepted |= set(model.get("properties") or {})
 
     assert accepted == {
         # adopt / release / revise / adopt-runtime / create-run
@@ -252,6 +265,8 @@ def test_the_openapi_document_offers_no_way_to_name_a_path_a_command_or_a_deadli
         "note", "expected_recovery_reason",
         # Explicit read-only journal sensitivity consent; no query authority.
         "acknowledge_sensitive",
+        # Numeric passive route and independently authorized typed diagnostic inputs.
+        "destination", "kind", "name", "record_type", "policy_digest", "address", "port",
     }
     for forbidden in ("backup_interface", "second_path", "probe_target", "watchdog_command",
                       "rollback_command", "timeout_action", "argv", "shell", "command",

@@ -1,7 +1,7 @@
 """The agent's dependency surface is part of its contract.
 
-The unprivileged agent has one deliberately narrow third-party boundary: Jeepney in the
-systemd provider. Protocol, IPC and logging remain standard-library-only, and the
+The unprivileged agent permits Jeepney only in the named systemd, NetworkManager and
+resolved providers. Protocol, IPC and logging remain standard-library-only, and the
 privileged helper has the stricter zero-third-party rule. These are checked rather than
 remembered.
 """
@@ -44,7 +44,7 @@ def _top_level_imports(path: Path) -> set[str]:
     return names
 
 
-def test_only_the_systemd_provider_imports_the_agents_one_third_party_dependency():
+def test_only_named_providers_import_the_agents_one_third_party_dependency():
     """Both sides of the privilege boundary, and the helper with more force than the agent.
 
     Everything the helper imports would have to be trusted with root on an operator's host and
@@ -59,7 +59,7 @@ def test_only_the_systemd_provider_imports_the_agents_one_third_party_dependency
             for name in _top_level_imports(path)
             if name != "localplane" and name not in sys.stdlib_module_names
         }
-        allowed = {"jeepney"} if path == SYSTEMD_PROVIDER else set()
+        allowed = {"jeepney"} if path in {SYSTEMD_PROVIDER, PACKAGE_ROOT / "agent/providers/connectivity_nm.py", PACKAGE_ROOT / "agent/providers/connectivity_resolved.py"} else set()
         third_party -= allowed
         if third_party:
             offenders[str(path.relative_to(PACKAGE_ROOT))] = third_party
@@ -70,7 +70,7 @@ def test_only_the_systemd_provider_imports_the_agents_one_third_party_dependency
         for path in _module_files()
         if "jeepney" in _top_level_imports(path)
     }
-    assert jeepney_importers == {"agent/providers/systemd.py"}
+    assert jeepney_importers == {"agent/providers/systemd.py", "agent/providers/connectivity_nm.py", "agent/providers/connectivity_resolved.py"}
 
 
 def test_protocol_ipc_log_and_helper_remain_stdlib_only():

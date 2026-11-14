@@ -105,6 +105,13 @@ from localplane.protocol.wire import (
     ErrorCode,
 )
 from localplane.protocol.storage import OUTPUT_BYTES
+from localplane.backend.api import connectivity_schemas as connectivity
+from localplane.backend import connectivity as connectivity_service
+from localplane.agent.diagnostics import DiagnosticLimiter
+from localplane.backend import diagnostics as diagnostic_service
+from localplane.backend.api.transport import request_connection_of
+
+_BACKEND_DIAGNOSTICS = DiagnosticLimiter()
 
 class MaintenanceRoute(APIRoute):
     """Acquire admission inside the worker thread that actually runs the endpoint."""
@@ -749,6 +756,81 @@ def get_agent_capabilities(request: Request) -> schemas.Capabilities:
 
 
 # ------------------------------------------------------------------------------ network
+
+
+def _connectivity_snapshot(object_id: str, request: Request) -> connectivity.ConnectivitySnapshot:
+    if request.query_params:
+        raise HTTPException(status_code=400, detail={"code": "invalid_params", "message": "Query parameters are not accepted.", "detail": {}})
+    context = _context(request)
+    record = _require_interface(context, object_id)
+    return connectivity_service.snapshot(context, record, request.app.state.diagnostic_policy)
+
+
+@router.get("/network/interfaces/{object_id}/connectivity", response_model=connectivity.ConnectivitySnapshot, tags=["network"])
+def get_connectivity(object_id: str, request: Request) -> connectivity.ConnectivitySnapshot:
+    """Read retained connectivity evidence only; never trigger a provider read."""
+    return _connectivity_snapshot(object_id, request)
+
+
+@router.post("/network/interfaces/{object_id}/connectivity/observations/refresh", response_model=connectivity.ConnectivitySnapshot, tags=["network"])
+def refresh_connectivity(object_id: str, request: Request) -> connectivity.ConnectivitySnapshot:
+    """Explicit passive provider observation, stored and reread; never an active probe."""
+    if request.query_params:
+        raise HTTPException(status_code=400, detail={"code": "invalid_params", "message": "Query parameters are not accepted.", "detail": {}})
+    context = _context(request)
+    return connectivity_service.refresh(context, _require_interface(context, object_id), request.app.state.diagnostic_policy)
+
+
+@router.post("/network/interfaces/{object_id}/connectivity/route", response_model=connectivity.RouteResult, tags=["network"])
+def connectivity_route(object_id: str, request: Request, body: connectivity.RouteRequest) -> connectivity.RouteResult:
+    """A numeric route lookup; availability does not imply packet reachability."""
+    context = _context(request)
+    record = _require_interface(context, object_id)
+    if request.query_params:
+        raise HTTPException(status_code=400, detail={"code": "invalid_params", "message": "Query parameters are not accepted.", "detail": {}})
+    try:
+        answer = connectivity.AgentRouteAnswer.model_validate(context.client.connectivity_route(body.destination))
+    except (AgentError, ValidationError):
+        return connectivity.RouteResult(object_id=object_id, destination=body.destination, status="unavailable", detail="Route lookup is unavailable or returned malformed evidence.")
+    observed = answer.route
+    if answer.host_id != record.host_id or observed.destination != body.destination or not answer.agent_instance_id:
+        return connectivity.RouteResult(object_id=object_id, destination=body.destination, status="error", detail="Route evidence identity did not match the requested host and destination.")
+    facts = observed.route
+    if facts is not None and (facts.family != observed.family or (facts.oif_index is not None and facts.oif_index <= 0) or (facts.priority is not None and facts.priority < 0)):
+        return connectivity.RouteResult(object_id=object_id, destination=body.destination, status="error", detail="Route evidence was inconsistent.")
+    if observed.status == "resolved" and facts is not None:
+        status = "prohibited" if facts.route_type in {"prohibit", "blackhole", "unreachable"} else "selected"
+    elif observed.status == "unreachable":
+        status = "prohibited" if observed.reason == "route_prohibited" else "no_route" if observed.reason in {"network_unreachable", "host_unreachable"} else "error"
+    else:
+        status = "unavailable" if observed.status == "unavailable" else "error"
+    if observed.status != "resolved" and facts is not None:
+        return connectivity.RouteResult(object_id=object_id, destination=body.destination, status="error", detail="Route evidence was inconsistent.")
+    egress_name, egress_object = connectivity_service.route_egress(context, answer)
+    return connectivity.RouteResult(
+        object_id=object_id, destination=body.destination, status=status,
+        source=facts.preferred_source if facts else None, gateway=facts.gateway if facts else None,
+        egress_ifindex=facts.oif_index if facts else None,
+        egress_interface=egress_name, egress_object_id=egress_object,
+        table=str(facts.table) if facts and facts.table is not None else None,
+        route_type=facts.route_type if facts else None, metric=facts.priority if facts else None,
+        observed_at=observed.observed_at, host_id=answer.host_id,
+        agent_instance_id=answer.agent_instance_id, provider_version=observed.provider_version,
+        detail="Kernel route selection is not a reachability or management-path check.",
+    )
+
+
+@router.post("/network/interfaces/{object_id}/connectivity/diagnostics", response_model=connectivity.DiagnosticResult, tags=["network"])
+def connectivity_diagnostic(object_id: str, request: Request, body: connectivity.DiagnosticRequest) -> connectivity.DiagnosticResult:
+    """One explicit, independently guarded action, never a management-path proof."""
+    if request.query_params:
+        raise HTTPException(status_code=400, detail={"code": "invalid_params", "message": "Query parameters are not accepted.", "detail": {}})
+    context = _context(request)
+    record = _require_interface(context, object_id)
+    admission = request.app.state.diagnostic_admission
+    connection = request_connection_of(request)
+    additional = tuple(x for x in (connection.peer_ip, connection.local_ip) if x is not None) if connection.usable else ()
+    return diagnostic_service.run(context, record, request.app.state.diagnostic_policy, body, admission, additional_addresses=additional)
 
 
 @router.get(

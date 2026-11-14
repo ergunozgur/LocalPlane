@@ -154,6 +154,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/network/interfaces/{object_id}/connectivity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Connectivity
+         * @description Read retained connectivity evidence only; never trigger a provider read.
+         */
+        get: operations["get_connectivity_api_v1_network_interfaces__object_id__connectivity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/network/interfaces/{object_id}/connectivity/observations/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Connectivity
+         * @description Explicit passive provider observation, stored and reread; never an active probe.
+         */
+        post: operations["refresh_connectivity_api_v1_network_interfaces__object_id__connectivity_observations_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/network/interfaces/{object_id}/connectivity/route": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connectivity Route
+         * @description A numeric route lookup; availability does not imply packet reachability.
+         */
+        post: operations["connectivity_route_api_v1_network_interfaces__object_id__connectivity_route_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/network/interfaces/{object_id}/connectivity/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connectivity Diagnostic
+         * @description One explicit, independently guarded action, never a management-path proof.
+         */
+        post: operations["connectivity_diagnostic_api_v1_network_interfaces__object_id__connectivity_diagnostics_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/network/interfaces": {
         parameters: {
             query?: never;
@@ -1545,6 +1625,11 @@ export interface components {
             /** Socket */
             socket: string;
         };
+        /** AppliedSection */
+        AppliedSection: {
+            evidence: components["schemas"]["ConnectivityEvidence"];
+            value?: components["schemas"]["ConnectivityApplied"] | null;
+        };
         /**
          * BackendStatus
          * @description Backend liveness. Deliberately independent of the agent.
@@ -1936,6 +2021,11 @@ export interface components {
             /** Reason */
             reason: string | null;
         };
+        /** ClientResolverSection */
+        ClientResolverSection: {
+            evidence: components["schemas"]["ConnectivityEvidence"];
+            value?: components["schemas"]["ConnectivityClientResolver"] | null;
+        };
         /**
          * ConfirmRunRequest
          * @description Satisfy the confirmation a published plan requires.
@@ -1970,6 +2060,285 @@ export interface components {
              * @description Optional concurrency check. When given it must equal the published digest, so a confirmation cannot be recorded against a plan the caller has not seen.
              */
             expected_preview_digest?: string | null;
+        };
+        /** ConnectivityAddress */
+        ConnectivityAddress: {
+            /** Address */
+            address: string;
+            /** Prefix */
+            prefix?: number | null;
+        };
+        /** ConnectivityApplied */
+        ConnectivityApplied: {
+            /** Provider */
+            provider: string;
+            /** Version */
+            version?: string | null;
+            /** Addresses */
+            addresses?: components["schemas"]["ConnectivityAddress"][] | null;
+            /** Routes */
+            routes?: components["schemas"]["ConnectivityRoute"][] | null;
+            /** Dns Servers */
+            dns_servers?: string[] | null;
+            /** Search Domains */
+            search_domains?: string[] | null;
+            /** Routing Domains */
+            routing_domains?: components["schemas"]["ConnectivityResolverDomain"][] | null;
+            /** Ip Settings */
+            ip_settings?: components["schemas"]["ConnectivityIPSettings"][] | null;
+        };
+        /** ConnectivityClientResolver */
+        ConnectivityClientResolver: {
+            /** Client Nameservers */
+            client_nameservers?: string[] | null;
+            /**
+             * Client Mode
+             * @default unknown
+             * @enum {string}
+             */
+            client_mode: "stub" | "direct" | "unknown";
+        };
+        /** ConnectivityEvidence */
+        ConnectivityEvidence: {
+            /** Source */
+            source?: string | null;
+            /** Provider Version */
+            provider_version?: string | null;
+            /** Agent Instance Id */
+            agent_instance_id?: string | null;
+            /** Host Id */
+            host_id?: string | null;
+            /** Vantage */
+            vantage?: string | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /**
+             * Freshness
+             * @default unknown
+             * @enum {string}
+             */
+            freshness: "current" | "stale" | "unknown";
+            /**
+             * Completeness
+             * @default unknown
+             * @enum {string}
+             */
+            completeness: "complete" | "partial" | "unknown";
+            /**
+             * Status
+             * @default not_observed
+             * @enum {string}
+             */
+            status: "observed" | "not_observed" | "unavailable" | "unsupported" | "changed";
+            /** Gaps */
+            gaps?: string[];
+        };
+        /** ConnectivityIPSettings */
+        ConnectivityIPSettings: {
+            /**
+             * Family
+             * @enum {string}
+             */
+            family: "ipv4" | "ipv6";
+            /** Method */
+            method?: string | null;
+            /** Ignore Auto Dns */
+            ignore_auto_dns?: boolean | null;
+            /** Dns Priority */
+            dns_priority?: number | null;
+            /** Route Metric */
+            route_metric?: number | null;
+            /** Gateway */
+            gateway?: string | null;
+            /** Dns Servers */
+            dns_servers?: string[] | null;
+        };
+        /** ConnectivityKernel */
+        ConnectivityKernel: {
+            /** Addresses */
+            addresses?: components["schemas"]["ConnectivityAddress"][] | null;
+        };
+        /** ConnectivityNexthop */
+        ConnectivityNexthop: {
+            /** Gateway */
+            gateway?: string | null;
+            /** Interface */
+            interface?: string | null;
+            /** Weight */
+            weight?: number | null;
+            /** Ifindex */
+            ifindex?: number | null;
+            /** Object Id */
+            object_id?: string | null;
+        };
+        /** ConnectivityPolicy */
+        ConnectivityPolicy: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "valid" | "missing" | "invalid" | "unsafe" | "unreadable";
+            /** Digest */
+            digest: string | null;
+            /** Dns */
+            dns: string[] | null;
+            /** Tcp */
+            tcp: components["schemas"]["TcpPolicyTarget"][] | null;
+            /** Version */
+            version?: number | null;
+            /** Control Plane Complete */
+            control_plane_complete?: boolean | null;
+            /** Address Count */
+            address_count?: number | null;
+            /**
+             * Tcp Status
+             * @default policy_unavailable
+             * @enum {string}
+             */
+            tcp_status: "ready" | "disabled" | "missing_declaration" | "incomplete_declaration" | "policy_unavailable";
+        };
+        /** ConnectivityProfile */
+        ConnectivityProfile: {
+            /** Provider */
+            provider: string;
+            /** Uuid */
+            uuid?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Version */
+            version?: string | null;
+            /** Device Identity */
+            device_identity?: string | null;
+            /** Device Ifindex */
+            device_ifindex?: number | null;
+            /** Active Connection Identity */
+            active_connection_identity?: string | null;
+            /**
+             * State
+             * @default unknown
+             * @enum {string}
+             */
+            state: "saved" | "unsaved" | "generated" | "external" | "unknown";
+            /** Unsaved */
+            unsaved?: boolean | null;
+            /** Generated */
+            generated?: boolean | null;
+            /** External */
+            external?: boolean | null;
+            /** Addresses */
+            addresses?: components["schemas"]["ConnectivityAddress"][] | null;
+            /** Routes */
+            routes?: components["schemas"]["ConnectivityRoute"][] | null;
+            /** Dns Servers */
+            dns_servers?: string[] | null;
+            /** Search Domains */
+            search_domains?: string[] | null;
+            /** Routing Domains */
+            routing_domains?: components["schemas"]["ConnectivityResolverDomain"][] | null;
+            /** Ip Settings */
+            ip_settings?: components["schemas"]["ConnectivityIPSettings"][] | null;
+        };
+        /** ConnectivityResolver */
+        ConnectivityResolver: {
+            /** Global Servers */
+            global_servers?: string[] | null;
+            /** Global Domains */
+            global_domains?: string[] | null;
+            /** Global Routing Domains */
+            global_routing_domains?: components["schemas"]["ConnectivityResolverDomain"][] | null;
+            /** Current Server */
+            current_server?: string | null;
+            /** Current Server Ifindex */
+            current_server_ifindex?: number | null;
+            /** Links */
+            links?: components["schemas"]["ConnectivityResolverLink"][] | null;
+        };
+        /** ConnectivityResolverDomain */
+        ConnectivityResolverDomain: {
+            /** Name */
+            name: string;
+            /** Route Only */
+            route_only?: boolean | null;
+        };
+        /** ConnectivityResolverLink */
+        ConnectivityResolverLink: {
+            /** Interface */
+            interface?: string | null;
+            /** Servers */
+            servers?: string[] | null;
+            /** Domains */
+            domains?: string[] | null;
+            /** Routing Domains */
+            routing_domains?: components["schemas"]["ConnectivityResolverDomain"][] | null;
+            /** Current Server */
+            current_server?: string | null;
+            /** Dns Default Route */
+            dns_default_route?: boolean | null;
+        };
+        /** ConnectivityRoute */
+        ConnectivityRoute: {
+            /**
+             * Family
+             * @enum {string}
+             */
+            family: "ipv4" | "ipv6";
+            /** Destination */
+            destination: string;
+            /** Table */
+            table?: string | null;
+            /** Route Type */
+            route_type?: string | null;
+            /** Scope */
+            scope?: string | null;
+            /** Protocol */
+            protocol?: string | null;
+            /** Metric */
+            metric?: number | null;
+            /** Nexthops */
+            nexthops?: components["schemas"]["ConnectivityNexthop"][] | null;
+        };
+        /** ConnectivityRule */
+        ConnectivityRule: {
+            /**
+             * Family
+             * @enum {string}
+             */
+            family: "ipv4" | "ipv6";
+            /** Priority */
+            priority?: number | null;
+            /** Source */
+            source?: string | null;
+            /** Destination */
+            destination?: string | null;
+            /** Table */
+            table?: string | null;
+            /** Action */
+            action?: string | null;
+            /** Fwmark */
+            fwmark?: string | null;
+            /** Fwmask */
+            fwmask?: string | null;
+            /** Incoming Interface */
+            incoming_interface?: string | null;
+            /** Outgoing Interface */
+            outgoing_interface?: string | null;
+            /** Uid Range */
+            uid_range?: string | null;
+            /** Suppress Prefix Length */
+            suppress_prefix_length?: number | null;
+        };
+        /** ConnectivitySnapshot */
+        ConnectivitySnapshot: {
+            /** Object Id */
+            object_id: string;
+            profile: components["schemas"]["ProfileSection"];
+            applied: components["schemas"]["AppliedSection"];
+            kernel: components["schemas"]["KernelSection"];
+            routes: components["schemas"]["RoutesSection"];
+            rules: components["schemas"]["RulesSection"];
+            resolver: components["schemas"]["ResolverSection"];
+            client_resolver: components["schemas"]["ClientResolverSection"];
+            policy: components["schemas"]["ConnectivityPolicy"];
         };
         /**
          * ConsultedSource
@@ -2340,6 +2709,55 @@ export interface components {
              * @description Migration versions applied to this store.
              */
             schema_versions: number[];
+        };
+        /** DnsRequest */
+        DnsRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "dns";
+            /** Name */
+            name: string;
+            /**
+             * Record Type
+             * @enum {string}
+             */
+            record_type: "A" | "AAAA";
+            /** Policy Digest */
+            policy_digest: string;
+        };
+        /** DnsResult */
+        DnsResult: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "dns";
+            /** Name */
+            name: string;
+            /**
+             * Record Type
+             * @enum {string}
+             */
+            record_type: "A" | "AAAA";
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "resolved" | "no_data" | "not_found" | "server_failure" | "refused" | "timeout" | "unavailable" | "denied" | "policy_mismatch" | "busy" | "rate_limited" | "error";
+            /** Vantage */
+            vantage?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Answers */
+            answers?: string[] | null;
+            /** Truncated */
+            truncated?: boolean | null;
+            /** Detail */
+            detail: string;
         };
         /**
          * DockerContainer
@@ -3230,6 +3648,11 @@ export interface components {
              * @description Must be true. Keeping a change to the object carrying your own connection is a deliberate act, and a request that did not say so would be one a stray client could make.
              */
             acknowledge: boolean;
+        };
+        /** KernelSection */
+        KernelSection: {
+            evidence: components["schemas"]["ConnectivityEvidence"];
+            value?: components["schemas"]["ConnectivityKernel"] | null;
         };
         /** Link */
         Link: {
@@ -4437,6 +4860,11 @@ export interface components {
              */
             expected_after: boolean | number | string;
         };
+        /** ProfileSection */
+        ProfileSection: {
+            evidence: components["schemas"]["ConnectivityEvidence"];
+            value?: components["schemas"]["ConnectivityProfile"] | null;
+        };
         /**
          * ProtectionReasonView
          * @description One protection reason, evaluated against one object.
@@ -4846,6 +5274,11 @@ export interface components {
              */
             providers?: components["schemas"]["ProviderReadingSummary"][];
         };
+        /** ResolverSection */
+        ResolverSection: {
+            evidence: components["schemas"]["ConnectivityEvidence"];
+            value?: components["schemas"]["ConnectivityResolver"] | null;
+        };
         /** RiskFactor */
         RiskFactor: {
             /** Code */
@@ -4900,6 +5333,66 @@ export interface components {
             error: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** RouteRequest */
+        RouteRequest: {
+            /** Destination */
+            destination: string;
+        };
+        /** RouteResult */
+        RouteResult: {
+            /** Object Id */
+            object_id: string;
+            /** Destination */
+            destination: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "selected" | "no_route" | "prohibited" | "unavailable" | "error";
+            /** Source */
+            source?: string | null;
+            /** Gateway */
+            gateway?: string | null;
+            /** Egress Interface */
+            egress_interface?: string | null;
+            /** Egress Ifindex */
+            egress_ifindex?: number | null;
+            /** Egress Object Id */
+            egress_object_id?: string | null;
+            /** Agent Instance Id */
+            agent_instance_id?: string | null;
+            /** Host Id */
+            host_id?: string | null;
+            /** Provider Version */
+            provider_version?: string | null;
+            /**
+             * Query Context
+             * @default Unmarked lookup in the agent network namespace; no source or interface binding.
+             */
+            query_context: string;
+            /** Table */
+            table?: string | null;
+            /** Route Type */
+            route_type?: string | null;
+            /** Metric */
+            metric?: number | null;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Detail */
+            detail: string;
+        };
+        /** RoutesSection */
+        RoutesSection: {
+            evidence: components["schemas"]["ConnectivityEvidence"];
+            /** Value */
+            value?: components["schemas"]["ConnectivityRoute"][] | null;
+        };
+        /** RulesSection */
+        RulesSection: {
+            evidence: components["schemas"]["ConnectivityEvidence"];
+            /** Value */
+            value?: components["schemas"]["ConnectivityRule"][] | null;
         };
         /**
          * Run
@@ -5365,6 +5858,13 @@ export interface components {
              * @description Absolute browser-session expiry; null for a master Bearer request.
              */
             expires_at: string | null;
+        };
+        /** SocketEndpoint */
+        SocketEndpoint: {
+            /** Address */
+            address: string;
+            /** Port */
+            port: number;
         };
         /** Statistics */
         Statistics: {
@@ -5989,6 +6489,54 @@ export interface components {
             /** Path */
             path: string;
         };
+        /** TcpPolicyTarget */
+        TcpPolicyTarget: {
+            /** Address */
+            address: string;
+            /** Port */
+            port: number;
+        };
+        /** TcpRequest */
+        TcpRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "tcp";
+            /** Address */
+            address: string;
+            /** Port */
+            port: number;
+            /** Policy Digest */
+            policy_digest: string;
+        };
+        /** TcpResult */
+        TcpResult: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "tcp";
+            /** Address */
+            address: string;
+            /** Port */
+            port: number;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "connected" | "refused" | "timeout" | "no_route" | "permission_denied" | "unavailable" | "denied" | "policy_mismatch" | "busy" | "rate_limited" | "error";
+            /** Vantage */
+            vantage?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
+            local?: components["schemas"]["SocketEndpoint"] | null;
+            remote?: components["schemas"]["SocketEndpoint"] | null;
+            /** Detail */
+            detail: string;
+        };
         /**
          * TransitionResult
          * @description The result of an adopt or a release.
@@ -6476,6 +7024,210 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_connectivity_api_v1_network_interfaces__object_id__connectivity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectivitySnapshot"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_connectivity_api_v1_network_interfaces__object_id__connectivity_observations_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectivitySnapshot"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connectivity_route_api_v1_network_interfaces__object_id__connectivity_route_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RouteResult"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connectivity_diagnostic_api_v1_network_interfaces__object_id__connectivity_diagnostics_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DnsRequest"] | components["schemas"]["TcpRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DnsResult"] | components["schemas"]["TcpResult"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
